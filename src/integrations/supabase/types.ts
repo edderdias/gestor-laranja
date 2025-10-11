@@ -17,6 +17,7 @@ export type Database = {
       accounts_payable: {
         Row: {
           amount: number
+          card_id: string | null
           category_id: string
           created_at: string
           created_by: string
@@ -28,11 +29,13 @@ export type Database = {
           installments: number | null
           paid: boolean | null
           paid_date: string | null
+          payment_type: Database["public"]["Enums"]["payment_type"] | null
           responsible_id: string
           updated_at: string
         }
         Insert: {
           amount: number
+          card_id?: string | null
           category_id: string
           created_at?: string
           created_by: string
@@ -44,11 +47,13 @@ export type Database = {
           installments?: number | null
           paid?: boolean | null
           paid_date?: string | null
+          payment_type?: Database["public"]["Enums"]["payment_type"] | null
           responsible_id: string
           updated_at?: string
         }
         Update: {
           amount?: number
+          card_id?: string | null
           category_id?: string
           created_at?: string
           created_by?: string
@@ -60,10 +65,18 @@ export type Database = {
           installments?: number | null
           paid?: boolean | null
           paid_date?: string | null
+          payment_type?: Database["public"]["Enums"]["payment_type"] | null
           responsible_id?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "accounts_payable_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "credit_cards"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "accounts_payable_category_id_fkey"
             columns: ["category_id"]
@@ -426,6 +439,7 @@ export type Database = {
       app_role: "admin" | "user"
       expense_type: "fixa" | "variavel"
       income_type: "fixa" | "variavel"
+      payment_type: "cartao" | "promissoria" | "boleto"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -556,6 +570,7 @@ export const Constants = {
       app_role: ["admin", "user"],
       expense_type: ["fixa", "variavel"],
       income_type: ["fixa", "variavel"],
+      payment_type: ["cartao", "promissoria", "boleto"],
     },
   },
 } as const
