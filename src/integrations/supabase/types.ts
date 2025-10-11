@@ -105,9 +105,12 @@ export type Database = {
           amount: number
           created_at: string
           created_by: string
+          current_installment: number | null
           description: string
           id: string
           income_type: Database["public"]["Enums"]["income_type"]
+          installments: number | null
+          payer_id: string | null
           receive_date: string
           received: boolean | null
           received_date: string | null
@@ -118,9 +121,12 @@ export type Database = {
           amount: number
           created_at?: string
           created_by: string
+          current_installment?: number | null
           description: string
           id?: string
           income_type?: Database["public"]["Enums"]["income_type"]
+          installments?: number | null
+          payer_id?: string | null
           receive_date: string
           received?: boolean | null
           received_date?: string | null
@@ -131,9 +137,12 @@ export type Database = {
           amount?: number
           created_at?: string
           created_by?: string
+          current_installment?: number | null
           description?: string
           id?: string
           income_type?: Database["public"]["Enums"]["income_type"]
+          installments?: number | null
+          payer_id?: string | null
           receive_date?: string
           received?: boolean | null
           received_date?: string | null
@@ -146,6 +155,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounts_receivable_payer_id_fkey"
+            columns: ["payer_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
             referencedColumns: ["id"]
           },
           {
@@ -343,6 +359,24 @@ export type Database = {
         }
         Relationships: []
       }
+      payers: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -438,7 +472,7 @@ export type Database = {
     Enums: {
       app_role: "admin" | "user"
       expense_type: "fixa" | "variavel"
-      income_type: "fixa" | "variavel"
+      income_type: "salario" | "extra" | "aluguel" | "vendas" | "comissao"
       payment_type: "cartao" | "promissoria" | "boleto"
     }
     CompositeTypes: {
@@ -569,7 +603,7 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "user"],
       expense_type: ["fixa", "variavel"],
-      income_type: ["fixa", "variavel"],
+      income_type: ["salario", "extra", "aluguel", "vendas", "comissao"],
       payment_type: ["cartao", "promissoria", "boleto"],
     },
   },
