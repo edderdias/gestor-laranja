@@ -18,7 +18,7 @@ const cardSchema = z.object({
   due_date: z.number().min(1).max(31),
   best_purchase_date: z.number().min(1).max(31),
   credit_limit: z.number().min(0, "Limite deve ser positivo"),
-  owner_id: z.string().min(1, "Selecione o dono do cartão"),
+  owner_name: z.string().min(1, "Nome do dono é obrigatório"),
   last_digits: z.string().optional(),
 });
 
@@ -33,6 +33,7 @@ export default function CreditCards() {
     due_date: 10,
     best_purchase_date: 5,
     credit_limit: 0,
+    owner_name: "",
   });
 
   // Buscar cartões
@@ -41,24 +42,8 @@ export default function CreditCards() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("credit_cards")
-        .select(`
-          *,
-          owner:responsible_parties(name)
-        `)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  // Buscar responsáveis
-  const { data: responsibleParties } = useQuery({
-    queryKey: ["responsible_parties"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("responsible_parties")
         .select("*")
-        .order("name");
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -95,7 +80,7 @@ export default function CreditCards() {
         due_date: data.due_date,
         best_purchase_date: data.best_purchase_date,
         credit_limit: data.credit_limit,
-        owner_id: data.owner_id,
+        owner_name: data.owner_name,
         last_digits: data.last_digits || null,
         created_by: user?.id,
       };
@@ -161,6 +146,7 @@ export default function CreditCards() {
       due_date: 10,
       best_purchase_date: 5,
       credit_limit: 0,
+      owner_name: "",
     });
     setEditingCard(null);
     setIsFormOpen(false);
@@ -174,7 +160,7 @@ export default function CreditCards() {
       due_date: card.due_date,
       best_purchase_date: card.best_purchase_date,
       credit_limit: card.credit_limit,
-      owner_id: card.owner_id,
+      owner_name: card.owner_name || "",
       last_digits: card.last_digits || "",
     });
     setIsFormOpen(true);
@@ -259,22 +245,13 @@ export default function CreditCards() {
                   </div>
 
                   <div>
-                    <Label htmlFor="owner_id">Dono do Cartão *</Label>
-                    <Select
-                      value={formData.owner_id}
-                      onValueChange={(value) => setFormData({ ...formData, owner_id: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o dono" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {responsibleParties?.map((party) => (
-                          <SelectItem key={party.id} value={party.id}>
-                            {party.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="owner_name">Dono do Cartão *</Label>
+                    <Input
+                      id="owner_name"
+                      value={formData.owner_name || ""}
+                      onChange={(e) => setFormData({ ...formData, owner_name: e.target.value })}
+                      placeholder="Ex: João Silva"
+                    />
                   </div>
 
                   <div>
@@ -379,7 +356,7 @@ export default function CreditCards() {
                     <div className="space-y-1 text-sm">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Dono:</span>
-                        <span className="font-medium">{card.owner?.name}</span>
+                        <span className="font-medium">{card.owner_name}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Vencimento:</span>

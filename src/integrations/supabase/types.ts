@@ -300,6 +300,7 @@ export type Database = {
           last_digits: string | null
           name: string
           owner_id: string | null
+          owner_name: string | null
           updated_at: string
         }
         Insert: {
@@ -313,6 +314,7 @@ export type Database = {
           last_digits?: string | null
           name: string
           owner_id?: string | null
+          owner_name?: string | null
           updated_at?: string
         }
         Update: {
@@ -326,6 +328,7 @@ export type Database = {
           last_digits?: string | null
           name?: string
           owner_id?: string | null
+          owner_name?: string | null
           updated_at?: string
         }
         Relationships: [
