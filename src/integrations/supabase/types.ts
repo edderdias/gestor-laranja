@@ -290,27 +290,42 @@ export type Database = {
       }
       credit_cards: {
         Row: {
+          best_purchase_date: number | null
+          brand: Database["public"]["Enums"]["card_brand"] | null
           created_at: string
           created_by: string
+          credit_limit: number | null
+          due_date: number | null
           id: string
           last_digits: string | null
           name: string
+          owner_id: string | null
           updated_at: string
         }
         Insert: {
+          best_purchase_date?: number | null
+          brand?: Database["public"]["Enums"]["card_brand"] | null
           created_at?: string
           created_by: string
+          credit_limit?: number | null
+          due_date?: number | null
           id?: string
           last_digits?: string | null
           name: string
+          owner_id?: string | null
           updated_at?: string
         }
         Update: {
+          best_purchase_date?: number | null
+          brand?: Database["public"]["Enums"]["card_brand"] | null
           created_at?: string
           created_by?: string
+          credit_limit?: number | null
+          due_date?: number | null
           id?: string
           last_digits?: string | null
           name?: string
+          owner_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -319,6 +334,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_cards_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "responsible_parties"
             referencedColumns: ["id"]
           },
         ]
@@ -471,6 +493,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      card_brand: "visa" | "master"
       expense_type: "fixa" | "variavel"
       income_type: "salario" | "extra" | "aluguel" | "vendas" | "comissao"
       payment_type: "cartao" | "promissoria" | "boleto"
@@ -602,6 +625,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      card_brand: ["visa", "master"],
       expense_type: ["fixa", "variavel"],
       income_type: ["salario", "extra", "aluguel", "vendas", "comissao"],
       payment_type: ["cartao", "promissoria", "boleto"],
