@@ -345,13 +345,13 @@ export default function AccountsReceivable() {
                             </FormControl>
                             <SelectContent>
                               {payers?.map((payer) => (
-                                <SelectItem key={payer.id} value={payer.id}>
+                                <SelectItem key={payer.id} value={payer.id} className="pr-0"> {/* Remove default right padding */}
                                   <div className="flex items-center justify-between w-full">
                                     <span>{payer.name}</span>
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      className="h-6 w-6"
+                                      className="h-6 w-6 pr-2" // Add right padding to the button itself
                                       onClick={(e) => {
                                         e.stopPropagation(); // Evita que o SelectItem seja selecionado
                                         handleDeletePayer(payer.id, payer.name);
