@@ -345,18 +345,30 @@ export default function AccountsReceivable() {
                                 </SelectValue>
                               </SelectTrigger>
                             </FormControl>
-                            // <SelectContent>
-                            //   {payers?.map((payer) => (
-                            //     <SelectItem key={payer.id} value={payer.id}>
-                            //       {payer.name} {/* Apenas o nome do pagador */}
-                            //     </SelectItem>
-                            //   ))}
-                            //   <SelectItem value="new-payer">
-                            //     + Novo Pagador
-                            //   </SelectItem>
-                            // </SelectContent>
+                            <SelectContent>
+                              {payers?.map((payer) => (
+                                <SelectItem key={payer.id} value={payer.id}>
+                                    <span>{payer.name}</span>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6" 
+                                      onClick={(e) => {
+                                        e.stopPropagation(); // Evita que o SelectItem seja selecionado
+                                        handleDeletePayer(payer.id, payer.name);
+                                      }}
+                                      disabled={deletePayerMutation.isPending}
+                                    >
+                                      <Trash2 className="h-3 w-3 text-destructive" />
+                                    </Button>
+                                </SelectItem>
+                              ))}
+                              <SelectItem value="new-payer">
+                                + Novo Pagador
+                              </SelectItem>
+                            </SelectContent>
                           </Select>
-                          // <FormMessage />
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
