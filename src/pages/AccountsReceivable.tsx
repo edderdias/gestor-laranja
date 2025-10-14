@@ -48,11 +48,11 @@ export default function AccountsReceivable() {
     if (isFormOpen && editingAccount) {
       form.reset({
         description: editingAccount.description,
-        income_type: editingAccount.income_type,
+        income_type: editingAccount.income_type || "extra", // Garante que seja string
         receive_date: editingAccount.receive_date,
         installments: editingAccount.installments?.toString() || "1",
         amount: editingAccount.amount.toString(),
-        source_id: editingAccount.source_id,
+        source_id: editingAccount.source_id || "", // Garante que seja string
       });
     } else if (!isFormOpen) {
       form.reset({

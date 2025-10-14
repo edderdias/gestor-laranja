@@ -55,14 +55,14 @@ export default function AccountsPayable() {
     if (isFormOpen && editingAccount) {
       form.reset({
         description: editingAccount.description,
-        payment_type: editingAccount.payment_type,
-        card_id: editingAccount.card_id || "",
+        payment_type: editingAccount.payment_type || "boleto", // Garante que seja string
+        card_id: editingAccount.card_id || "", // Garante que seja string
         purchase_date: editingAccount.created_at?.split("T")[0] || "",
         due_date: editingAccount.due_date,
         installments: editingAccount.installments.toString(),
         amount: editingAccount.amount.toString(),
-        responsible_id: editingAccount.responsible_id,
-        category_id: editingAccount.category_id,
+        responsible_id: editingAccount.responsible_id || "", // Garante que seja string
+        category_id: editingAccount.category_id || "", // Garante que seja string
       });
     } else if (!isFormOpen) {
       form.reset({
