@@ -340,7 +340,10 @@ export default function AccountsReceivable() {
                           <Select onValueChange={handlePayerSelectChange} value={field.value}>
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Quem vai pagar" />
+                                {/* Explicitly display the selected payer's name or placeholder */}
+                                <SelectValue placeholder="Quem vai pagar">
+                                  {field.value ? payers?.find(p => p.id === field.value)?.name : "Quem vai pagar"}
+                                </SelectValue>
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
