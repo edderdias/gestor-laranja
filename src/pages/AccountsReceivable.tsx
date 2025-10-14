@@ -347,20 +347,22 @@ export default function AccountsReceivable() {
                             </FormControl>
                             <SelectContent>
                               {payers?.map((payer) => (
-                                <SelectItem key={payer.id} value={payer.id} className="relative pr-8"> {/* Adicionado relative e pr-8 */}
-                                  <span>{payer.name}</span> {/* Apenas o span como filho direto */}
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6" // Posicionamento absoluto
-                                    onClick={(e) => {
-                                      e.stopPropagation(); // Evita que o SelectItem seja selecionado
-                                      handleDeletePayer(payer.id, payer.name);
-                                    }}
-                                    disabled={deletePayerMutation.isPending}
-                                  >
-                                    <Trash2 className="h-3 w-3 text-destructive" />
-                                  </Button>
+                                <SelectItem key={payer.id} value={payer.id}>
+                                  <div className="flex items-center justify-between w-full pr-2"> {/* Único filho direto do SelectItem */}
+                                    <span>{payer.name}</span>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6" 
+                                      onClick={(e) => {
+                                        e.stopPropagation(); // Evita que o SelectItem seja selecionado
+                                        handleDeletePayer(payer.id, payer.name);
+                                      }}
+                                      disabled={deletePayerMutation.isPending}
+                                    >
+                                      <Trash2 className="h-3 w-3 text-destructive" />
+                                    </Button>
+                                  </div>
                                 </SelectItem>
                               ))}
                               <SelectItem value="new-payer">
