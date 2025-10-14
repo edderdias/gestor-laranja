@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-// NewPayerForm não é mais necessário
+// NewPayerForm e DialogFooter não são mais necessários
 
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -22,7 +22,6 @@ const formSchema = z.object({
   receive_date: z.string().min(1, "Data do recebimento é obrigatória"),
   installments: z.string().min(1, "Quantidade de parcelas é obrigatória"),
   amount: z.string().min(1, "Valor é obrigatório"),
-  // payer_id removido
   source_id: z.string().min(1, "Fonte de receita é obrigatória"),
 });
 
@@ -31,7 +30,6 @@ type FormData = z.infer<typeof formSchema>;
 export default function AccountsReceivable() {
   const { user } = useAuth();
   const [isFormOpen, setIsFormOpen] = useState(false);
-  // isNewPayerFormOpen removido
   const [editingAccount, setEditingAccount] = useState<any>(null);
   const queryClient = useQueryClient();
 
@@ -43,7 +41,6 @@ export default function AccountsReceivable() {
       receive_date: format(new Date(), "yyyy-MM-dd"),
       installments: "1",
       amount: "",
-      // payer_id removido
       source_id: "",
     },
   });
@@ -56,7 +53,6 @@ export default function AccountsReceivable() {
         receive_date: editingAccount.receive_date,
         installments: editingAccount.installments?.toString() || "1",
         amount: editingAccount.amount.toString(),
-        // payer_id removido
         source_id: editingAccount.income_sources?.id || "",
       });
     } else if (!isFormOpen) {
@@ -66,7 +62,6 @@ export default function AccountsReceivable() {
         receive_date: format(new Date(), "yyyy-MM-dd"),
         installments: "1",
         amount: "",
-        // payer_id removido
         source_id: "",
       });
     }
@@ -78,15 +73,13 @@ export default function AccountsReceivable() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("accounts_receivable")
-        .select("*, income_sources(id, name)") // Removido payers(id, name)
+        .select("*, income_sources(id, name)")
         .order("receive_date", { ascending: true });
       
       if (error) throw error;
       return data;
     },
   });
-
-  // Buscar pagadores removido
 
   // Buscar fontes de receita
   const { data: sources } = useQuery({
@@ -111,7 +104,6 @@ export default function AccountsReceivable() {
         receive_date: values.receive_date,
         installments: parseInt(values.installments),
         amount: parseFloat(values.amount),
-        // payer_id removido
         source_id: values.source_id,
         created_by: user?.id,
       };
@@ -162,8 +154,6 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Mutation para deletar pagador removido
-
   const onSubmit = (values: FormData) => {
     saveMutation.mutate(values);
   };
@@ -178,10 +168,6 @@ export default function AccountsReceivable() {
       deleteMutation.mutate(id);
     }
   };
-
-  // handlePayerSelectChange removido
-  // handleNewPayerCreated removido
-  // handleDeletePayer removido
 
   const totalAmount = accounts?.reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
@@ -269,8 +255,6 @@ export default function AccountsReceivable() {
                         </FormItem>
                       )}
                     />
-
-                    {/* Campo Pagador removido */}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -351,8 +335,6 @@ export default function AccountsReceivable() {
         </div>
       </div>
 
-      {/* Diálogo para Novo Pagador removido */}
-
       <main className="container mx-auto px-4 py-8">
         <Card className="mb-6">
           <CardHeader>
@@ -396,7 +378,6 @@ export default function AccountsReceivable() {
                             R$ {(account.amount * (account.installments || 1)).toFixed(2)}
                           </span>
                         </div>
-                        {/* Pagador removido */}
                         {account.income_sources && (
                           <div>
                             <span className="font-medium">Fonte:</span> {account.income_sources.name}
