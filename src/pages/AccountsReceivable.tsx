@@ -340,7 +340,6 @@ export default function AccountsReceivable() {
                           <Select onValueChange={handlePayerSelectChange} value={field.value}>
                             <FormControl>
                               <SelectTrigger>
-                                {/* Explicitly display the selected payer's name or placeholder */}
                                 <SelectValue placeholder="Quem vai pagar">
                                   {field.value ? payers?.find(p => p.id === field.value)?.name : "Quem vai pagar"}
                                 </SelectValue>
@@ -348,22 +347,20 @@ export default function AccountsReceivable() {
                             </FormControl>
                             <SelectContent>
                               {payers?.map((payer) => (
-                                <SelectItem key={payer.id} value={payer.id} className="pr-0"> {/* Remove default right padding */}
-                                  <div className="flex items-center justify-between w-full">
-                                    <span>{payer.name}</span>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-6 w-6 pr-2" // Add right padding to the button itself
-                                      onClick={(e) => {
-                                        e.stopPropagation(); // Evita que o SelectItem seja selecionado
-                                        handleDeletePayer(payer.id, payer.name);
-                                      }}
-                                      disabled={deletePayerMutation.isPending}
-                                    >
-                                      <Trash2 className="h-3 w-3 text-destructive" />
-                                    </Button>
-                                  </div>
+                                <SelectItem key={payer.id} value={payer.id} className="relative pr-8"> {/* Adicionado relative e pr-8 */}
+                                  <span>{payer.name}</span> {/* Apenas o span como filho direto */}
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6" // Posicionamento absoluto
+                                    onClick={(e) => {
+                                      e.stopPropagation(); // Evita que o SelectItem seja selecionado
+                                      handleDeletePayer(payer.id, payer.name);
+                                    }}
+                                    disabled={deletePayerMutation.isPending}
+                                  >
+                                    <Trash2 className="h-3 w-3 text-destructive" />
+                                  </Button>
                                 </SelectItem>
                               ))}
                               <SelectItem value="new-payer">
