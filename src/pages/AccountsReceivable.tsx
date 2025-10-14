@@ -10,11 +10,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { NewPayerForm } from "@/components/NewPayerForm"; // Importar o novo componente
+// NewPayerForm não é mais necessário
 
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -22,7 +22,7 @@ const formSchema = z.object({
   receive_date: z.string().min(1, "Data do recebimento é obrigatória"),
   installments: z.string().min(1, "Quantidade de parcelas é obrigatória"),
   amount: z.string().min(1, "Valor é obrigatório"),
-  payer_id: z.string().min(1, "Pagador é obrigatório"),
+  // payer_id removido
   source_id: z.string().min(1, "Fonte de receita é obrigatória"),
 });
 
@@ -31,7 +31,7 @@ type FormData = z.infer<typeof formSchema>;
 export default function AccountsReceivable() {
   const { user } = useAuth();
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isNewPayerFormOpen, setIsNewPayerFormOpen] = useState(false); // Novo estado para o diálogo de novo pagador
+  // isNewPayerFormOpen removido
   const [editingAccount, setEditingAccount] = useState<any>(null);
   const queryClient = useQueryClient();
 
@@ -43,7 +43,7 @@ export default function AccountsReceivable() {
       receive_date: format(new Date(), "yyyy-MM-dd"),
       installments: "1",
       amount: "",
-      payer_id: "", // Inicialmente vazio
+      // payer_id removido
       source_id: "",
     },
   });
@@ -56,7 +56,7 @@ export default function AccountsReceivable() {
         receive_date: editingAccount.receive_date,
         installments: editingAccount.installments?.toString() || "1",
         amount: editingAccount.amount.toString(),
-        payer_id: editingAccount.payers?.id || "",
+        // payer_id removido
         source_id: editingAccount.income_sources?.id || "",
       });
     } else if (!isFormOpen) {
@@ -66,7 +66,7 @@ export default function AccountsReceivable() {
         receive_date: format(new Date(), "yyyy-MM-dd"),
         installments: "1",
         amount: "",
-        payer_id: "", // Resetar para vazio
+        // payer_id removido
         source_id: "",
       });
     }
@@ -78,7 +78,7 @@ export default function AccountsReceivable() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("accounts_receivable")
-        .select("*, income_sources(id, name), payers(id, name)")
+        .select("*, income_sources(id, name)") // Removido payers(id, name)
         .order("receive_date", { ascending: true });
       
       if (error) throw error;
@@ -86,19 +86,7 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Buscar pagadores
-  const { data: payers } = useQuery({
-    queryKey: ["payers"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("payers")
-        .select("*")
-        .order("name");
-      
-      if (error) throw error;
-      return data;
-    },
-  });
+  // Buscar pagadores removido
 
   // Buscar fontes de receita
   const { data: sources } = useQuery({
@@ -123,7 +111,7 @@ export default function AccountsReceivable() {
         receive_date: values.receive_date,
         installments: parseInt(values.installments),
         amount: parseFloat(values.amount),
-        payer_id: values.payer_id,
+        // payer_id removido
         source_id: values.source_id,
         created_by: user?.id,
       };
@@ -174,41 +162,7 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Mutation para deletar pagador
-  const deletePayerMutation = useMutation({
-    mutationFn: async (payerId: string) => {
-      // Verificar se o pagador tem contas a receber associadas
-      const { count, error: countError } = await supabase
-        .from("accounts_receivable")
-        .select("id", { count: "exact" })
-        .eq("payer_id", payerId);
-
-      if (countError) throw countError;
-
-      if (count && count > 0) {
-        throw new Error("Não é possível excluir este pagador, pois ele possui contas a receber associadas.");
-      }
-
-      // Se não houver contas associadas, prosseguir com a exclusão
-      const { error } = await supabase
-        .from("payers")
-        .delete()
-        .eq("id", payerId);
-
-      if (error) throw error;
-    },
-    onSuccess: (data, payerId) => {
-      queryClient.invalidateQueries({ queryKey: ["payers"] });
-      toast.success("Pagador excluído com sucesso!");
-      // Se o pagador excluído era o selecionado no formulário, resetar o campo
-      if (form.getValues("payer_id") === payerId) {
-        form.setValue("payer_id", "");
-      }
-    },
-    onError: (error) => {
-      toast.error("Erro ao excluir pagador: " + error.message);
-    },
-  });
+  // Mutation para deletar pagador removido
 
   const onSubmit = (values: FormData) => {
     saveMutation.mutate(values);
@@ -225,24 +179,9 @@ export default function AccountsReceivable() {
     }
   };
 
-  const handlePayerSelectChange = (value: string) => {
-    if (value === "new-payer") {
-      setIsNewPayerFormOpen(true);
-    } else {
-      form.setValue("payer_id", value);
-    }
-  };
-
-  const handleNewPayerCreated = (newPayerId: string) => {
-    form.setValue("payer_id", newPayerId);
-    setIsNewPayerFormOpen(false);
-  };
-
-  const handleDeletePayer = (payerId: string, payerName: string) => {
-    if (confirm(`Tem certeza que deseja excluir o pagador "${payerName}"?`)) {
-      deletePayerMutation.mutate(payerId);
-    }
-  };
+  // handlePayerSelectChange removido
+  // handleNewPayerCreated removido
+  // handleDeletePayer removido
 
   const totalAmount = accounts?.reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
@@ -331,47 +270,7 @@ export default function AccountsReceivable() {
                       )}
                     />
 
-                    <FormField
-                      control={form.control}
-                      name="payer_id"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Pagador</FormLabel>
-                          <Select onValueChange={handlePayerSelectChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Quem vai pagar">
-                                  {field.value ? payers?.find(p => p.id === field.value)?.name : "Quem vai pagar"}
-                                </SelectValue>
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {payers?.map((payer) => (
-                                <SelectItem key={payer.id} value={payer.id}>
-                                    <span>{payer.name}</span>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-6 w-6" 
-                                      onClick={(e) => {
-                                        e.stopPropagation(); // Evita que o SelectItem seja selecionado
-                                        handleDeletePayer(payer.id, payer.name);
-                                      }}
-                                      disabled={deletePayerMutation.isPending}
-                                    >
-                                      <Trash2 className="h-3 w-3 text-destructive" />
-                                    </Button>
-                                </SelectItem>
-                              ))}
-                              <SelectItem value="new-payer">
-                                + Novo Pagador
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    {/* Campo Pagador removido */}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -452,18 +351,7 @@ export default function AccountsReceivable() {
         </div>
       </div>
 
-      {/* Diálogo para Novo Pagador */}
-      <Dialog open={isNewPayerFormOpen} onOpenChange={setIsNewPayerFormOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Novo Pagador</DialogTitle>
-          </DialogHeader>
-          <NewPayerForm
-            onPayerCreated={handleNewPayerCreated}
-            onClose={() => setIsNewPayerFormOpen(false)}
-          />
-        </DialogContent>
-      </Dialog>
+      {/* Diálogo para Novo Pagador removido */}
 
       <main className="container mx-auto px-4 py-8">
         <Card className="mb-6">
@@ -508,11 +396,7 @@ export default function AccountsReceivable() {
                             R$ {(account.amount * (account.installments || 1)).toFixed(2)}
                           </span>
                         </div>
-                        {account.payers && (
-                          <div>
-                            <span className="font-medium">Pagador:</span> {account.payers.name}
-                          </div>
-                        )}
+                        {/* Pagador removido */}
                         {account.income_sources && (
                           <div>
                             <span className="font-medium">Fonte:</span> {account.income_sources.name}
