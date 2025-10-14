@@ -356,7 +356,7 @@ export default function AccountsReceivable() {
                             //   </SelectItem>
                             // </SelectContent>
                           </Select>
-                          <FormMessage />
+                          // <FormMessage />
                         </FormItem>
                       )}
                     />
