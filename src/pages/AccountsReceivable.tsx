@@ -348,7 +348,6 @@ export default function AccountsReceivable() {
                             <SelectContent>
                               {payers?.map((payer) => (
                                 <SelectItem key={payer.id} value={payer.id}>
-                                  <div className="flex items-center justify-between w-full pr-2"> {/* Único filho direto do SelectItem */}
                                     <span>{payer.name}</span>
                                     <Button
                                       variant="ghost"
@@ -362,7 +361,6 @@ export default function AccountsReceivable() {
                                     >
                                       <Trash2 className="h-3 w-3 text-destructive" />
                                     </Button>
-                                  </div>
                                 </SelectItem>
                               ))}
                               <SelectItem value="new-payer">
