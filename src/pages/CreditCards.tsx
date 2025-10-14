@@ -19,7 +19,7 @@ const formatCurrencyDisplay = (value: number | undefined): string => {
     style: 'currency',
     currency: 'BRL',
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 100,
   }).format(value);
 };
 
