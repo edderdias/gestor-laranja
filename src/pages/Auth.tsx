@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Wallet } from "lucide-react";
+// Removido Wallet
 
 export default function Auth() {
   const { signIn, signUp } = useAuth();
@@ -51,11 +51,11 @@ export default function Auth() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <div className="flex items-center justify-center mb-4">
-            <div className="bg-primary rounded-full p-3">
-              <Wallet className="h-8 w-8 text-primary-foreground" />
+            <div className="p-1"> {/* Ajustado padding para o logo */}
+              <img src="/logo.png" alt="Bússola Financeira Logo" className="h-12 w-12" /> {/* Novo logo */}
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold text-center">Controle Financeiro</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">Bússola Financeira</CardTitle> {/* Novo nome */}
           <CardDescription className="text-center">
             Gerencie suas finanças de forma simples e eficiente
           </CardDescription>

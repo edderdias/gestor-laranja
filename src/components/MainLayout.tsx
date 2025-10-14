@@ -1,7 +1,7 @@
 import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LogOut, Wallet } from "lucide-react";
+import { LogOut } from "lucide-react"; // Removido Wallet
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -48,11 +48,11 @@ export function MainLayout() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link to="/dashboard" className="flex items-center gap-3">
-              <div className="bg-primary rounded-full p-2">
-                <Wallet className="h-6 w-6 text-primary-foreground" />
+              <div className="p-1"> {/* Ajustado padding para o logo */}
+                <img src="/logo.png" alt="Bússola Financeira Logo" className="h-10 w-10" /> {/* Novo logo */}
               </div>
               <div>
-                <h1 className="text-xl font-bold">Controle Financeiro</h1>
+                <h1 className="text-xl font-bold">Bússola Financeira</h1> {/* Novo nome */}
                 <p className="text-sm text-muted-foreground">{user?.email}</p>
               </div>
             </Link>
