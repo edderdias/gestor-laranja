@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Pencil, Trash2 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -205,38 +204,84 @@ export default function AccountsReceivable() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/dashboard">
-                <Button variant="ghost" size="icon">
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-              </Link>
-              <h1 className="text-2xl font-bold">Contas a Receber</h1>
-            </div>
-            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => setEditingAccount(null)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Nova Conta
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>{editingAccount ? "Editar Conta" : "Nova Conta a Receber"}</DialogTitle>
-                </DialogHeader>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <div className="container mx-auto px-4 py-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Contas a Receber</h1>
+          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => setEditingAccount(null)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nova Conta
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{editingAccount ? "Editar Conta" : "Nova Conta a Receber"}</DialogTitle>
+              </DialogHeader>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Descrição</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="Ex: Pagamento cliente X" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="income_type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tipo de Recebimento</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o tipo" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="salario">Salário</SelectItem>
+                            <SelectItem value="extra">Extra</SelectItem>
+                            <SelectItem value="aluguel">Aluguel</SelectItem>
+                            <SelectItem value="vendas">Vendas</SelectItem>
+                            <SelectItem value="comissao">Comissão</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="receive_date"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Data do Recebimento</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
-                      name="description"
+                      name="installments"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Descrição</FormLabel>
+                          <FormLabel>Quantidade de Parcelas</FormLabel>
                           <FormControl>
-                            <Input {...field} placeholder="Ex: Pagamento cliente X" />
+                            <Input type="number" min="1" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -245,144 +290,89 @@ export default function AccountsReceivable() {
 
                     <FormField
                       control={form.control}
-                      name="income_type"
+                      name="amount"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Tipo de Recebimento</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione o tipo" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="salario">Salário</SelectItem>
-                              <SelectItem value="extra">Extra</SelectItem>
-                              <SelectItem value="aluguel">Aluguel</SelectItem>
-                              <SelectItem value="vendas">Vendas</SelectItem>
-                              <SelectItem value="comissao">Comissão</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="receive_date"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Data do Recebimento</FormLabel>
+                          <FormLabel>Valor da Parcela</FormLabel>
                           <FormControl>
-                            <Input type="date" {...field} />
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
+                  </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="installments"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Quantidade de Parcelas</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="1" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                  <FormField
+                    control={form.control}
+                    name="payer_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Pagador</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Quem vai pagar" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {payers?.map((payer) => (
+                              <SelectItem key={payer.id} value={payer.id}>
+                                {payer.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                      <FormField
-                        control={form.control}
-                        name="amount"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Valor da Parcela</FormLabel>
-                            <FormControl>
-                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
+                  <FormField
+                    control={form.control}
+                    name="source_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Fonte de Receita</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione a fonte" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {sources?.map((source) => (
+                              <SelectItem key={source.id} value={source.id}>
+                                {source.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                    <FormField
-                      control={form.control}
-                      name="payer_id"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Pagador</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Quem vai pagar" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {payers?.map((payer) => (
-                                <SelectItem key={payer.id} value={payer.id}>
-                                  {payer.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  <div className="bg-muted p-4 rounded-lg">
+                    <p className="text-sm font-medium">
+                      Valor Total: R$ {(parseFloat(form.watch("amount") || "0") * parseInt(form.watch("installments") || "1")).toFixed(2)}
+                    </p>
+                  </div>
 
-                    <FormField
-                      control={form.control}
-                      name="source_id"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Fonte de Receita</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione a fonte" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {sources?.map((source) => (
-                                <SelectItem key={source.id} value={source.id}>
-                                  {source.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <div className="bg-muted p-4 rounded-lg">
-                      <p className="text-sm font-medium">
-                        Valor Total: R$ {(parseFloat(form.watch("amount") || "0") * parseInt(form.watch("installments") || "1")).toFixed(2)}
-                      </p>
-                    </div>
-
-                    <div className="flex justify-end gap-2">
-                      <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
-                        Cancelar
-                      </Button>
-                      <Button type="submit" disabled={saveMutation.isPending}>
-                        {saveMutation.isPending ? "Salvando..." : editingAccount ? "Atualizar" : "Criar"}
-                      </Button>
-                    </div>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
-          </div>
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button type="submit" disabled={saveMutation.isPending}>
+                      {saveMutation.isPending ? "Salvando..." : editingAccount ? "Atualizar" : "Criar"}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
         </div>
-      </header>
+      </div>
 
       <main className="container mx-auto px-4 py-8">
         <Card className="mb-6">

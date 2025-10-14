@@ -5,7 +5,6 @@ import {
   ArrowDownCircle, 
   ArrowUpCircle, 
   CreditCard, 
-  LogOut, 
   Wallet,
   TrendingUp,
   TrendingDown
@@ -20,7 +19,7 @@ import { CategoryExpensesChart } from "@/components/charts/CategoryExpensesChart
 import { ResponsiblePartyExpensesChart } from "@/components/charts/ResponsiblePartyExpensesChart";
 
 export default function Dashboard() {
-  const { signOut, user } = useAuth();
+  const { user } = useAuth();
   const currentMonth = getMonth(new Date());
   const currentYear = getYear(new Date());
 
@@ -150,23 +149,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-primary rounded-full p-2">
-              <Wallet className="h-6 w-6 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold">Controle Financeiro</h1>
-              <p className="text-sm text-muted-foreground">{user?.email}</p>
-            </div>
-          </div>
-          <Button variant="ghost" size="icon" onClick={signOut}>
-            <LogOut className="h-5 w-5" />
-          </Button>
-        </div>
-      </header>
+      {/* Header removido, agora gerenciado por MainLayout */}
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">

@@ -1,17 +1,16 @@
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, CreditCard, Plus, Edit, Trash2 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { CreditCard, Plus, Edit, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import { z } from "zod";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { toast } from "sonner";
-import { z } from "zod";
-import { useAuth } from "@/contexts/AuthContext";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 // Helper function for formatting currency for display
 const formatCurrencyDisplay = (value: number | undefined): string => {
@@ -208,134 +207,125 @@ export default function CreditCards() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/dashboard">
-                <Button variant="ghost" size="icon">
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-              </Link>
-              <h1 className="text-2xl font-bold">Cartões de Crédito</h1>
-            </div>
-            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => setEditingCard(null)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Novo Cartão
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>{editingCard ? "Editar Cartão" : "Novo Cartão"}</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="name">Descrição do Cartão *</Label>
-                      <Input
-                        id="name"
-                        value={formData.name || ""}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        placeholder="Ex: Cartão principal"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="brand">Bandeira *</Label>
-                      <Select
-                        value={formData.brand}
-                        onValueChange={(value: "visa" | "master") => 
-                          setFormData({ ...formData, brand: value })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione a bandeira" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="visa">Visa</SelectItem>
-                          <SelectItem value="master">Mastercard</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="last_digits">Últimos 4 dígitos</Label>
-                      <Input
-                        id="last_digits"
-                        value={formData.last_digits || ""}
-                        onChange={(e) => setFormData({ ...formData, last_digits: e.target.value })}
-                        placeholder="1234"
-                        maxLength={4}
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="owner_name">Dono do Cartão *</Label>
-                      <Input
-                        id="owner_name"
-                        value={formData.owner_name || ""}
-                        onChange={(e) => setFormData({ ...formData, owner_name: e.target.value })}
-                        placeholder="Ex: João Silva"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="due_date">Data de Vencimento (dia) *</Label>
-                      <Input
-                        id="due_date"
-                        type="number"
-                        min="1"
-                        max="31"
-                        value={formData.due_date || ""}
-                        onChange={(e) => setFormData({ ...formData, due_date: parseInt(e.target.value) || 0 })}
-                        placeholder="10"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="best_purchase_date">Melhor Data de Compra (dia) *</Label>
-                      <Input
-                        id="best_purchase_date"
-                        type="number"
-                        min="1"
-                        max="31"
-                        value={formData.best_purchase_date || ""}
-                        onChange={(e) => setFormData({ ...formData, best_purchase_date: parseInt(e.target.value) || 0 })}
-                        placeholder="5"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="credit_limit">Limite Total de Crédito *</Label>
-                      <Input
-                        id="credit_limit"
-                        type="text"
-                        value={formatCurrencyDisplay(formData.credit_limit)}
-                        onChange={(e) => {
-                          const numericValue = parseCurrencyInput(e.target.value);
-                          setFormData({ ...formData, credit_limit: numericValue });
-                        }}
-                        placeholder="R$ 0,00"
-                      />
-                    </div>
+      <div className="container mx-auto px-4 py-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Cartões de Crédito</h1>
+          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => setEditingCard(null)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Novo Cartão
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{editingCard ? "Editar Cartão" : "Novo Cartão"}</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="name">Descrição do Cartão *</Label>
+                    <Input
+                      id="name"
+                      value={formData.name || ""}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="Ex: Cartão principal"
+                    />
                   </div>
 
-                  <div className="flex justify-end gap-2">
-                    <Button type="submit" disabled={saveMutation.isPending}>
-                      {saveMutation.isPending ? "Salvando..." : "Salvar"}
-                    </Button>
-                    <Button type="button" variant="outline" onClick={resetForm}>
-                      Cancelar
-                    </Button>
+                  <div>
+                    <Label htmlFor="brand">Bandeira *</Label>
+                    <Select
+                      value={formData.brand}
+                      onValueChange={(value: "visa" | "master") => 
+                        setFormData({ ...formData, brand: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a bandeira" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="visa">Visa</SelectItem>
+                        <SelectItem value="master">Mastercard</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
+
+                  <div>
+                    <Label htmlFor="last_digits">Últimos 4 dígitos</Label>
+                    <Input
+                      id="last_digits"
+                      value={formData.last_digits || ""}
+                      onChange={(e) => setFormData({ ...formData, last_digits: e.target.value })}
+                      placeholder="1234"
+                      maxLength={4}
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="owner_name">Dono do Cartão *</Label>
+                    <Input
+                      id="owner_name"
+                      value={formData.owner_name || ""}
+                      onChange={(e) => setFormData({ ...formData, owner_name: e.target.value })}
+                      placeholder="Ex: João Silva"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="due_date">Data de Vencimento (dia) *</Label>
+                    <Input
+                      id="due_date"
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={formData.due_date || ""}
+                      onChange={(e) => setFormData({ ...formData, due_date: parseInt(e.target.value) || 0 })}
+                      placeholder="10"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="best_purchase_date">Melhor Data de Compra (dia) *</Label>
+                    <Input
+                      id="best_purchase_date"
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={formData.best_purchase_date || ""}
+                      onChange={(e) => setFormData({ ...formData, best_purchase_date: parseInt(e.target.value) || 0 })}
+                      placeholder="5"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="credit_limit">Limite Total de Crédito *</Label>
+                    <Input
+                      id="credit_limit"
+                      type="text"
+                      value={formatCurrencyDisplay(formData.credit_limit)}
+                      onChange={(e) => {
+                        const numericValue = parseCurrencyInput(e.target.value);
+                        setFormData({ ...formData, credit_limit: numericValue });
+                      }}
+                      placeholder="R$ 0,00"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button type="submit" disabled={saveMutation.isPending}>
+                    {saveMutation.isPending ? "Salvando..." : "Salvar"}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={resetForm}>
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
-      </header>
+      </div>
 
       <main className="container mx-auto px-4 py-8">
         {isLoadingCards ? (
