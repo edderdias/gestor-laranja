@@ -338,23 +338,23 @@ export default function AccountsReceivable() {
                         <FormItem>
                           <FormLabel>Pagador</FormLabel>
                           <Select onValueChange={handlePayerSelectChange} value={field.value}>
-                            // <FormControl>
-                            //   <SelectTrigger>
-                            //     <SelectValue placeholder="Quem vai pagar">
-                            //       {field.value ? payers?.find(p => p.id === field.value)?.name : "Quem vai pagar"}
-                            //     </SelectValue>
-                            //   </SelectTrigger>
-                            // </FormControl>
-                            <SelectContent>
-                              {payers?.map((payer) => (
-                                <SelectItem key={payer.id} value={payer.id}>
-                                  {payer.name} {/* Apenas o nome do pagador */}
-                                </SelectItem>
-                              ))}
-                              <SelectItem value="new-payer">
-                                + Novo Pagador
-                              </SelectItem>
-                            </SelectContent>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Quem vai pagar">
+                                  {field.value ? payers?.find(p => p.id === field.value)?.name : "Quem vai pagar"}
+                                </SelectValue>
+                              </SelectTrigger>
+                            </FormControl>
+                            // <SelectContent>
+                            //   {payers?.map((payer) => (
+                            //     <SelectItem key={payer.id} value={payer.id}>
+                            //       {payer.name} {/* Apenas o nome do pagador */}
+                            //     </SelectItem>
+                            //   ))}
+                            //   <SelectItem value="new-payer">
+                            //     + Novo Pagador
+                            //   </SelectItem>
+                            // </SelectContent>
                           </Select>
                           <FormMessage />
                         </FormItem>
