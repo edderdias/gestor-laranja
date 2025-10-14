@@ -14,15 +14,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-// NewPayerForm e DialogFooter não são mais necessários
 
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
-  income_type: z.enum(["salario", "extra", "aluguel", "vendas", "comissao"]),
+  // income_type e source_id removidos do formulário, mas ainda podem ser definidos na mutação
   receive_date: z.string().min(1, "Data do recebimento é obrigatória"),
   installments: z.string().min(1, "Quantidade de parcelas é obrigatória"),
   amount: z.string().min(1, "Valor é obrigatório"),
-  source_id: z.string().min(1, "Fonte de receita é obrigatória"),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -37,11 +35,9 @@ export default function AccountsReceivable() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       description: "",
-      income_type: "extra",
       receive_date: format(new Date(), "yyyy-MM-dd"),
       installments: "1",
       amount: "",
-      source_id: "",
     },
   });
 
@@ -49,20 +45,16 @@ export default function AccountsReceivable() {
     if (isFormOpen && editingAccount) {
       form.reset({
         description: editingAccount.description,
-        income_type: editingAccount.income_type,
         receive_date: editingAccount.receive_date,
         installments: editingAccount.installments?.toString() || "1",
         amount: editingAccount.amount.toString(),
-        source_id: editingAccount.income_sources?.id || "",
       });
     } else if (!isFormOpen) {
       form.reset({
         description: "",
-        income_type: "extra",
         receive_date: format(new Date(), "yyyy-MM-dd"),
         installments: "1",
         amount: "",
-        source_id: "",
       });
     }
   }, [isFormOpen, editingAccount, form]);
@@ -81,14 +73,15 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Buscar fontes de receita
-  const { data: sources } = useQuery({
-    queryKey: ["income-sources"],
+  // Buscar fontes de receita para usar como padrão
+  const { data: sources, isLoading: loadingSources } = useQuery({
+    queryKey: ["income-sources-default"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("income_sources")
-        .select("*")
-        .order("name");
+        .select("id, name")
+        .order("name")
+        .limit(1); // Apenas o primeiro para usar como padrão
       
       if (error) throw error;
       return data;
@@ -98,13 +91,22 @@ export default function AccountsReceivable() {
   // Criar/Atualizar conta
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
+      const defaultIncomeType = "extra"; // Valor padrão para income_type
+      let defaultSourceId: string | null = null;
+
+      if (sources && sources.length > 0) {
+        defaultSourceId = sources[0].id;
+      } else {
+        throw new Error("Nenhuma fonte de receita disponível. Por favor, crie uma fonte de receita primeiro.");
+      }
+
       const accountData = {
         description: values.description,
-        income_type: values.income_type,
+        income_type: defaultIncomeType,
         receive_date: values.receive_date,
         installments: parseInt(values.installments),
         amount: parseFloat(values.amount),
-        source_id: values.source_id,
+        source_id: defaultSourceId,
         created_by: user?.id,
       };
 
@@ -173,17 +175,6 @@ export default function AccountsReceivable() {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
 
-  const getIncomeTypeLabel = (type: string) => {
-    const types: Record<string, string> = {
-      salario: "Salário",
-      extra: "Extra",
-      aluguel: "Aluguel",
-      vendas: "Vendas",
-      comissao: "Comissão",
-    };
-    return types[type] || type;
-  };
-
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-4">
@@ -216,30 +207,7 @@ export default function AccountsReceivable() {
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="income_type"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tipo de Recebimento</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o tipo" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="salario">Salário</SelectItem>
-                            <SelectItem value="extra">Extra</SelectItem>
-                            <SelectItem value="aluguel">Aluguel</SelectItem>
-                            <SelectItem value="vendas">Vendas</SelectItem>
-                            <SelectItem value="comissao">Comissão</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  {/* Tipo de Recebimento removido */}
 
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
@@ -288,30 +256,7 @@ export default function AccountsReceivable() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="source_id"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Fonte de Receita</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione a fonte" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {sources?.map((source) => (
-                                <SelectItem key={source.id} value={source.id}>
-                                  {source.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    {/* Fonte de Receita removida */}
 
                     <div className="bg-muted p-4 rounded-lg flex items-center">
                       <p className="text-sm font-medium">
@@ -324,8 +269,8 @@ export default function AccountsReceivable() {
                     <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
                       Cancelar
                     </Button>
-                    <Button type="submit" disabled={saveMutation.isPending}>
-                      {saveMutation.isPending ? "Salvando..." : editingAccount ? "Atualizar" : "Criar"}
+                    <Button type="submit" disabled={saveMutation.isPending || loadingSources}>
+                      {saveMutation.isPending || loadingSources ? "Salvando..." : editingAccount ? "Atualizar" : "Criar"}
                     </Button>
                   </div>
                 </form>
@@ -358,10 +303,7 @@ export default function AccountsReceivable() {
                     <div className="flex-1">
                       <h3 className="font-semibold text-lg mb-2">{account.description}</h3>
                       <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                        <div>
-                          <span className="font-medium">Tipo:</span>{" "}
-                          {getIncomeTypeLabel(account.income_type)}
-                        </div>
+                        {/* Tipo de Recebimento removido da exibição */}
                         <div>
                           <span className="font-medium">Recebimento:</span>{" "}
                           {format(new Date(account.receive_date), "dd/MM/yyyy")}
@@ -378,11 +320,7 @@ export default function AccountsReceivable() {
                             R$ {(account.amount * (account.installments || 1)).toFixed(2)}
                           </span>
                         </div>
-                        {account.income_sources && (
-                          <div>
-                            <span className="font-medium">Fonte:</span> {account.income_sources.name}
-                          </div>
-                        )}
+                        {/* Fonte de Receita removida da exibição */}
                       </div>
                     </div>
                     <div className="flex gap-2 ml-4">
