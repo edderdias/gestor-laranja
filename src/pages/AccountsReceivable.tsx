@@ -10,11 +10,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { NewPayerForm } from "@/components/NewPayerForm"; // Importar o novo componente
 
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -31,7 +30,6 @@ type FormData = z.infer<typeof formSchema>;
 export default function AccountsReceivable() {
   const { user } = useAuth();
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isNewPayerFormOpen, setIsNewPayerFormOpen] = useState(false); // Novo estado para o diálogo de novo pagador
   const [editingAccount, setEditingAccount] = useState<any>(null);
   const queryClient = useQueryClient();
 
@@ -189,21 +187,6 @@ export default function AccountsReceivable() {
     }
   };
 
-  const handlePayerSelectChange = (value: string) => {
-    if (value === "new-payer") {
-      setIsNewPayerFormOpen(true);
-      // Não define o valor do campo 'payer_id' para 'new-payer'
-      // O valor será definido após a criação do novo pagador
-    } else {
-      form.setValue("payer_id", value);
-    }
-  };
-
-  const handleNewPayerCreated = (newPayerId: string) => {
-    form.setValue("payer_id", newPayerId);
-    setIsNewPayerFormOpen(false);
-  };
-
   const totalAmount = accounts?.reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
@@ -297,7 +280,7 @@ export default function AccountsReceivable() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Pagador</FormLabel>
-                          <Select onValueChange={handlePayerSelectChange} value={field.value}>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Quem vai pagar" />
@@ -309,9 +292,6 @@ export default function AccountsReceivable() {
                                   {payer.name}
                                 </SelectItem>
                               ))}
-                              <SelectItem value="new-payer">
-                                + Novo Pagador
-                              </SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -397,19 +377,6 @@ export default function AccountsReceivable() {
           </Dialog>
         </div>
       </div>
-
-      {/* Diálogo para Novo Pagador */}
-      <Dialog open={isNewPayerFormOpen} onOpenChange={setIsNewPayerFormOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Novo Pagador</DialogTitle>
-          </DialogHeader>
-          <NewPayerForm
-            onPayerCreated={handleNewPayerCreated}
-            onClose={() => setIsNewPayerFormOpen(false)}
-          />
-        </DialogContent>
-      </Dialog>
 
       <main className="container mx-auto px-4 py-8">
         <Card className="mb-6">
