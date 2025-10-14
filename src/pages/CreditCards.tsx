@@ -56,6 +56,9 @@ export default function CreditCards() {
     owner_name: "",
   });
 
+  // Local state to manage the displayed string value of credit_limit
+  const [creditLimitInput, setCreditLimitInput] = useState<string>("");
+
   useEffect(() => {
     if (isFormOpen && editingCard) {
       setFormData({
@@ -67,6 +70,8 @@ export default function CreditCards() {
         owner_name: editingCard.owner_name || "",
         last_digits: editingCard.last_digits || "",
       });
+      // Initialize creditLimitInput with formatted value
+      setCreditLimitInput(formatCurrencyDisplay(editingCard.credit_limit));
     } else if (!isFormOpen) {
       resetForm();
     }
@@ -189,6 +194,7 @@ export default function CreditCards() {
     });
     setEditingCard(null);
     setIsFormOpen(false);
+    setCreditLimitInput(""); // Reset local input state for currency
   };
 
   const handleEdit = (card: any) => {
@@ -303,10 +309,16 @@ export default function CreditCards() {
                     <Input
                       id="credit_limit"
                       type="text"
-                      value={formatCurrencyDisplay(formData.credit_limit)}
+                      value={creditLimitInput}
                       onChange={(e) => {
-                        const numericValue = parseCurrencyInput(e.target.value);
-                        setFormData({ ...formData, credit_limit: numericValue });
+                        const rawValue = e.target.value;
+                        setCreditLimitInput(rawValue); // Update local string state
+                        const numericValue = parseCurrencyInput(rawValue);
+                        setFormData((prev) => ({ ...prev, credit_limit: numericValue })); // Update formData with numeric value
+                      }}
+                      onBlur={() => {
+                        // Format on blur
+                        setCreditLimitInput(formatCurrencyDisplay(formData.credit_limit));
                       }}
                       placeholder="R$ 0,00"
                     />
