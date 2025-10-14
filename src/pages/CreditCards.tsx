@@ -3,7 +3,6 @@ import { ArrowLeft, CreditCard, Edit, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +10,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { z } from "zod";
+
+// Helper function for formatting currency for display
+const formatCurrencyDisplay = (value: number | undefined): string => {
+  if (value === undefined || value === null) return "";
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+};
+
+// Helper function for parsing currency input string to number
+const parseCurrencyInput = (input: string): number => {
+  // Remove all non-digit characters except comma
+  const cleanedInput = input.replace(/[^0-9,]/g, '');
+  // Replace comma with dot for parseFloat
+  const numericValue = parseFloat(cleanedInput.replace(',', '.')) || 0;
+  return numericValue;
+};
 
 const cardSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
@@ -284,12 +303,13 @@ export default function CreditCards() {
                     <Label htmlFor="credit_limit">Limite Total de Crédito *</Label>
                     <Input
                       id="credit_limit"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.credit_limit || ""}
-                      onChange={(e) => setFormData({ ...formData, credit_limit: parseFloat(e.target.value) || 0 })}
-                      placeholder="5000.00"
+                      type="text"
+                      value={formatCurrencyDisplay(formData.credit_limit)}
+                      onChange={(e) => {
+                        const numericValue = parseCurrencyInput(e.target.value);
+                        setFormData({ ...formData, credit_limit: numericValue });
+                      }}
+                      placeholder="R$ 0,00"
                     />
                   </div>
                 </div>
