@@ -286,7 +286,9 @@ export default function AccountsPayable() {
                             <SelectContent>
                               {cards?.map((card) => (
                                 <SelectItem key={card.id} value={card.id}>
-                                  {card.name} {card.last_digits ? `(**** ${card.last_digits})` : ""}
+                                  <span> {/* Envolvendo o conteúdo em um único span */}
+                                    {card.name} {card.last_digits ? `(**** ${card.last_digits})` : ""}
+                                  </span>
                                 </SelectItem>
                               ))}
                             </SelectContent>
