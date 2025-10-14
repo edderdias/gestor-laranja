@@ -61,21 +61,21 @@ export function MainLayout() {
             <NavigationMenu>
               <NavigationMenuList>
                 <NavigationMenuItem>
-                  <Link to="/accounts-payable" legacyBehavior passHref>
+                  <Link to="/accounts-payable" legacyBehavior>
                     <NavigationMenuLink className={navigationMenuTriggerStyle()}>
                       Contas a Pagar
                     </NavigationMenuLink>
                   </Link>
                 </NavigationMenuItem>
                 <NavigationMenuItem>
-                  <Link to="/accounts-receivable" legacyBehavior passHref>
+                  <Link to="/accounts-receivable" legacyBehavior>
                     <NavigationMenuLink className={navigationMenuTriggerStyle()}>
                       Contas a Receber
                     </NavigationMenuLink>
                   </Link>
                 </NavigationMenuItem>
                 <NavigationMenuItem>
-                  <Link to="/credit-cards" legacyBehavior passHref>
+                  <Link to="/credit-cards" legacyBehavior>
                     <NavigationMenuLink className={navigationMenuTriggerStyle()}>
                       Cartões de Crédito
                     </NavigationMenuLink>
