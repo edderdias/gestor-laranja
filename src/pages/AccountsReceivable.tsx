@@ -174,6 +174,42 @@ export default function AccountsReceivable() {
     },
   });
 
+  // Mutation para deletar pagador
+  const deletePayerMutation = useMutation({
+    mutationFn: async (payerId: string) => {
+      // Verificar se o pagador tem contas a receber associadas
+      const { count, error: countError } = await supabase
+        .from("accounts_receivable")
+        .select("id", { count: "exact" })
+        .eq("payer_id", payerId);
+
+      if (countError) throw countError;
+
+      if (count && count > 0) {
+        throw new Error("Não é possível excluir este pagador, pois ele possui contas a receber associadas.");
+      }
+
+      // Se não houver contas associadas, prosseguir com a exclusão
+      const { error } = await supabase
+        .from("payers")
+        .delete()
+        .eq("id", payerId);
+
+      if (error) throw error;
+    },
+    onSuccess: (data, payerId) => {
+      queryClient.invalidateQueries({ queryKey: ["payers"] });
+      toast.success("Pagador excluído com sucesso!");
+      // Se o pagador excluído era o selecionado no formulário, resetar o campo
+      if (form.getValues("payer_id") === payerId) {
+        form.setValue("payer_id", "");
+      }
+    },
+    onError: (error) => {
+      toast.error("Erro ao excluir pagador: " + error.message);
+    },
+  });
+
   const onSubmit = (values: FormData) => {
     saveMutation.mutate(values);
   };
@@ -200,6 +236,12 @@ export default function AccountsReceivable() {
   const handleNewPayerCreated = (newPayerId: string) => {
     form.setValue("payer_id", newPayerId);
     setIsNewPayerFormOpen(false);
+  };
+
+  const handleDeletePayer = (payerId: string, payerName: string) => {
+    if (confirm(`Tem certeza que deseja excluir o pagador "${payerName}"?`)) {
+      deletePayerMutation.mutate(payerId);
+    }
   };
 
   const totalAmount = accounts?.reduce((sum, account) => {
@@ -304,7 +346,21 @@ export default function AccountsReceivable() {
                             <SelectContent>
                               {payers?.map((payer) => (
                                 <SelectItem key={payer.id} value={payer.id}>
-                                  {payer.name}
+                                  <div className="flex items-center justify-between w-full">
+                                    <span>{payer.name}</span>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      onClick={(e) => {
+                                        e.stopPropagation(); // Evita que o SelectItem seja selecionado
+                                        handleDeletePayer(payer.id, payer.name);
+                                      }}
+                                      disabled={deletePayerMutation.isPending}
+                                    >
+                                      <Trash2 className="h-3 w-3 text-destructive" />
+                                    </Button>
+                                  </div>
                                 </SelectItem>
                               ))}
                               <SelectItem value="new-payer">
