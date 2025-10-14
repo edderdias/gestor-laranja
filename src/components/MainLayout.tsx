@@ -1,7 +1,7 @@
 import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react"; // Removido Wallet
+import { LogOut } from "lucide-react";
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -61,21 +61,21 @@ export function MainLayout() {
             <NavigationMenu>
               <NavigationMenuList>
                 <NavigationMenuItem>
-                  <Link to="/accounts-payable" legacyBehavior>
+                  <Link to="/accounts-payable"> {/* Removido legacyBehavior */}
                     <NavigationMenuLink className={navigationMenuTriggerStyle()}>
                       Contas a Pagar
                     </NavigationMenuLink>
                   </Link>
                 </NavigationMenuItem>
                 <NavigationMenuItem>
-                  <Link to="/accounts-receivable" legacyBehavior>
+                  <Link to="/accounts-receivable"> {/* Removido legacyBehavior */}
                     <NavigationMenuLink className={navigationMenuTriggerStyle()}>
                       Contas a Receber
                     </NavigationMenuLink>
                   </Link>
                 </NavigationMenuItem>
                 <NavigationMenuItem>
-                  <Link to="/credit-cards" legacyBehavior>
+                  <Link to="/credit-cards"> {/* Removido legacyBehavior */}
                     <NavigationMenuLink className={navigationMenuTriggerStyle()}>
                       Cartões de Crédito
                     </NavigationMenuLink>
