@@ -61,25 +61,25 @@ export function MainLayout() {
             <NavigationMenu>
               <NavigationMenuList>
                 <NavigationMenuItem>
-                  <Link to="/accounts-payable"> {/* Removido legacyBehavior */}
-                    <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+                  <NavigationMenuLink asChild> {/* Adicionado asChild aqui */}
+                    <Link to="/accounts-payable" className={navigationMenuTriggerStyle()}>
                       Contas a Pagar
-                    </NavigationMenuLink>
-                  </Link>
+                    </Link>
+                  </NavigationMenuLink>
                 </NavigationMenuItem>
                 <NavigationMenuItem>
-                  <Link to="/accounts-receivable"> {/* Removido legacyBehavior */}
-                    <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+                  <NavigationMenuLink asChild> {/* Adicionado asChild aqui */}
+                    <Link to="/accounts-receivable" className={navigationMenuTriggerStyle()}>
                       Contas a Receber
-                    </NavigationMenuLink>
-                  </Link>
+                    </Link>
+                  </NavigationMenuLink>
                 </NavigationMenuItem>
                 <NavigationMenuItem>
-                  <Link to="/credit-cards"> {/* Removido legacyBehavior */}
-                    <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+                  <NavigationMenuLink asChild> {/* Adicionado asChild aqui */}
+                    <Link to="/credit-cards" className={navigationMenuTriggerStyle()}>
                       Cartões de Crédito
-                    </NavigationMenuLink>
-                  </Link>
+                    </Link>
+                  </NavigationMenuLink>
                 </NavigationMenuItem>
               </NavigationMenuList>
             </NavigationMenu>
