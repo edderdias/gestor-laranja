@@ -54,8 +54,8 @@ export default function AccountsReceivable() {
         receive_date: editingAccount.receive_date,
         installments: editingAccount.installments?.toString() || "1",
         amount: editingAccount.amount.toString(),
-        payer_id: editingAccount.payer_id || "",
-        source_id: editingAccount.source_id,
+        payer_id: editingAccount.payers?.id || "", // Use payers.id if available, otherwise empty string
+        source_id: editingAccount.income_sources?.id || "", // Use income_sources.id if available, otherwise empty string
       });
     } else if (!isFormOpen) {
       form.reset({
@@ -76,7 +76,7 @@ export default function AccountsReceivable() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("accounts_receivable")
-        .select("*, income_sources(name), payers(name)")
+        .select("*, income_sources(id, name), payers(id, name)") // Select id and name for proper mapping
         .order("receive_date", { ascending: true });
       
       if (error) throw error;
@@ -259,19 +259,46 @@ export default function AccountsReceivable() {
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="receive_date"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Data do Recebimento</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="receive_date"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Data do Recebimento</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="payer_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Pagador</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Quem vai pagar" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {payers?.map((payer) => (
+                                <SelectItem key={payer.id} value={payer.id}>
+                                  {payer.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
@@ -303,60 +330,37 @@ export default function AccountsReceivable() {
                     />
                   </div>
 
-                  <FormField
-                    control={form.control}
-                    name="payer_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Pagador</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Quem vai pagar" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {payers?.map((payer) => (
-                              <SelectItem key={payer.id} value={payer.id}>
-                                {payer.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="source_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Fonte de Receita</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione a fonte" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {sources?.map((source) => (
+                                <SelectItem key={source.id} value={source.id}>
+                                  {source.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  <FormField
-                    control={form.control}
-                    name="source_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Fonte de Receita</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione a fonte" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {sources?.map((source) => (
-                              <SelectItem key={source.id} value={source.id}>
-                                {source.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="bg-muted p-4 rounded-lg">
-                    <p className="text-sm font-medium">
-                      Valor Total: R$ {(parseFloat(form.watch("amount") || "0") * parseInt(form.watch("installments") || "1")).toFixed(2)}
-                    </p>
+                    <div className="bg-muted p-4 rounded-lg flex items-center">
+                      <p className="text-sm font-medium">
+                        Valor Total: R$ {(parseFloat(form.watch("amount") || "0") * parseInt(form.watch("installments") || "1")).toFixed(2)}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="flex justify-end gap-2">
