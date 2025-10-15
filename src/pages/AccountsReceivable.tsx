@@ -221,7 +221,7 @@ export default function AccountsReceivable() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Tipo de Recebimento</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Selecione o tipo" />
@@ -293,7 +293,7 @@ export default function AccountsReceivable() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Fonte de Receita</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <Select onValueChange={field.onChange} value={field.value || ""}>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Selecione a fonte" />
