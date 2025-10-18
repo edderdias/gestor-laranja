@@ -30,7 +30,6 @@ export type Database = {
           paid: boolean | null
           paid_date: string | null
           payment_type: Database["public"]["Enums"]["payment_type"] | null
-          responsible_id: string | null
           updated_at: string
           is_fixed: boolean | null // Adicionado
         }
@@ -49,7 +48,6 @@ export type Database = {
           paid?: boolean | null
           paid_date?: string | null
           payment_type?: Database["public"]["Enums"]["payment_type"] | null
-          responsible_id?: string | null
           updated_at?: string
           is_fixed?: boolean | null // Adicionado
         }
@@ -68,7 +66,6 @@ export type Database = {
           paid?: boolean | null
           paid_date?: string | null
           payment_type?: Database["public"]["Enums"]["payment_type"] | null
-          responsible_id?: string | null
           updated_at?: string
           is_fixed?: boolean | null // Adicionado
         }
@@ -92,13 +89,6 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "accounts_payable_responsible_id_fkey"
-            columns: ["responsible_id"]
-            isOneToOne: false
-            referencedRelation: "responsible_parties"
             referencedColumns: ["id"]
           },
         ]
@@ -425,35 +415,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
-      }
-      responsible_parties: {
-        Row: {
-          created_at: string
-          id: string
-          name: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          name: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          name?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "responsible_parties_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       user_roles: {
         Row: {

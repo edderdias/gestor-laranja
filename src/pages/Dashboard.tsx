@@ -16,7 +16,7 @@ import { format, parseISO, getMonth, getYear } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { MonthlyExpensesChart } from "@/components/charts/MonthlyExpensesChart";
 import { CategoryExpensesChart } from "@/components/charts/CategoryExpensesChart";
-import { ResponsiblePartyExpensesChart } from "@/components/charts/ResponsiblePartyExpensesChart";
+// import { ResponsiblePartyExpensesChart } from "@/components/charts/ResponsiblePartyExpensesChart"; // Removido
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -30,7 +30,7 @@ export default function Dashboard() {
       if (!user?.id) return [];
       const { data, error } = await supabase
         .from("accounts_payable")
-        .select("*, expense_categories(name), responsible_parties(name)")
+        .select("*, expense_categories(name)") // Removido responsible_parties(name)
         .eq("created_by", user.id);
       if (error) throw error;
       return data;
@@ -78,7 +78,7 @@ export default function Dashboard() {
 
   const monthlyExpensesMap = new Map<string, number>();
   const categoryExpensesMap = new Map<string, number>();
-  const responsiblePartyExpensesMap = new Map<string, number>();
+  // const responsiblePartyExpensesMap = new Map<string, number>(); // Removido
 
   if (accountsPayable) {
     accountsPayable.forEach(account => {
@@ -101,11 +101,11 @@ export default function Dashboard() {
         categoryExpensesMap.set(categoryName, (categoryExpensesMap.get(categoryName) || 0) + amount);
       }
 
-      // Responsible party expenses for chart
-      if (account.responsible_parties) {
-        const responsibleName = account.responsible_parties.name;
-        responsiblePartyExpensesMap.set(responsibleName, (responsiblePartyExpensesMap.get(responsibleName) || 0) + amount);
-      }
+      // Responsible party expenses for chart - REMOVIDO
+      // if (account.responsible_parties) {
+      //   const responsibleName = account.responsible_parties.name;
+      //   responsiblePartyExpensesMap.set(responsibleName, (responsiblePartyExpensesMap.get(responsibleName) || 0) + amount);
+      // }
 
       // Credit card usage
       if (account.payment_type === "cartao") {
@@ -143,9 +143,9 @@ export default function Dashboard() {
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value);
 
-  const responsiblePartyExpensesChartData = Array.from(responsiblePartyExpensesMap.entries())
-    .map(([name, total]) => ({ name, total }))
-    .sort((a, b) => b.total - a.total);
+  // const responsiblePartyExpensesChartData = Array.from(responsiblePartyExpensesMap.entries()) // Removido
+  //   .map(([name, total]) => ({ name, total }))
+  //   .sort((a, b) => b.total - a.total);
 
   return (
     <div className="min-h-screen bg-background">
@@ -220,7 +220,7 @@ export default function Dashboard() {
         <div className="grid gap-6 lg:grid-cols-2 mb-8">
           <MonthlyExpensesChart data={monthlyExpensesChartData} />
           <CategoryExpensesChart data={categoryExpensesChartData} />
-          <ResponsiblePartyExpensesChart data={responsiblePartyExpensesChartData} />
+          {/* <ResponsiblePartyExpensesChart data={responsiblePartyExpensesChartData} /> */} {/* Removido */}
         </div>
 
         {/* Menu de Navegação */}
