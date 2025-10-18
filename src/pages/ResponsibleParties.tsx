@@ -74,8 +74,6 @@ export default function ResponsibleParties() {
         user_id: user.id,
       };
 
-      console.log("Attempting to save responsible with data:", responsibleData); // DEBUG LOG
-
       if (editingResponsible) {
         const { error } = await supabase
           .from("responsible_parties")
