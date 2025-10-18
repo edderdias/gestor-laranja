@@ -203,6 +203,7 @@ export default function AccountsPayable() {
           toast.error("Usuário não autenticado. Não foi possível criar novo responsável.");
           throw new Error("User not authenticated."); // Interrompe a mutação
         }
+        console.log("Attempting to insert new responsible with user.id:", user.id); // DEBUG LOG
         const { data: newResponsible, error: newResponsibleError } = await supabase
           .from("responsible_parties")
           .insert({ name: values.new_responsible_name, user_id: user.id }) // Garante que user.id seja usado
