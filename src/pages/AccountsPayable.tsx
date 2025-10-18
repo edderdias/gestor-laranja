@@ -11,7 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch"; // Importar o Switch
@@ -20,13 +20,14 @@ const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   payment_type: z.enum(["cartao", "promissoria", "boleto"]),
   card_id: z.string().optional(),
-  purchase_date: z.string().optional(), // Tornar opcional inicialmente
+  purchase_date: z.string().optional(),
   due_date: z.string().min(1, "Data de vencimento é obrigatória"),
   installments: z.string().min(1, "Quantidade de parcelas é obrigatória"),
   amount: z.string().min(1, "Valor é obrigatório"),
-  responsible_id: z.string().min(1, "Responsável é obrigatório"),
+  responsible_id: z.string().optional(), // Tornar opcional para lidar com 'new-responsible'
+  new_responsible_name: z.string().optional(), // Novo campo para o nome do novo responsável
   category_id: z.string().min(1, "Categoria é obrigatória"),
-  is_fixed: z.boolean().default(false), // Novo campo
+  is_fixed: z.boolean().default(false),
 }).superRefine((data, ctx) => {
   // Validação condicional para purchase_date
   if (!data.is_fixed && !data.purchase_date) {
@@ -34,6 +35,26 @@ const formSchema = z.object({
       code: z.ZodIssueCode.custom,
       message: "Data da compra é obrigatória para contas não fixas",
       path: ["purchase_date"],
+    });
+  }
+  // Validação condicional para responsible_id e new_responsible_name
+  if (data.responsible_id === "new-responsible" && !data.new_responsible_name) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Nome do novo responsável é obrigatório",
+      path: ["new_responsible_name"],
+    });
+  } else if (data.responsible_id === "new-responsible" && data.new_responsible_name && data.new_responsible_name.length < 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Nome do novo responsável é obrigatório",
+      path: ["new_responsible_name"],
+    });
+  } else if (!data.responsible_id && data.responsible_id !== "new-responsible") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Responsável é obrigatório",
+      path: ["responsible_id"],
     });
   }
 });
@@ -56,13 +77,15 @@ export default function AccountsPayable() {
       installments: "1",
       amount: "",
       responsible_id: "",
+      new_responsible_name: "",
       category_id: "",
-      is_fixed: false, // Valor padrão para o novo campo
+      is_fixed: false,
     },
   });
 
   const paymentType = form.watch("payment_type");
-  const isFixed = form.watch("is_fixed"); // Observar o estado do switch
+  const isFixed = form.watch("is_fixed");
+  const selectedResponsibleId = form.watch("responsible_id");
 
   useEffect(() => {
     if (isFormOpen && editingAccount) {
@@ -70,13 +93,14 @@ export default function AccountsPayable() {
         description: editingAccount.description,
         payment_type: editingAccount.payment_type || "boleto",
         card_id: editingAccount.card_id || "",
-        purchase_date: editingAccount.purchase_date || format(new Date(), "yyyy-MM-dd"), // Usar purchase_date
+        purchase_date: editingAccount.purchase_date || format(new Date(), "yyyy-MM-dd"),
         due_date: editingAccount.due_date,
         installments: editingAccount.installments.toString(),
         amount: editingAccount.amount.toString(),
         responsible_id: editingAccount.responsible_id || "",
+        new_responsible_name: "", // Sempre limpa ao editar um existente
         category_id: editingAccount.category_id || "",
-        is_fixed: editingAccount.is_fixed || false, // Carregar valor de is_fixed
+        is_fixed: editingAccount.is_fixed || false,
       });
     } else if (!isFormOpen) {
       form.reset({
@@ -87,6 +111,7 @@ export default function AccountsPayable() {
         installments: "1",
         amount: "",
         responsible_id: "",
+        new_responsible_name: "",
         category_id: "",
         is_fixed: false,
       });
@@ -100,11 +125,29 @@ export default function AccountsPayable() {
       const { data, error } = await supabase
         .from("accounts_payable")
         .select("*, expense_categories(name), responsible_parties(name), credit_cards(name)")
+        .eq("created_by", user?.id) // Filtrar por usuário logado
         .order("due_date", { ascending: true });
       
       if (error) throw error;
       return data;
     },
+    enabled: !!user?.id, // Habilitar query apenas se houver user.id
+  });
+
+  // Buscar responsáveis
+  const { data: responsibles, isLoading: isLoadingResponsibles } = useQuery({
+    queryKey: ["responsible-parties"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("responsible_parties")
+        .select("*")
+        .eq("user_id", user?.id) // Filtrar por usuário logado
+        .order("name");
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id, // Habilitar query apenas se houver user.id
   });
 
   // Buscar cartões
@@ -114,25 +157,13 @@ export default function AccountsPayable() {
       const { data, error } = await supabase
         .from("credit_cards")
         .select("*")
+        .eq("created_by", user?.id) // Filtrar por usuário logado
         .order("name");
       
       if (error) throw error;
       return data;
     },
-  });
-
-  // Buscar responsáveis
-  const { data: responsibles } = useQuery({
-    queryKey: ["responsible-parties"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("responsible_parties")
-        .select("*")
-        .order("name");
-      
-      if (error) throw error;
-      return data;
-    },
+    enabled: !!user?.id, // Habilitar query apenas se houver user.id
   });
 
   // Buscar categorias
@@ -152,18 +183,33 @@ export default function AccountsPayable() {
   // Criar/Atualizar conta
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
+      let finalResponsibleId = values.responsible_id;
+
+      // Se "Novo Responsável" foi selecionado e um nome foi fornecido
+      if (values.responsible_id === "new-responsible" && values.new_responsible_name) {
+        const { data: newResponsible, error: newResponsibleError } = await supabase
+          .from("responsible_parties")
+          .insert({ name: values.new_responsible_name, user_id: user?.id })
+          .select("id")
+          .single();
+
+        if (newResponsibleError) throw newResponsibleError;
+        finalResponsibleId = newResponsible.id;
+        queryClient.invalidateQueries({ queryKey: ["responsible-parties"] }); // Invalida para atualizar a lista
+      }
+
       const accountData = {
         description: values.description,
         payment_type: values.payment_type,
         card_id: values.payment_type === "cartao" ? values.card_id : null,
-        purchase_date: values.is_fixed ? null : values.purchase_date, // Data da compra é nula se for fixa
+        purchase_date: values.is_fixed ? null : values.purchase_date,
         due_date: values.due_date,
         installments: parseInt(values.installments),
         amount: parseFloat(values.amount),
-        responsible_id: values.responsible_id,
+        responsible_id: finalResponsibleId, // Usar o ID final
         category_id: values.category_id,
-        expense_type: "variavel" as const, // Manter como variável por enquanto, pode ser ajustado
-        is_fixed: values.is_fixed, // Salvar o novo campo
+        expense_type: "variavel" as const,
+        is_fixed: values.is_fixed,
         created_by: user?.id,
       };
 
@@ -412,17 +458,42 @@ export default function AccountsPayable() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {responsibles?.map((responsible) => (
-                              <SelectItem key={responsible.id} value={responsible.id}>
-                                {responsible.name}
-                              </SelectItem>
-                            ))}
+                            {isLoadingResponsibles ? (
+                              <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                            ) : (
+                              <>
+                                {responsibles?.map((responsible) => (
+                                  <SelectItem key={responsible.id} value={responsible.id}>
+                                    {responsible.name}
+                                  </SelectItem>
+                                ))}
+                                <SelectItem value="new-responsible">
+                                  + Novo Responsável
+                                </SelectItem>
+                              </>
+                            )}
                           </SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+
+                  {selectedResponsibleId === "new-responsible" && (
+                    <FormField
+                      control={form.control}
+                      name="new_responsible_name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nome do Novo Responsável</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="Nome do novo responsável" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
 
                   <FormField
                     control={form.control}
