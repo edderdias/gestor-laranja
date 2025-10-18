@@ -84,19 +84,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      // Adiciona verificação antes de tentar fazer logout
       if (user) { 
         const { error } = await supabase.auth.signOut();
-        if (error) throw error;
-        toast.success("Logout realizado com sucesso!");
+        if (error) {
+          console.error("Supabase signOut error:", error);
+          toast.error(error.message || "Erro ao fazer logout no servidor. Desconectando localmente.");
+        } else {
+          toast.success("Logout realizado com sucesso!");
+        }
       } else {
-        // Se não há usuário, já estamos efetivamente deslogados
         toast.info("Você já está desconectado.");
       }
+      // Sempre limpa o estado local e navega para a página de autenticação
+      // Isso garante que a UI reflita um estado de deslogado, mesmo que o signOut no servidor tenha falhado.
+      setSession(null);
+      setUser(null);
       navigate('/auth');
     } catch (error: any) {
-      toast.error(error.message || "Erro ao fazer logout");
-      throw error;
+      console.error("Logout process error:", error);
+      toast.error(error.message || "Erro inesperado durante o logout.");
+      // Garante a navegação mesmo em erros inesperados
+      setSession(null);
+      setUser(null);
+      navigate('/auth');
     }
   };
 
