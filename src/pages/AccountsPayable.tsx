@@ -25,6 +25,7 @@ const formSchema = z.object({
   due_date: z.string().min(1, "Data de vencimento é obrigatória"),
   installments: z.string().optional(), // Tornar opcional para lidar com conta fixa
   amount: z.string().min(1, "Valor é obrigatório"),
+  responsible_id: z.string().min(1, "Responsável é obrigatório"), // Campo de responsável reintroduzido
   category_id: z.string().min(1, "Categoria é obrigatória"),
   is_fixed: z.boolean().default(false),
 }).superRefine((data, ctx) => {
@@ -63,6 +64,7 @@ export default function AccountsPayable() {
       due_date: format(new Date(), "yyyy-MM-dd"),
       installments: "1",
       amount: "",
+      responsible_id: "", // Valor padrão para o campo de responsável
       category_id: "",
       is_fixed: false,
     },
@@ -77,12 +79,13 @@ export default function AccountsPayable() {
         description: editingAccount.description,
         payment_type: editingAccount.payment_type || "boleto",
         card_id: editingAccount.card_id || "",
-        purchase_date: editingAccount.purchase_date || format(new Date(), "yyyy-MM-dd"), // Usar purchase_date
+        purchase_date: editingAccount.purchase_date || format(new Date(), "yyyy-MM-dd"),
         due_date: editingAccount.due_date,
-        installments: editingAccount.installments?.toString() || (editingAccount.is_fixed ? "" : "1"), // Ajuste para conta fixa
+        installments: editingAccount.installments?.toString() || (editingAccount.is_fixed ? "" : "1"),
         amount: editingAccount.amount.toString(),
+        responsible_id: editingAccount.responsible_id || "", // Carregar valor de responsible_id
         category_id: editingAccount.category_id || "",
-        is_fixed: editingAccount.is_fixed || false, // Carregar valor de is_fixed
+        is_fixed: editingAccount.is_fixed || false,
       });
     } else if (!isFormOpen) {
       form.reset({
@@ -92,6 +95,7 @@ export default function AccountsPayable() {
         due_date: format(new Date(), "yyyy-MM-dd"),
         installments: "1",
         amount: "",
+        responsible_id: "", // Resetar para valor padrão
         category_id: "",
         is_fixed: false,
       });
@@ -102,34 +106,51 @@ export default function AccountsPayable() {
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
     queryKey: ["accounts-payable"],
     queryFn: async () => {
-      if (!user?.id) return []; // Adicionado: Retorna vazio se user.id não estiver disponível
+      if (!user?.id) return [];
       const { data, error } = await supabase
         .from("accounts_payable")
-        .select("*, expense_categories(name), credit_cards(name)") // Removido responsible_parties(name)
-        .eq("created_by", user.id) // Filtrar por usuário logado
+        .select("*, expense_categories(name), responsible_parties(name), credit_cards(name)") // Re-adicionado responsible_parties(name)
+        .eq("created_by", user.id)
         .order("due_date", { ascending: true });
       
       if (error) throw error;
       return data;
     },
-    enabled: !!user?.id, // Habilitar query apenas se houver user.id
+    enabled: !!user?.id,
+  });
+
+  // Buscar responsáveis
+  const { data: responsibles, isLoading: isLoadingResponsibles } = useQuery({
+    queryKey: ["responsible-parties"],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from("responsible_parties")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("name");
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
   });
 
   // Buscar cartões
   const { data: cards } = useQuery({
     queryKey: ["credit-cards"],
     queryFn: async () => {
-      if (!user?.id) return []; // Adicionado: Retorna vazio se user.id não estiver disponível
+      if (!user?.id) return [];
       const { data, error } = await supabase
         .from("credit_cards")
         .select("*")
-        .eq("created_by", user.id) // Filtrar por usuário logado
+        .eq("created_by", user.id)
         .order("name");
       
       if (error) throw error;
       return data;
     },
-    enabled: !!user?.id, // Habilitar query apenas se houver user.id
+    enabled: !!user?.id,
   });
 
   // Buscar categorias
@@ -149,18 +170,24 @@ export default function AccountsPayable() {
   // Criar/Atualizar conta
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
+      if (!user?.id) {
+        toast.error("Usuário não autenticado. Não foi possível salvar conta.");
+        throw new Error("User not authenticated.");
+      }
+
       const accountData = {
         description: values.description,
         payment_type: values.payment_type,
         card_id: values.payment_type === "cartao" ? values.card_id : null,
-        purchase_date: values.is_fixed ? null : values.purchase_date, // Data da compra é nula se for fixa
+        purchase_date: values.is_fixed ? null : values.purchase_date,
         due_date: values.due_date,
-        installments: values.is_fixed ? 1 : parseInt(values.installments || "1"), // Se fixa, 1 parcela
+        installments: values.is_fixed ? 1 : parseInt(values.installments || "1"),
         amount: parseFloat(values.amount),
+        responsible_id: values.responsible_id, // Usar o ID do responsável selecionado
         category_id: values.category_id,
-        expense_type: "variavel" as const, // Manter como variável por enquanto, pode ser ajustado
-        is_fixed: values.is_fixed, // Salvar o novo campo
-        created_by: user?.id,
+        expense_type: "variavel" as const,
+        is_fixed: values.is_fixed,
+        created_by: user.id,
       };
 
       if (editingAccount) {
@@ -334,7 +361,7 @@ export default function AccountsPayable() {
                   )}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {!isFixed && ( // Renderiza a data da compra apenas se não for fixa
+                    {!isFixed && (
                       <FormField
                         control={form.control}
                         name="purchase_date"
@@ -364,7 +391,7 @@ export default function AccountsPayable() {
                     />
                   </div>
 
-                  {!isFixed && ( // Renderiza a quantidade de parcelas apenas se não for fixa
+                  {!isFixed && (
                     <div className="grid grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
@@ -396,7 +423,7 @@ export default function AccountsPayable() {
                     </div>
                   )}
 
-                  {isFixed && ( // Renderiza o valor da parcela em uma linha separada se for fixa
+                  {isFixed && (
                     <div className="grid grid-cols-1 gap-4">
                       <FormField
                         control={form.control}
@@ -413,6 +440,37 @@ export default function AccountsPayable() {
                       />
                     </div>
                   )}
+
+                  <FormField
+                    control={form.control}
+                    name="responsible_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Responsável</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o responsável" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {isLoadingResponsibles ? (
+                              <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                            ) : (
+                              <>
+                                {responsibles?.map((responsible) => (
+                                  <SelectItem key={responsible.id} value={responsible.id}>
+                                    {responsible.name}
+                                  </SelectItem>
+                                ))}
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
                   <FormField
                     control={form.control}
@@ -497,7 +555,7 @@ export default function AccountsPayable() {
                           <span className="font-medium">Vencimento:</span>{" "}
                           {format(new Date(account.due_date), "dd/MM/yyyy")}
                         </div>
-                        {!account.is_fixed && ( // Exibe parcelas apenas se não for fixa
+                        {!account.is_fixed && (
                           <div>
                             <span className="font-medium">Parcelas:</span> {account.installments}x
                           </div>
@@ -511,6 +569,11 @@ export default function AccountsPayable() {
                             R$ {(account.amount * (account.installments || 1)).toFixed(2)}
                           </span>
                         </div>
+                        {account.responsible_parties && (
+                          <div>
+                            <span className="font-medium">Responsável:</span> {account.responsible_parties.name}
+                          </div>
+                        )}
                         {account.expense_categories && (
                           <div>
                             <span className="font-medium">Categoria:</span> {account.expense_categories.name}
