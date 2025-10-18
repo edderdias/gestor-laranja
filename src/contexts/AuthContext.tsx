@@ -51,11 +51,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
       });
 
-      if (error) throw error;
-      toast.success("Login realizado com sucesso!");
+      if (error) {
+        toast.error(error.message || "Erro ao fazer login");
+        // Não re-lançar o erro para evitar Unhandled Promise Rejection
+      } else {
+        toast.success("Login realizado com sucesso!");
+      }
     } catch (error: any) {
-      toast.error(error.message || "Erro ao fazer login");
-      throw error;
+      toast.error(error.message || "Erro inesperado ao fazer login");
     }
   };
 
@@ -74,11 +77,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       });
 
-      if (error) throw error;
-      toast.success("Cadastro realizado com sucesso!");
+      if (error) {
+        toast.error(error.message || "Erro ao criar conta");
+        // Não re-lançar o erro para evitar Unhandled Promise Rejection
+      } else {
+        toast.success("Cadastro realizado com sucesso!");
+      }
     } catch (error: any) {
-      toast.error(error.message || "Erro ao criar conta");
-      throw error;
+      toast.error(error.message || "Erro inesperado ao criar conta");
     }
   };
 
@@ -87,23 +93,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user) { 
         const { error } = await supabase.auth.signOut();
         if (error) {
-          console.error("Supabase signOut error:", error);
-          toast.error(error.message || "Erro ao fazer logout no servidor. Desconectando localmente.");
+          // Verifica se o erro é AuthSessionMissingError
+          if (error.message.includes("Auth session missing!")) {
+            console.warn("Supabase signOut warning: Sessão já ausente no servidor. Prosseguindo com logout local.");
+            toast.info("Sessão já encerrada no servidor. Desconectando localmente.");
+          } else {
+            console.error("Supabase signOut error:", error);
+            toast.error(error.message || "Erro ao fazer logout no servidor. Desconectando localmente.");
+          }
         } else {
           toast.success("Logout realizado com sucesso!");
         }
       } else {
         toast.info("Você já está desconectado.");
       }
-      // Sempre limpa o estado local e navega para a página de autenticação
-      // Isso garante que a UI reflita um estado de deslogado, mesmo que o signOut no servidor tenha falhado.
-      setSession(null);
-      setUser(null);
-      navigate('/auth');
     } catch (error: any) {
       console.error("Logout process error:", error);
       toast.error(error.message || "Erro inesperado durante o logout.");
-      // Garante a navegação mesmo em erros inesperados
+    } finally {
+      // Sempre limpa o estado local e navega para a página de autenticação
       setSession(null);
       setUser(null);
       navigate('/auth');
