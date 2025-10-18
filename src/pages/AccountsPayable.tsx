@@ -14,17 +14,28 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch"; // Importar o Switch
 
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   payment_type: z.enum(["cartao", "promissoria", "boleto"]),
   card_id: z.string().optional(),
-  purchase_date: z.string().min(1, "Data da compra é obrigatória"),
+  purchase_date: z.string().optional(), // Tornar opcional inicialmente
   due_date: z.string().min(1, "Data de vencimento é obrigatória"),
   installments: z.string().min(1, "Quantidade de parcelas é obrigatória"),
   amount: z.string().min(1, "Valor é obrigatório"),
   responsible_id: z.string().min(1, "Responsável é obrigatório"),
   category_id: z.string().min(1, "Categoria é obrigatória"),
+  is_fixed: z.boolean().default(false), // Novo campo
+}).superRefine((data, ctx) => {
+  // Validação condicional para purchase_date
+  if (!data.is_fixed && !data.purchase_date) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Data da compra é obrigatória para contas não fixas",
+      path: ["purchase_date"],
+    });
+  }
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -46,23 +57,26 @@ export default function AccountsPayable() {
       amount: "",
       responsible_id: "",
       category_id: "",
+      is_fixed: false, // Valor padrão para o novo campo
     },
   });
 
   const paymentType = form.watch("payment_type");
+  const isFixed = form.watch("is_fixed"); // Observar o estado do switch
 
   useEffect(() => {
     if (isFormOpen && editingAccount) {
       form.reset({
         description: editingAccount.description,
-        payment_type: editingAccount.payment_type || "boleto", // Garante que seja string
-        card_id: editingAccount.card_id || "", // Garante que seja string
-        purchase_date: editingAccount.created_at?.split("T")[0] || "",
+        payment_type: editingAccount.payment_type || "boleto",
+        card_id: editingAccount.card_id || "",
+        purchase_date: editingAccount.purchase_date || format(new Date(), "yyyy-MM-dd"), // Usar purchase_date
         due_date: editingAccount.due_date,
         installments: editingAccount.installments.toString(),
         amount: editingAccount.amount.toString(),
-        responsible_id: editingAccount.responsible_id || "", // Garante que seja string
-        category_id: editingAccount.category_id || "", // Garante que seja string
+        responsible_id: editingAccount.responsible_id || "",
+        category_id: editingAccount.category_id || "",
+        is_fixed: editingAccount.is_fixed || false, // Carregar valor de is_fixed
       });
     } else if (!isFormOpen) {
       form.reset({
@@ -74,6 +88,7 @@ export default function AccountsPayable() {
         amount: "",
         responsible_id: "",
         category_id: "",
+        is_fixed: false,
       });
     }
   }, [isFormOpen, editingAccount, form]);
@@ -141,12 +156,14 @@ export default function AccountsPayable() {
         description: values.description,
         payment_type: values.payment_type,
         card_id: values.payment_type === "cartao" ? values.card_id : null,
+        purchase_date: values.is_fixed ? null : values.purchase_date, // Data da compra é nula se for fixa
         due_date: values.due_date,
         installments: parseInt(values.installments),
         amount: parseFloat(values.amount),
         responsible_id: values.responsible_id,
         category_id: values.category_id,
-        expense_type: "variavel" as const,
+        expense_type: "variavel" as const, // Manter como variável por enquanto, pode ser ajustado
+        is_fixed: values.is_fixed, // Salvar o novo campo
         created_by: user?.id,
       };
 
@@ -297,21 +314,46 @@ export default function AccountsPayable() {
                     />
                   )}
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="purchase_date"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Data da Compra</FormLabel>
-                          <FormControl>
-                            <Input type="date" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  <FormField
+                    control={form.control}
+                    name="is_fixed"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                          <FormLabel className="text-base">Conta Fixa</FormLabel>
+                          <FormDescription>
+                            Marque se esta conta se repete todos os meses.
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
 
+                  {!isFixed && ( // Renderiza a data da compra apenas se não for fixa
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="purchase_date"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Data da Compra</FormLabel>
+                            <FormControl>
+                              <Input type="date" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
                       name="due_date"
@@ -485,6 +527,11 @@ export default function AccountsPayable() {
                         {account.expense_categories && (
                           <div>
                             <span className="font-medium">Categoria:</span> {account.expense_categories.name}
+                          </div>
+                        )}
+                        {account.is_fixed && (
+                          <div className="col-span-2">
+                            <span className="font-medium text-primary">Conta Fixa</span>
                           </div>
                         )}
                       </div>

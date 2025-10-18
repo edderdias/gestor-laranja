@@ -32,6 +32,7 @@ export type Database = {
           payment_type: Database["public"]["Enums"]["payment_type"] | null
           responsible_id: string
           updated_at: string
+          is_fixed: boolean | null // Adicionado
         }
         Insert: {
           amount: number
@@ -50,6 +51,7 @@ export type Database = {
           payment_type?: Database["public"]["Enums"]["payment_type"] | null
           responsible_id: string
           updated_at?: string
+          is_fixed?: boolean | null // Adicionado
         }
         Update: {
           amount?: number
@@ -68,6 +70,7 @@ export type Database = {
           payment_type?: Database["public"]["Enums"]["payment_type"] | null
           responsible_id?: string
           updated_at?: string
+          is_fixed?: boolean | null // Adicionado
         }
         Relationships: [
           {
