@@ -22,7 +22,7 @@ const formSchema = z.object({
   card_id: z.string().optional(),
   purchase_date: z.string().optional(), // Tornar opcional inicialmente
   due_date: z.string().min(1, "Data de vencimento é obrigatória"),
-  installments: z.string().min(1, "Quantidade de parcelas é obrigatória"),
+  installments: z.string().optional(), // Tornar opcional para lidar com conta fixa
   amount: z.string().min(1, "Valor é obrigatório"),
   responsible_id: z.string().optional(), // Tornar opcional para lidar com 'new-responsible'
   new_responsible_name: z.string().optional(), // Novo campo para o nome do novo responsável
@@ -35,6 +35,14 @@ const formSchema = z.object({
       code: z.ZodIssueCode.custom,
       message: "Data da compra é obrigatória para contas não fixas",
       path: ["purchase_date"],
+    });
+  }
+  // Validação condicional para installments
+  if (!data.is_fixed && (!data.installments || parseInt(data.installments) < 1)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Quantidade de parcelas é obrigatória para contas não fixas",
+      path: ["installments"],
     });
   }
   // Validação condicional para responsible_id e new_responsible_name
@@ -95,7 +103,7 @@ export default function AccountsPayable() {
         card_id: editingAccount.card_id || "",
         purchase_date: editingAccount.purchase_date || format(new Date(), "yyyy-MM-dd"), // Usar purchase_date
         due_date: editingAccount.due_date,
-        installments: editingAccount.installments.toString(),
+        installments: editingAccount.installments?.toString() || (editingAccount.is_fixed ? "" : "1"), // Ajuste para conta fixa
         amount: editingAccount.amount.toString(),
         responsible_id: editingAccount.responsible_id || "",
         new_responsible_name: "", // Sempre limpa ao editar um existente
@@ -204,7 +212,7 @@ export default function AccountsPayable() {
         card_id: values.payment_type === "cartao" ? values.card_id : null,
         purchase_date: values.is_fixed ? null : values.purchase_date, // Data da compra é nula se for fixa
         due_date: values.due_date,
-        installments: parseInt(values.installments),
+        installments: values.is_fixed ? 1 : parseInt(values.installments || "1"), // Se fixa, 1 parcela
         amount: parseFloat(values.amount),
         responsible_id: finalResponsibleId, // Usar o ID final
         category_id: values.category_id,
@@ -417,35 +425,55 @@ export default function AccountsPayable() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="installments"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Quantidade de Parcelas</FormLabel>
-                          <FormControl>
-                            <Input type="number" min="1" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  {!isFixed && ( // Renderiza a quantidade de parcelas apenas se não for fixa
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="installments"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Quantidade de Parcelas</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="1" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                    <FormField
-                      control={form.control}
-                      name="amount"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Valor da Parcela</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                      <FormField
+                        control={form.control}
+                        name="amount"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Valor da Parcela</FormLabel>
+                            <FormControl>
+                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  {isFixed && ( // Renderiza o valor da parcela em uma linha separada se for fixa
+                    <div className="grid grid-cols-1 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="amount"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Valor da Parcela</FormLabel>
+                            <FormControl>
+                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
 
                   <FormField
                     control={form.control}
@@ -524,7 +552,7 @@ export default function AccountsPayable() {
 
                   <div className="bg-muted p-4 rounded-lg">
                     <p className="text-sm font-medium">
-                      Valor Total: R$ {(parseFloat(form.watch("amount") || "0") * parseInt(form.watch("installments") || "1")).toFixed(2)}
+                      Valor Total: R$ {(parseFloat(form.watch("amount") || "0") * (isFixed ? 1 : parseInt(form.watch("installments") || "1"))).toFixed(2)}
                     </p>
                   </div>
 
@@ -580,9 +608,11 @@ export default function AccountsPayable() {
                           <span className="font-medium">Vencimento:</span>{" "}
                           {format(new Date(account.due_date), "dd/MM/yyyy")}
                         </div>
-                        <div>
-                          <span className="font-medium">Parcelas:</span> {account.installments}x
-                        </div>
+                        {!account.is_fixed && ( // Exibe parcelas apenas se não for fixa
+                          <div>
+                            <span className="font-medium">Parcelas:</span> {account.installments}x
+                          </div>
+                        )}
                         <div>
                           <span className="font-medium">Valor da Parcela:</span> R$ {account.amount.toFixed(2)}
                         </div>
