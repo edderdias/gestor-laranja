@@ -15,6 +15,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch"; // Importar o Switch
+import { cn } from "@/lib/utils"; // Importar cn para classes condicionais
 
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -391,8 +392,8 @@ export default function AccountsPayable() {
                     />
                   )}
 
-                  {!isFixed && ( // Renderiza a data da compra apenas se não for fixa
-                    <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {!isFixed && ( // Renderiza a data da compra apenas se não for fixa
                       <FormField
                         control={form.control}
                         name="purchase_date"
@@ -406,15 +407,12 @@ export default function AccountsPayable() {
                           </FormItem>
                         )}
                       />
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-4">
+                    )}
                     <FormField
                       control={form.control}
                       name="due_date"
                       render={({ field }) => (
-                        <FormItem>
+                        <FormItem className={cn(isFixed && "col-span-2")}>
                           <FormLabel>Data de Vencimento</FormLabel>
                           <FormControl>
                             <Input type="date" {...field} />
