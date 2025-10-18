@@ -131,10 +131,11 @@ export default function AccountsPayable() {
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
     queryKey: ["accounts-payable"],
     queryFn: async () => {
+      if (!user?.id) return []; // Adicionado: Retorna vazio se user.id não estiver disponível
       const { data, error } = await supabase
         .from("accounts_payable")
         .select("*, expense_categories(name), responsible_parties(name), credit_cards(name)")
-        .eq("created_by", user?.id) // Filtrar por usuário logado
+        .eq("created_by", user.id) // Filtrar por usuário logado
         .order("due_date", { ascending: true });
       
       if (error) throw error;
@@ -147,10 +148,11 @@ export default function AccountsPayable() {
   const { data: responsibles, isLoading: isLoadingResponsibles } = useQuery({
     queryKey: ["responsible-parties"],
     queryFn: async () => {
+      if (!user?.id) return []; // Adicionado: Retorna vazio se user.id não estiver disponível
       const { data, error } = await supabase
         .from("responsible_parties")
         .select("*")
-        .eq("user_id", user?.id) // Filtrar por usuário logado
+        .eq("user_id", user.id) // Filtrar por usuário logado
         .order("name");
       
       if (error) throw error;
@@ -163,10 +165,11 @@ export default function AccountsPayable() {
   const { data: cards } = useQuery({
     queryKey: ["credit-cards"],
     queryFn: async () => {
+      if (!user?.id) return []; // Adicionado: Retorna vazio se user.id não estiver disponível
       const { data, error } = await supabase
         .from("credit_cards")
         .select("*")
-        .eq("created_by", user?.id) // Filtrar por usuário logado
+        .eq("created_by", user.id) // Filtrar por usuário logado
         .order("name");
       
       if (error) throw error;
@@ -196,9 +199,13 @@ export default function AccountsPayable() {
 
       // Se "Novo Responsável" foi selecionado e um nome foi fornecido
       if (values.responsible_id === "new-responsible" && values.new_responsible_name) {
+        if (!user?.id) {
+          toast.error("Usuário não autenticado. Não foi possível criar novo responsável.");
+          throw new Error("User not authenticated."); // Interrompe a mutação
+        }
         const { data: newResponsible, error: newResponsibleError } = await supabase
           .from("responsible_parties")
-          .insert({ name: values.new_responsible_name, user_id: user?.id })
+          .insert({ name: values.new_responsible_name, user_id: user.id }) // Garante que user.id seja usado
           .select("id")
           .single();
 
