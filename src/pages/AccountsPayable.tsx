@@ -25,6 +25,8 @@ const formSchema = z.object({
   due_date: z.string().min(1, "Data de vencimento é obrigatória"),
   installments: z.string().optional(), // Tornar opcional para lidar com conta fixa
   amount: z.string().min(1, "Valor é obrigatório"),
+  responsible_id: z.string().optional(), // Tornar opcional para lidar com 'new-responsible'
+  new_responsible_name: z.string().optional(), // Novo campo para o nome do novo responsável
   category_id: z.string().min(1, "Categoria é obrigatória"),
   is_fixed: z.boolean().default(false),
 }).superRefine((data, ctx) => {
@@ -42,6 +44,26 @@ const formSchema = z.object({
       code: z.ZodIssueCode.custom,
       message: "Quantidade de parcelas é obrigatória para contas não fixas",
       path: ["installments"],
+    });
+  }
+  // Validação condicional para responsible_id e new_responsible_name
+  if (data.responsible_id === "new-responsible" && !data.new_responsible_name) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Nome do novo responsável é obrigatório",
+      path: ["new_responsible_name"],
+    });
+  } else if (data.responsible_id === "new-responsible" && data.new_responsible_name && data.new_responsible_name.length < 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Nome do novo responsável é obrigatório",
+      path: ["new_responsible_name"],
+    });
+  } else if (!data.responsible_id && data.responsible_id !== "new-responsible") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Responsável é obrigatório",
+      path: ["responsible_id"],
     });
   }
 });
@@ -63,6 +85,8 @@ export default function AccountsPayable() {
       due_date: format(new Date(), "yyyy-MM-dd"),
       installments: "1",
       amount: "",
+      responsible_id: "",
+      new_responsible_name: "",
       category_id: "",
       is_fixed: false,
     },
@@ -70,6 +94,7 @@ export default function AccountsPayable() {
 
   const paymentType = form.watch("payment_type");
   const isFixed = form.watch("is_fixed"); // Observar o estado do switch
+  const selectedResponsibleId = form.watch("responsible_id");
 
   useEffect(() => {
     if (isFormOpen && editingAccount) {
@@ -81,6 +106,8 @@ export default function AccountsPayable() {
         due_date: editingAccount.due_date,
         installments: editingAccount.installments?.toString() || (editingAccount.is_fixed ? "" : "1"), // Ajuste para conta fixa
         amount: editingAccount.amount.toString(),
+        responsible_id: editingAccount.responsible_id || "",
+        new_responsible_name: "", // Sempre limpa ao editar um existente
         category_id: editingAccount.category_id || "",
         is_fixed: editingAccount.is_fixed || false, // Carregar valor de is_fixed
       });
@@ -92,6 +119,8 @@ export default function AccountsPayable() {
         due_date: format(new Date(), "yyyy-MM-dd"),
         installments: "1",
         amount: "",
+        responsible_id: "",
+        new_responsible_name: "",
         category_id: "",
         is_fixed: false,
       });
@@ -104,9 +133,25 @@ export default function AccountsPayable() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("accounts_payable")
-        .select("*, expense_categories(name), credit_cards(name)") // Removido responsible_parties
+        .select("*, expense_categories(name), responsible_parties(name), credit_cards(name)")
         .eq("created_by", user?.id) // Filtrar por usuário logado
         .order("due_date", { ascending: true });
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id, // Habilitar query apenas se houver user.id
+  });
+
+  // Buscar responsáveis
+  const { data: responsibles, isLoading: isLoadingResponsibles } = useQuery({
+    queryKey: ["responsible-parties"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("responsible_parties")
+        .select("*")
+        .eq("user_id", user?.id) // Filtrar por usuário logado
+        .order("name");
       
       if (error) throw error;
       return data;
@@ -147,6 +192,21 @@ export default function AccountsPayable() {
   // Criar/Atualizar conta
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
+      let finalResponsibleId = values.responsible_id;
+
+      // Se "Novo Responsável" foi selecionado e um nome foi fornecido
+      if (values.responsible_id === "new-responsible" && values.new_responsible_name) {
+        const { data: newResponsible, error: newResponsibleError } = await supabase
+          .from("responsible_parties")
+          .insert({ name: values.new_responsible_name, user_id: user?.id })
+          .select("id")
+          .single();
+
+        if (newResponsibleError) throw newResponsibleError;
+        finalResponsibleId = newResponsible.id;
+        queryClient.invalidateQueries({ queryKey: ["responsible-parties"] }); // Invalida para atualizar a lista
+      }
+
       const accountData = {
         description: values.description,
         payment_type: values.payment_type,
@@ -155,7 +215,7 @@ export default function AccountsPayable() {
         due_date: values.due_date,
         installments: values.is_fixed ? 1 : parseInt(values.installments || "1"), // Se fixa, 1 parcela
         amount: parseFloat(values.amount),
-        responsible_id: null, // Definido como null, pois o campo foi removido
+        responsible_id: finalResponsibleId, // Usar o ID final
         category_id: values.category_id,
         expense_type: "variavel" as const, // Manter como variável por enquanto, pode ser ajustado
         is_fixed: values.is_fixed, // Salvar o novo campo
@@ -415,6 +475,56 @@ export default function AccountsPayable() {
 
                   <FormField
                     control={form.control}
+                    name="responsible_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Responsável</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o responsável" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {isLoadingResponsibles ? (
+                              <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                            ) : (
+                              <>
+                                {responsibles?.map((responsible) => (
+                                  <SelectItem key={responsible.id} value={responsible.id}>
+                                    {responsible.name}
+                                  </SelectItem>
+                                ))}
+                                <SelectItem value="new-responsible">
+                                  + Novo Responsável
+                                </SelectItem>
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {selectedResponsibleId === "new-responsible" && (
+                    <FormField
+                      control={form.control}
+                      name="new_responsible_name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nome do Novo Responsável</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="Nome do novo responsável" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+
+                  <FormField
+                    control={form.control}
                     name="category_id"
                     render={({ field }) => (
                       <FormItem>
@@ -510,6 +620,11 @@ export default function AccountsPayable() {
                             R$ {(account.amount * (account.installments || 1)).toFixed(2)}
                           </span>
                         </div>
+                        {account.responsible_parties && (
+                          <div>
+                            <span className="font-medium">Responsável:</span> {account.responsible_parties.name}
+                          </div>
+                        )}
                         {account.expense_categories && (
                           <div>
                             <span className="font-medium">Categoria:</span> {account.expense_categories.name}
