@@ -22,9 +22,9 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <Toaster />
     <Sonner />
-    <BrowserRouter>
-      <AuthProvider>
-        <TooltipProvider> {/* TooltipProvider agora envolve Suspense */}
+    <TooltipProvider> {/* TooltipProvider agora envolve BrowserRouter */}
+      <BrowserRouter>
+        <AuthProvider>
           <Suspense fallback={
             <div className="flex items-center justify-center min-h-screen">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -43,9 +43,9 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
-        </TooltipProvider>
-      </AuthProvider>
-    </BrowserRouter>
+        </AuthProvider>
+      </BrowserRouter>
+    </TooltipProvider>
   </QueryClientProvider>
 );
 
