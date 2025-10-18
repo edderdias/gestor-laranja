@@ -22,6 +22,23 @@ const formSchema = z.object({
   installments: z.string().min(1, "Quantidade de parcelas é obrigatória"),
   amount: z.string().min(1, "Valor é obrigatório"),
   source_id: z.string().min(1, "Fonte de receita é obrigatória"),
+  payer_id: z.string().optional(), // Adicionado
+  new_payer_name: z.string().optional(), // Adicionado
+}).superRefine((data, ctx) => {
+  // Validação condicional para payer_id e new_payer_name
+  if (data.payer_id === "new-payer" && !data.new_payer_name) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Nome do novo pagador é obrigatório",
+      path: ["new_payer_name"],
+    });
+  } else if (!data.payer_id && data.payer_id !== "new-payer") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Pagador é obrigatório",
+      path: ["payer_id"],
+    });
+  }
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -41,8 +58,12 @@ export default function AccountsReceivable() {
       installments: "1",
       amount: "",
       source_id: "",
+      payer_id: "", // Adicionado
+      new_payer_name: "", // Adicionado
     },
   });
+
+  const selectedPayerId = form.watch("payer_id"); // Observar o estado do select de pagador
 
   useEffect(() => {
     if (isFormOpen && editingAccount) {
@@ -53,6 +74,8 @@ export default function AccountsReceivable() {
         installments: editingAccount.installments?.toString() || "1",
         amount: editingAccount.amount.toString(),
         source_id: editingAccount.source_id || "", // Garante que seja string
+        payer_id: editingAccount.payer_id || "", // Adicionado
+        new_payer_name: "", // Sempre limpa ao editar um existente
       });
     } else if (!isFormOpen) {
       form.reset({
@@ -62,6 +85,8 @@ export default function AccountsReceivable() {
         installments: "1",
         amount: "",
         source_id: "",
+        payer_id: "", // Adicionado
+        new_payer_name: "", // Adicionado
       });
     }
   }, [isFormOpen, editingAccount, form]);
@@ -72,7 +97,7 @@ export default function AccountsReceivable() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("accounts_receivable")
-        .select("*, income_sources(id, name)")
+        .select("*, income_sources(id, name), payers(name)") // Adicionado payers(name)
         .order("receive_date", { ascending: true });
       
       if (error) throw error;
@@ -94,9 +119,38 @@ export default function AccountsReceivable() {
     },
   });
 
+  // Buscar pagadores
+  const { data: payers, isLoading: isLoadingPayers } = useQuery({
+    queryKey: ["payers"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("payers")
+        .select("*")
+        .order("name");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
   // Criar/Atualizar conta
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
+      let finalPayerId = values.payer_id;
+
+      // Se "Novo Pagador" foi selecionado e um nome foi fornecido
+      if (values.payer_id === "new-payer" && values.new_payer_name) {
+        const { data: newPayer, error: newPayerError } = await supabase
+          .from("payers")
+          .insert({ name: values.new_payer_name })
+          .select("id")
+          .single();
+
+        if (newPayerError) throw newPayerError;
+        finalPayerId = newPayer.id;
+        queryClient.invalidateQueries({ queryKey: ["payers"] }); // Invalida para atualizar a lista
+      }
+
       const accountData = {
         description: values.description,
         income_type: values.income_type,
@@ -104,6 +158,7 @@ export default function AccountsReceivable() {
         installments: parseInt(values.installments),
         amount: parseFloat(values.amount),
         source_id: values.source_id,
+        payer_id: finalPayerId, // Usar o ID final
         created_by: user?.id,
       };
 
@@ -319,6 +374,56 @@ export default function AccountsReceivable() {
                     </div>
                   </div>
 
+                  <FormField
+                    control={form.control}
+                    name="payer_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Pagador</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o pagador" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {isLoadingPayers ? (
+                              <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                            ) : (
+                              <>
+                                {payers?.map((payer) => (
+                                  <SelectItem key={payer.id} value={payer.id}>
+                                    {payer.name}
+                                  </SelectItem>
+                                ))}
+                                <SelectItem value="new-payer">
+                                  + Novo Pagador
+                                </SelectItem>
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {selectedPayerId === "new-payer" && (
+                    <FormField
+                      control={form.control}
+                      name="new_payer_name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nome do Novo Pagador</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="Nome do novo pagador" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+
                   <div className="flex justify-end gap-2">
                     <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
                       Cancelar
@@ -380,6 +485,11 @@ export default function AccountsReceivable() {
                         {account.income_sources && (
                           <div>
                             <span className="font-medium">Fonte:</span> {account.income_sources.name}
+                          </div>
+                        )}
+                        {account.payers && ( // Exibir o nome do pagador
+                          <div>
+                            <span className="font-medium">Pagador:</span> {account.payers.name}
                           </div>
                         )}
                       </div>
