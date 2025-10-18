@@ -84,10 +84,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      
-      toast.success("Logout realizado com sucesso!");
+      // Adiciona verificação antes de tentar fazer logout
+      if (user) { 
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+        toast.success("Logout realizado com sucesso!");
+      } else {
+        // Se não há usuário, já estamos efetivamente deslogados
+        toast.info("Você já está desconectado.");
+      }
       navigate('/auth');
     } catch (error: any) {
       toast.error(error.message || "Erro ao fazer logout");
