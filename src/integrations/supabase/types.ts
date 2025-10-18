@@ -30,7 +30,7 @@ export type Database = {
           paid: boolean | null
           paid_date: string | null
           payment_type: Database["public"]["Enums"]["payment_type"] | null
-          responsible_id: string
+          responsible_id: string | null
           updated_at: string
           is_fixed: boolean | null // Adicionado
         }
@@ -49,7 +49,7 @@ export type Database = {
           paid?: boolean | null
           paid_date?: string | null
           payment_type?: Database["public"]["Enums"]["payment_type"] | null
-          responsible_id: string
+          responsible_id?: string | null
           updated_at?: string
           is_fixed?: boolean | null // Adicionado
         }
@@ -68,7 +68,7 @@ export type Database = {
           paid?: boolean | null
           paid_date?: string | null
           payment_type?: Database["public"]["Enums"]["payment_type"] | null
-          responsible_id?: string
+          responsible_id?: string | null
           updated_at?: string
           is_fixed?: boolean | null // Adicionado
         }
