@@ -310,7 +310,7 @@ export default function AccountsReceivable() {
                               <SelectItem value="extra">Extra</SelectItem>
                               <SelectItem value="aluguel">Aluguel</SelectItem>
                               <SelectItem value="vendas">Vendas</SelectItem>
-                              <SelectItem value="comissao">Comissão</SelectItem>
+                              <SelectItem value="comissão">Comissão</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
