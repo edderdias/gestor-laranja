@@ -11,19 +11,22 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch"; // Importar o Switch
+import { cn } from "@/lib/utils"; // Importar cn para classes condicionais
 
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   income_type: z.enum(["salario", "extra", "aluguel", "vendas", "comissao"], { required_error: "Tipo de recebimento é obrigatório" }),
   receive_date: z.string().min(1, "Data do recebimento é obrigatória"),
-  installments: z.string().min(1, "Quantidade de parcelas é obrigatória"),
+  installments: z.string().optional(), // Tornar opcional para lidar com conta fixa
   amount: z.string().min(1, "Valor é obrigatório"),
   source_id: z.string().min(1, "Fonte de receita é obrigatória"),
-  payer_id: z.string().optional(), // Adicionado
-  new_payer_name: z.string().optional(), // Adicionado
+  payer_id: z.string().optional(),
+  new_payer_name: z.string().optional(),
+  is_fixed: z.boolean().default(false), // Novo campo
 }).superRefine((data, ctx) => {
   // Validação condicional para payer_id e new_payer_name
   if (data.payer_id === "new-payer" && !data.new_payer_name) {
@@ -37,6 +40,14 @@ const formSchema = z.object({
       code: z.ZodIssueCode.custom,
       message: "Pagador é obrigatório",
       path: ["payer_id"],
+    });
+  }
+  // Validação condicional para installments
+  if (!data.is_fixed && (!data.installments || parseInt(data.installments) < 1)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Quantidade de parcelas é obrigatória para contas não fixas",
+      path: ["installments"],
     });
   }
 });
@@ -53,29 +64,32 @@ export default function AccountsReceivable() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       description: "",
-      income_type: "extra", // Valor padrão inicial
+      income_type: "extra",
       receive_date: format(new Date(), "yyyy-MM-dd"),
       installments: "1",
       amount: "",
       source_id: "",
-      payer_id: "", // Adicionado
-      new_payer_name: "", // Adicionado
+      payer_id: "",
+      new_payer_name: "",
+      is_fixed: false, // Valor padrão inicial
     },
   });
 
-  const selectedPayerId = form.watch("payer_id"); // Observar o estado do select de pagador
+  const selectedPayerId = form.watch("payer_id");
+  const isFixed = form.watch("is_fixed"); // Observar o estado do switch
 
   useEffect(() => {
     if (isFormOpen && editingAccount) {
       form.reset({
         description: editingAccount.description,
-        income_type: editingAccount.income_type || "extra", // Garante que seja string
+        income_type: editingAccount.income_type || "extra",
         receive_date: editingAccount.receive_date,
-        installments: editingAccount.installments?.toString() || "1",
+        installments: editingAccount.installments?.toString() || (editingAccount.is_fixed ? "" : "1"), // Ajuste para conta fixa
         amount: editingAccount.amount.toString(),
-        source_id: editingAccount.source_id || "", // Garante que seja string
-        payer_id: editingAccount.payer_id || "", // Adicionado
-        new_payer_name: "", // Sempre limpa ao editar um existente
+        source_id: editingAccount.source_id || "",
+        payer_id: editingAccount.payer_id || "",
+        new_payer_name: "",
+        is_fixed: editingAccount.is_fixed || false, // Carrega o valor existente
       });
     } else if (!isFormOpen) {
       form.reset({
@@ -85,8 +99,9 @@ export default function AccountsReceivable() {
         installments: "1",
         amount: "",
         source_id: "",
-        payer_id: "", // Adicionado
-        new_payer_name: "", // Adicionado
+        payer_id: "",
+        new_payer_name: "",
+        is_fixed: false,
       });
     }
   }, [isFormOpen, editingAccount, form]);
@@ -97,7 +112,7 @@ export default function AccountsReceivable() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("accounts_receivable")
-        .select("*, income_sources(id, name), payers(name)") // Adicionado payers(name)
+        .select("*, income_sources(id, name), payers(name)")
         .order("receive_date", { ascending: true });
       
       if (error) throw error;
@@ -148,18 +163,19 @@ export default function AccountsReceivable() {
 
         if (newPayerError) throw newPayerError;
         finalPayerId = newPayer.id;
-        queryClient.invalidateQueries({ queryKey: ["payers"] }); // Invalida para atualizar a lista
+        queryClient.invalidateQueries({ queryKey: ["payers"] });
       }
 
       const accountData = {
         description: values.description,
         income_type: values.income_type,
         receive_date: values.receive_date,
-        installments: parseInt(values.installments),
+        installments: values.is_fixed ? 1 : parseInt(values.installments || "1"), // Ajuste para conta fixa
         amount: parseFloat(values.amount),
         source_id: values.source_id,
-        payer_id: finalPayerId, // Usar o ID final
+        payer_id: finalPayerId,
         created_by: user?.id,
+        is_fixed: values.is_fixed, // Salva o novo campo
       };
 
       if (editingAccount) {
@@ -270,37 +286,60 @@ export default function AccountsReceivable() {
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="income_type"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tipo de Recebimento</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ""}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o tipo" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="salario">Salário</SelectItem>
-                            <SelectItem value="extra">Extra</SelectItem>
-                            <SelectItem value="aluguel">Aluguel</SelectItem>
-                            <SelectItem value="vendas">Vendas</SelectItem>
-                            <SelectItem value="comissao">Comissão</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="income_type"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Tipo de Recebimento</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || ""}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione o tipo" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="salario">Salário</SelectItem>
+                              <SelectItem value="extra">Extra</SelectItem>
+                              <SelectItem value="aluguel">Aluguel</SelectItem>
+                              <SelectItem value="vendas">Vendas</SelectItem>
+                              <SelectItem value="comissao">Comissão</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="is_fixed"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                          <div className="space-y-0.5">
+                            <FormLabel className="text-base">Receita Fixa</FormLabel>
+                            <FormDescription>
+                              Marque se esta receita se repete todos os meses.
+                            </FormDescription>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
                       name="receive_date"
                       render={({ field }) => (
-                        <FormItem>
+                        <FormItem className={cn(isFixed && "col-span-2")}>
                           <FormLabel>Data do Recebimento</FormLabel>
                           <FormControl>
                             <Input type="date" {...field} />
@@ -311,35 +350,55 @@ export default function AccountsReceivable() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="installments"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Quantidade de Parcelas</FormLabel>
-                          <FormControl>
-                            <Input type="number" min="1" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  {!isFixed && ( // Oculta o campo de parcelas se for conta fixa
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="installments"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Quantidade de Parcelas</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="1" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                    <FormField
-                      control={form.control}
-                      name="amount"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Valor da Parcela</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                      <FormField
+                        control={form.control}
+                        name="amount"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Valor da Parcela</FormLabel>
+                            <FormControl>
+                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  {isFixed && ( // Exibe apenas o valor da parcela para contas fixas
+                    <div className="grid grid-cols-1 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="amount"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Valor da Parcela</FormLabel>
+                            <FormControl>
+                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
@@ -369,7 +428,7 @@ export default function AccountsReceivable() {
 
                     <div className="bg-muted p-4 rounded-lg flex items-center">
                       <p className="text-sm font-medium">
-                        Valor Total: R$ {(parseFloat(form.watch("amount") || "0") * parseInt(form.watch("installments") || "1")).toFixed(2)}
+                        Valor Total: R$ {(parseFloat(form.watch("amount") || "0") * (isFixed ? 1 : parseInt(form.watch("installments") || "1"))).toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -470,9 +529,11 @@ export default function AccountsReceivable() {
                           <span className="font-medium">Recebimento:</span>{" "}
                           {format(new Date(account.receive_date), "dd/MM/yyyy")}
                         </div>
-                        <div>
-                          <span className="font-medium">Parcelas:</span> {account.installments || 1}x
-                        </div>
+                        {!account.is_fixed && ( // Oculta parcelas se for conta fixa
+                          <div>
+                            <span className="font-medium">Parcelas:</span> {account.installments || 1}x
+                          </div>
+                        )}
                         <div>
                           <span className="font-medium">Valor da Parcela:</span> R$ {account.amount.toFixed(2)}
                         </div>
@@ -487,9 +548,14 @@ export default function AccountsReceivable() {
                             <span className="font-medium">Fonte:</span> {account.income_sources.name}
                           </div>
                         )}
-                        {account.payers && ( // Exibir o nome do pagador
+                        {account.payers && (
                           <div>
                             <span className="font-medium">Pagador:</span> {account.payers.name}
+                          </div>
+                        )}
+                        {account.is_fixed && ( // Exibe "Receita Fixa"
+                          <div className="col-span-2">
+                            <span className="font-medium text-income">Receita Fixa</span>
                           </div>
                         )}
                       </div>

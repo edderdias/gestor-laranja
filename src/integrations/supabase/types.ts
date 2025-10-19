@@ -115,6 +115,7 @@ export type Database = {
           received_date: string | null
           source_id: string
           updated_at: string
+          is_fixed: boolean | null
         }
         Insert: {
           amount: number
@@ -131,6 +132,7 @@ export type Database = {
           received_date?: string | null
           source_id: string
           updated_at?: string
+          is_fixed?: boolean | null
         }
         Update: {
           amount?: number
@@ -147,6 +149,7 @@ export type Database = {
           received_date?: string | null
           source_id?: string
           updated_at?: string
+          is_fixed?: boolean | null
         }
         Relationships: [
           {
@@ -461,7 +464,7 @@ export type Database = {
       expense_type: "fixa" | "variavel"
       income_type: "salario" | "extra" | "aluguel" | "vendas" | "comissao"
       payment_type: "cartao" | "promissoria" | "boleto"
-      responsible_person_enum: "Eder" | "Monalisa" | "Luiz" | "Elizabeth" | "Tosta"
+      responsible_person_enum: "Eder" | "Monalisa" | "Luiz" | "Elizabeth", "Tosta"
     }
     CompositeTypes: {
       [_ in never]: never
