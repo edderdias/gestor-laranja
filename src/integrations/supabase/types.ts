@@ -116,6 +116,7 @@ export type Database = {
           source_id: string
           updated_at: string
           is_fixed: boolean | null
+          responsible_person: Database["public"]["Enums"]["responsible_person_enum"] | null
         }
         Insert: {
           amount: number
@@ -133,6 +134,7 @@ export type Database = {
           source_id: string
           updated_at?: string
           is_fixed?: boolean | null
+          responsible_person?: Database["public"]["Enums"]["responsible_person_enum"] | null
         }
         Update: {
           amount?: number
@@ -150,6 +152,7 @@ export type Database = {
           source_id?: string
           updated_at?: string
           is_fixed?: boolean | null
+          responsible_person?: Database["public"]["Enums"]["responsible_person_enum"] | null
         }
         Relationships: [
           {
@@ -464,7 +467,7 @@ export type Database = {
       expense_type: "fixa" | "variavel"
       income_type: "salario" | "extra" | "aluguel" | "vendas" | "comissao"
       payment_type: "cartao" | "promissoria" | "boleto"
-      responsible_person_enum: "Eder" | "Monalisa" | "Luiz" | "Elizabeth", "Tosta"
+      responsible_person_enum: "Eder" | "Monalisa" | "Luiz" | "Elizabeth" | "Tosta"
     }
     CompositeTypes: {
       [_ in never]: never

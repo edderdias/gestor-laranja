@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch"; // Importar o Switch
 import { cn } from "@/lib/utils"; // Importar cn para classes condicionais
+import { Constants } from "@/integrations/supabase/types"; // Importar Constants para os enums
 
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -27,6 +28,7 @@ const formSchema = z.object({
   payer_id: z.string().optional(),
   new_payer_name: z.string().optional(),
   is_fixed: z.boolean().default(false), // Novo campo
+  responsible_person: z.enum(Constants.public.Enums.responsible_person_enum).optional(), // Novo campo
 }).superRefine((data, ctx) => {
   // Validação condicional para payer_id e new_payer_name
   if (data.payer_id === "new-payer" && !data.new_payer_name) {
@@ -72,6 +74,7 @@ export default function AccountsReceivable() {
       payer_id: "",
       new_payer_name: "",
       is_fixed: false, // Valor padrão inicial
+      responsible_person: undefined, // Valor padrão para o novo campo
     },
   });
 
@@ -90,6 +93,7 @@ export default function AccountsReceivable() {
         payer_id: editingAccount.payer_id || "",
         new_payer_name: "",
         is_fixed: editingAccount.is_fixed || false, // Carrega o valor existente
+        responsible_person: editingAccount.responsible_person || undefined, // Carrega o valor existente
       });
     } else if (!isFormOpen) {
       form.reset({
@@ -102,6 +106,7 @@ export default function AccountsReceivable() {
         payer_id: "",
         new_payer_name: "",
         is_fixed: false,
+        responsible_person: undefined,
       });
     }
   }, [isFormOpen, editingAccount, form]);
@@ -176,6 +181,7 @@ export default function AccountsReceivable() {
         payer_id: finalPayerId,
         created_by: user?.id,
         is_fixed: values.is_fixed, // Salva o novo campo
+        responsible_person: values.responsible_person || null, // Salva o novo campo
       };
 
       if (editingAccount) {
@@ -483,6 +489,32 @@ export default function AccountsReceivable() {
                     />
                   )}
 
+                  {/* Novo campo para Responsible Person */}
+                  <FormField
+                    control={form.control}
+                    name="responsible_person"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Recebedor</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o recebedor" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {Constants.public.Enums.responsible_person_enum.map((person) => (
+                              <SelectItem key={person} value={person}>
+                                {person}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
                   <div className="flex justify-end gap-2">
                     <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
                       Cancelar
@@ -551,6 +583,11 @@ export default function AccountsReceivable() {
                         {account.payers && (
                           <div>
                             <span className="font-medium">Pagador:</span> {account.payers.name}
+                          </div>
+                        )}
+                        {account.responsible_person && ( // Exibe o recebedor
+                          <div>
+                            <span className="font-medium">Recebedor:</span> {account.responsible_person}
                           </div>
                         )}
                         {account.is_fixed && ( // Exibe "Receita Fixa"
