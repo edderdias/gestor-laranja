@@ -14,7 +14,6 @@ const Dashboard = React.lazy(() => import("./pages/Dashboard"));
 const AccountsPayable = React.lazy(() => import("./pages/AccountsPayable"));
 const AccountsReceivable = React.lazy(() => import("./pages/AccountsReceivable"));
 const CreditCards = React.lazy(() => import("./pages/CreditCards"));
-const ResponsibleParties = React.lazy(() => import("./pages/ResponsibleParties")); // Nova página
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -40,7 +39,6 @@ const App = () => (
                   <Route path="/accounts-payable" element={<AccountsPayable />} />
                   <Route path="/accounts-receivable" element={<AccountsReceivable />} />
                   <Route path="/credit-cards" element={<CreditCards />} />
-                  <Route path="/responsible-parties" element={<ResponsibleParties />} /> {/* Nova rota */}
                 </Route>
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />

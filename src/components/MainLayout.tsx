@@ -76,11 +76,6 @@ export function MainLayout() {
                     Cartões de Crédito
                   </Link>
                 </NavigationMenuItem>
-                <NavigationMenuItem>
-                  <Link to="/responsible-parties" className={navigationMenuTriggerStyle()}>
-                    Responsáveis
-                  </Link>
-                </NavigationMenuItem>
               </NavigationMenuList>
             </NavigationMenu>
           </div>

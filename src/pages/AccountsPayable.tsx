@@ -25,7 +25,6 @@ const formSchema = z.object({
   due_date: z.string().min(1, "Data de vencimento é obrigatória"),
   installments: z.string().optional(), // Tornar opcional para lidar com conta fixa
   amount: z.string().min(1, "Valor é obrigatório"),
-  responsible_id: z.string().min(1, "Responsável é obrigatório"), // Campo de responsável reintroduzido
   category_id: z.string().min(1, "Categoria é obrigatória"),
   is_fixed: z.boolean().default(false),
 }).superRefine((data, ctx) => {
@@ -64,7 +63,6 @@ export default function AccountsPayable() {
       due_date: format(new Date(), "yyyy-MM-dd"),
       installments: "1",
       amount: "",
-      responsible_id: "", // Valor padrão para o campo de responsável
       category_id: "",
       is_fixed: false,
     },
@@ -83,7 +81,6 @@ export default function AccountsPayable() {
         due_date: editingAccount.due_date,
         installments: editingAccount.installments?.toString() || (editingAccount.is_fixed ? "" : "1"),
         amount: editingAccount.amount.toString(),
-        responsible_id: editingAccount.responsible_id || "", // Carregar valor de responsible_id
         category_id: editingAccount.category_id || "",
         is_fixed: editingAccount.is_fixed || false,
       });
@@ -95,7 +92,6 @@ export default function AccountsPayable() {
         due_date: format(new Date(), "yyyy-MM-dd"),
         installments: "1",
         amount: "",
-        responsible_id: "", // Resetar para valor padrão
         category_id: "",
         is_fixed: false,
       });
@@ -109,26 +105,9 @@ export default function AccountsPayable() {
       if (!user?.id) return [];
       const { data, error } = await supabase
         .from("accounts_payable")
-        .select("*, expense_categories(name), responsible_parties(name), credit_cards(name)") // Re-adicionado responsible_parties(name)
+        .select("*, expense_categories(name), credit_cards(name)") // Removido responsible_parties(name)
         .eq("created_by", user.id)
         .order("due_date", { ascending: true });
-      
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user?.id,
-  });
-
-  // Buscar responsáveis
-  const { data: responsibles, isLoading: isLoadingResponsibles } = useQuery({
-    queryKey: ["responsible-parties"],
-    queryFn: async () => {
-      if (!user?.id) return [];
-      const { data, error } = await supabase
-        .from("responsible_parties")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("name");
       
       if (error) throw error;
       return data;
@@ -183,7 +162,6 @@ export default function AccountsPayable() {
         due_date: values.due_date,
         installments: values.is_fixed ? 1 : parseInt(values.installments || "1"),
         amount: parseFloat(values.amount),
-        responsible_id: values.responsible_id, // Usar o ID do responsável selecionado
         category_id: values.category_id,
         expense_type: "variavel" as const,
         is_fixed: values.is_fixed,
@@ -443,37 +421,6 @@ export default function AccountsPayable() {
 
                   <FormField
                     control={form.control}
-                    name="responsible_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Responsável</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ""}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o responsável" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {isLoadingResponsibles ? (
-                              <SelectItem value="loading" disabled>Carregando...</SelectItem>
-                            ) : (
-                              <>
-                                {responsibles?.map((responsible) => (
-                                  <SelectItem key={responsible.id} value={responsible.id}>
-                                    {responsible.name}
-                                  </SelectItem>
-                                ))}
-                              </>
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
                     name="category_id"
                     render={({ field }) => (
                       <FormItem>
@@ -569,11 +516,6 @@ export default function AccountsPayable() {
                             R$ {(account.amount * (account.installments || 1)).toFixed(2)}
                           </span>
                         </div>
-                        {account.responsible_parties && (
-                          <div>
-                            <span className="font-medium">Responsável:</span> {account.responsible_parties.name}
-                          </div>
-                        )}
                         {account.expense_categories && (
                           <div>
                             <span className="font-medium">Categoria:</span> {account.expense_categories.name}

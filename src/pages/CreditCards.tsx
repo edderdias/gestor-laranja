@@ -38,7 +38,6 @@ const cardSchema = z.object({
   due_date: z.number().min(1).max(31, "Dia de vencimento inválido"),
   best_purchase_date: z.number().min(1).max(31, "Melhor dia de compra inválido"),
   credit_limit: z.number().min(0, "Limite deve ser positivo"),
-  owner_name: z.string().min(1, "Nome do dono é obrigatório"),
   last_digits: z.string().optional(),
 });
 
@@ -53,7 +52,6 @@ export default function CreditCards() {
     due_date: 10,
     best_purchase_date: 5,
     credit_limit: 0,
-    owner_name: "",
   });
 
   // Local state to manage the displayed string value of credit_limit
@@ -67,7 +65,6 @@ export default function CreditCards() {
         due_date: editingCard.due_date,
         best_purchase_date: editingCard.best_purchase_date,
         credit_limit: editingCard.credit_limit,
-        owner_name: editingCard.owner_name || "",
         last_digits: editingCard.last_digits || "",
       });
       // Initialize creditLimitInput with formatted value
@@ -121,7 +118,6 @@ export default function CreditCards() {
         due_date: data.due_date,
         best_purchase_date: data.best_purchase_date,
         credit_limit: data.credit_limit,
-        owner_name: data.owner_name,
         last_digits: data.last_digits || null,
         created_by: user?.id,
       };
@@ -189,7 +185,6 @@ export default function CreditCards() {
       due_date: 10,
       best_purchase_date: 5,
       credit_limit: 0,
-      owner_name: "",
       last_digits: "",
     });
     setEditingCard(null);
@@ -265,16 +260,6 @@ export default function CreditCards() {
                       onChange={(e) => setFormData({ ...formData, last_digits: e.target.value })}
                       placeholder="1234"
                       maxLength={4}
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="owner_name">Dono do Cartão *</Label>
-                    <Input
-                      id="owner_name"
-                      value={formData.owner_name || ""}
-                      onChange={(e) => setFormData({ ...formData, owner_name: e.target.value })}
-                      placeholder="Ex: João Silva"
                     />
                   </div>
 
@@ -387,10 +372,6 @@ export default function CreditCards() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Dono:</span>
-                        <span className="font-medium">{card.owner_name}</span>
-                      </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Vencimento:</span>
                         <span className="font-medium">Dia {card.due_date}</span>
