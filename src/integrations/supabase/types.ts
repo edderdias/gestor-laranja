@@ -32,7 +32,8 @@ export type Database = {
           payment_type: Database["public"]["Enums"]["payment_type"] | null
           updated_at: string
           is_fixed: boolean | null
-          responsible_person: Database["public"]["Enums"]["responsible_person_enum"] | null // Novo campo
+          responsible_person: Database["public"]["Enums"]["responsible_person_enum"] | null
+          purchase_date: string | null
         }
         Insert: {
           amount: number
@@ -51,7 +52,8 @@ export type Database = {
           payment_type?: Database["public"]["Enums"]["payment_type"] | null
           updated_at?: string
           is_fixed?: boolean | null
-          responsible_person?: Database["public"]["Enums"]["responsible_person_enum"] | null // Novo campo
+          responsible_person?: Database["public"]["Enums"]["responsible_person_enum"] | null
+          purchase_date?: string | null
         }
         Update: {
           amount?: number
@@ -70,7 +72,8 @@ export type Database = {
           payment_type?: Database["public"]["Enums"]["payment_type"] | null
           updated_at?: string
           is_fixed?: boolean | null
-          responsible_person?: Database["public"]["Enums"]["responsible_person_enum"] | null // Novo campo
+          responsible_person?: Database["public"]["Enums"]["responsible_person_enum"] | null
+          purchase_date?: string | null
         }
         Relationships: [
           {
@@ -380,24 +383,35 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_url: string | null
           created_at: string
-          full_name: string
+          full_name: string | null
           id: string
-          updated_at: string
+          updated_at: string | null
         }
         Insert: {
+          avatar_url?: string | null
           created_at?: string
-          full_name: string
+          full_name?: string | null
           id: string
-          updated_at?: string
+          updated_at?: string | null
         }
         Update: {
+          avatar_url?: string | null
           created_at?: string
-          full_name?: string
+          full_name?: string | null
           id?: string
-          updated_at?: string
+          updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_id_fkey"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -447,7 +461,7 @@ export type Database = {
       expense_type: "fixa" | "variavel"
       income_type: "salario" | "extra" | "aluguel" | "vendas" | "comissao"
       payment_type: "cartao" | "promissoria" | "boleto"
-      responsible_person_enum: "Eder" | "Monalisa" | "Luiz" | "Elizabeth" | "Tosta" // Novo ENUM
+      responsible_person_enum: "Eder" | "Monalisa" | "Luiz" | "Elizabeth" | "Tosta"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -580,7 +594,7 @@ export const Constants = {
       expense_type: ["fixa", "variavel"],
       income_type: ["salario", "extra", "aluguel", "vendas", "comissao"],
       payment_type: ["cartao", "promissoria", "boleto"],
-      responsible_person_enum: ["Eder", "Monalisa", "Luiz", "Elizabeth", "Tosta"], // Novo ENUM
+      responsible_person_enum: ["Eder", "Monalisa", "Luiz", "Elizabeth", "Tosta"],
     },
   },
 } as const
