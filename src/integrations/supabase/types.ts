@@ -32,6 +32,7 @@ export type Database = {
           payment_type: Database["public"]["Enums"]["payment_type"] | null
           updated_at: string
           is_fixed: boolean | null
+          responsible_person: Database["public"]["Enums"]["responsible_person_enum"] | null // Novo campo
         }
         Insert: {
           amount: number
@@ -50,6 +51,7 @@ export type Database = {
           payment_type?: Database["public"]["Enums"]["payment_type"] | null
           updated_at?: string
           is_fixed?: boolean | null
+          responsible_person?: Database["public"]["Enums"]["responsible_person_enum"] | null // Novo campo
         }
         Update: {
           amount?: number
@@ -68,6 +70,7 @@ export type Database = {
           payment_type?: Database["public"]["Enums"]["payment_type"] | null
           updated_at?: string
           is_fixed?: boolean | null
+          responsible_person?: Database["public"]["Enums"]["responsible_person_enum"] | null // Novo campo
         }
         Relationships: [
           {
@@ -444,6 +447,7 @@ export type Database = {
       expense_type: "fixa" | "variavel"
       income_type: "salario" | "extra" | "aluguel" | "vendas" | "comissao"
       payment_type: "cartao" | "promissoria" | "boleto"
+      responsible_person_enum: "Eder" | "Monalisa" | "Luiz" | "Elizabeth" | "Tosta" // Novo ENUM
     }
     CompositeTypes: {
       [_ in never]: never
@@ -576,6 +580,7 @@ export const Constants = {
       expense_type: ["fixa", "variavel"],
       income_type: ["salario", "extra", "aluguel", "vendas", "comissao"],
       payment_type: ["cartao", "promissoria", "boleto"],
+      responsible_person_enum: ["Eder", "Monalisa", "Luiz", "Elizabeth", "Tosta"], // Novo ENUM
     },
   },
 } as const

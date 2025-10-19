@@ -27,6 +27,7 @@ const formSchema = z.object({
   amount: z.string().min(1, "Valor é obrigatório"),
   category_id: z.string().min(1, "Categoria é obrigatória"),
   is_fixed: z.boolean().default(false),
+  responsible_person: z.enum(["Eder", "Monalisa", "Luiz", "Elizabeth", "Tosta"]).optional(), // Novo campo
 }).superRefine((data, ctx) => {
   // Validação condicional para purchase_date
   if (!data.is_fixed && !data.purchase_date) {
@@ -65,6 +66,7 @@ export default function AccountsPayable() {
       amount: "",
       category_id: "",
       is_fixed: false,
+      responsible_person: undefined, // Valor padrão para o novo campo
     },
   });
 
@@ -83,6 +85,7 @@ export default function AccountsPayable() {
         amount: editingAccount.amount.toString(),
         category_id: editingAccount.category_id || "",
         is_fixed: editingAccount.is_fixed || false,
+        responsible_person: editingAccount.responsible_person || undefined, // Carrega o valor existente
       });
     } else if (!isFormOpen) {
       form.reset({
@@ -94,6 +97,7 @@ export default function AccountsPayable() {
         amount: "",
         category_id: "",
         is_fixed: false,
+        responsible_person: undefined,
       });
     }
   }, [isFormOpen, editingAccount, form]);
@@ -105,7 +109,7 @@ export default function AccountsPayable() {
       if (!user?.id) return [];
       const { data, error } = await supabase
         .from("accounts_payable")
-        .select("*, expense_categories(name), credit_cards(name)") // Removido responsible_parties(name)
+        .select("*, expense_categories(name), credit_cards(name)")
         .eq("created_by", user.id)
         .order("due_date", { ascending: true });
       
@@ -165,6 +169,7 @@ export default function AccountsPayable() {
         category_id: values.category_id,
         expense_type: "variavel" as const,
         is_fixed: values.is_fixed,
+        responsible_person: values.responsible_person || null, // Salva o novo campo
         created_by: user.id,
       };
 
@@ -444,6 +449,32 @@ export default function AccountsPayable() {
                     )}
                   />
 
+                  {/* Novo campo para Responsible Person */}
+                  <FormField
+                    control={form.control}
+                    name="responsible_person"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Responsável</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o responsável" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="Eder">Eder</SelectItem>
+                            <SelectItem value="Monalisa">Monalisa</SelectItem>
+                            <SelectItem value="Luiz">Luiz</SelectItem>
+                            <SelectItem value="Elizabeth">Elizabeth</SelectItem>
+                            <SelectItem value="Tosta">Tosta</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
                   <div className="bg-muted p-4 rounded-lg">
                     <p className="text-sm font-medium">
                       Valor Total: R$ {(parseFloat(form.watch("amount") || "0") * (isFixed ? 1 : parseInt(form.watch("installments") || "1"))).toFixed(2)}
@@ -519,6 +550,11 @@ export default function AccountsPayable() {
                         {account.expense_categories && (
                           <div>
                             <span className="font-medium">Categoria:</span> {account.expense_categories.name}
+                          </div>
+                        )}
+                        {account.responsible_person && ( // Exibe o responsável
+                          <div>
+                            <span className="font-medium">Responsável:</span> {account.responsible_person}
                           </div>
                         )}
                         {account.is_fixed && (
