@@ -505,54 +505,18 @@ export default function AccountsReceivable() {
   const [selectedYear, selectedMonth] = selectedMonthYear.split('-').map(Number);
   const selectedMonthDate = parseISO(`${selectedMonthYear}-01`);
 
-  // Processar contas para exibição, incluindo a replicação de contas fixas
-  const processedAccounts = accounts?.flatMap(account => {
-    const accountReceiveDate = parseISO(account.receive_date);
-    const currentMonthAccounts: AccountReceivableWithGeneratedFlag[] = [];
-
-    // 1. Incluir contas não fixas que pertencem ao mês selecionado
-    if (!account.is_fixed && isSameMonth(accountReceiveDate, selectedMonthDate) && isSameYear(accountReceiveDate, selectedMonthDate)) {
-      currentMonthAccounts.push(account);
-    } 
-    // 2. Incluir contas fixas originais que pertencem ao mês selecionado
-    else if (account.is_fixed && isSameMonth(accountReceiveDate, selectedMonthDate) && isSameYear(accountReceiveDate, selectedMonthDate)) {
-      currentMonthAccounts.push(account);
-    }
-    // 3. Gerar ocorrências para contas fixas em meses futuros
-    else if (account.is_fixed && accountReceiveDate <= endOfMonth(selectedMonthDate)) {
-      // Verificar se já existe uma ocorrência real para este mês e esta conta fixa
-      const existingOccurrence = accounts.find(
-        (a) => a.original_fixed_account_id === account.id &&
-               isSameMonth(parseISO(a.receive_date), selectedMonthDate) &&
-               isSameYear(parseISO(a.receive_date), selectedMonthDate)
-      );
-
-      if (!existingOccurrence) {
-        // Se não existe uma ocorrência real, cria uma instância gerada para exibição
-        const displayDate = new Date(selectedYear, selectedMonth - 1, accountReceiveDate.getDate());
-        // Ajusta o dia se o mês selecionado não tiver aquele dia (ex: 31 de fevereiro)
-        if (displayDate.getMonth() !== selectedMonth - 1) {
-          displayDate.setDate(0); // Vai para o último dia do mês anterior
-          displayDate.setDate(displayDate.getDate() + 1); // Adiciona 1 dia para o último dia do mês atual
-        }
-
-        currentMonthAccounts.push({
-          ...account,
-          id: `temp-${account.id}-${selectedMonthYear}`, // ID temporário para instâncias geradas
-          receive_date: format(displayDate, "yyyy-MM-dd"),
-          received: false, // Instâncias geradas são sempre não recebidas por padrão
-          received_date: null,
-          is_generated_fixed_instance: true,
-          original_fixed_account_id: account.id, // Referência ao modelo fixo original
-          transferred_to_piggy_bank: false, // Instâncias geradas não são transferidas
-        });
-      }
-    }
-    return currentMonthAccounts;
-  }).sort((a, b) => parseISO(a.receive_date).getTime() - parseISO(b.receive_date).getTime()) || [];
+  // TEMPORARY: Bypass processedAccounts logic for debugging
+  const accountsToDisplay = accounts || [];
 
   // Filtrar contas recebidas para o resumo total (apenas do mês selecionado e NÃO transferidas)
-  const receivedAccounts = processedAccounts.filter(account => account.received && !account.transferred_to_piggy_bank) || [];
+  // Esta lógica ainda usa o filtro de mês, mas para os dados brutos.
+  const receivedAccounts = accountsToDisplay.filter(account => 
+    account.received && 
+    !account.transferred_to_piggy_bank &&
+    isSameMonth(parseISO(account.receive_date), selectedMonthDate) &&
+    isSameYear(parseISO(account.receive_date), selectedMonthDate)
+  ) || [];
+
   const totalAmount = receivedAccounts.reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
@@ -566,7 +530,11 @@ export default function AccountsReceivable() {
   }, {});
 
   // Calcular previsão de recebimento do mês (contas NÃO recebidas para o mês selecionado)
-  const monthlyForecast = processedAccounts.filter(account => !account.received).reduce((sum, account) => {
+  const monthlyForecast = accountsToDisplay.filter(account => 
+    !account.received &&
+    isSameMonth(parseISO(account.receive_date), selectedMonthDate) &&
+    isSameYear(parseISO(account.receive_date), selectedMonthDate)
+  ).reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
 
@@ -574,10 +542,10 @@ export default function AccountsReceivable() {
   console.log("AccountsReceivable: userProfile", userProfile);
   console.log("AccountsReceivable: userIdsToFetch", userIdsToFetch);
   console.log("AccountsReceivable: loadingAccounts", loadingAccounts);
-  console.log("AccountsReceivable: fetched accounts (raw)", accounts);
+  console.log("AccountsReceivable: fetched accounts (raw from Supabase)", accounts); // Log dos dados brutos
   console.log("AccountsReceivable: selectedMonthYear", selectedMonthYear);
   console.log("AccountsReceivable: selectedMonthDate", selectedMonthDate);
-  console.log("AccountsReceivable: processedAccounts (for display)", processedAccounts);
+  console.log("AccountsReceivable: accountsToDisplay (for rendering)", accountsToDisplay); // Log dos dados a serem exibidos
 
   return (
     <div className="min-h-screen bg-background">
@@ -910,9 +878,9 @@ export default function AccountsReceivable() {
 
         {loadingAccounts ? (
           <p className="text-muted-foreground">Carregando contas...</p>
-        ) : processedAccounts && processedAccounts.length > 0 ? (
+        ) : accountsToDisplay && accountsToDisplay.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2">
-            {processedAccounts.map((account) => (
+            {accountsToDisplay.map((account) => (
               <Card key={account.id} className={cn(account.received ? "border-l-4 border-income" : "border-l-4 border-muted")}>
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between">
@@ -1038,7 +1006,7 @@ export default function AccountsReceivable() {
         ) : (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
-              Nenhuma conta a receber cadastrada para o mês selecionado.
+              Nenhuma conta a receber cadastrada ou encontrada para o(s) usuário(s) atual(is).
             </CardContent>
           </Card>
         )}
