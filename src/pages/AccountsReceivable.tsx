@@ -19,10 +19,9 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tables } from "@/integrations/supabase/types"; // Importar tipos do Supabase
-import { Label } from "@/components/ui/label"; // Adicionado: Importação do componente Label
+import { Tables } from "@/integrations/supabase/types";
+import { Label } from "@/components/ui/label";
 
-// Estender o tipo de conta para incluir a flag de instância gerada e a nova coluna
 type AccountReceivableWithGeneratedFlag = Tables<'accounts_receivable'> & {
   is_generated_fixed_instance?: boolean;
 };
@@ -131,21 +130,43 @@ export default function AccountsReceivable() {
     }
   }, [isFormOpen, editingAccount, form]);
 
+  // Fetch current user's profile to check family status
+  const { data: userProfile, isLoading: isLoadingProfile } = useQuery({
+    queryKey: ["user-profile", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, is_family_member, invited_by_user_id")
+        .eq("id", user.id)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Determine which user IDs to fetch data for
+  const userIdsToFetch = [user?.id];
+  if (userProfile?.is_family_member && userProfile?.invited_by_user_id) {
+    userIdsToFetch.push(userProfile.invited_by_user_id);
+  }
+
   // Buscar contas a receber
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
-    queryKey: ["accounts-receivable", user?.id], // Adicionado user?.id ao queryKey
+    queryKey: ["accounts-receivable", userIdsToFetch], // Usar userIdsToFetch
     queryFn: async () => {
-      if (!user?.id) return []; // Adicionado guard clause
+      if (!user?.id || userIdsToFetch.length === 0) return [];
       const { data, error } = await supabase
         .from("accounts_receivable")
         .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(id, name), banks(id, name)")
-        .eq("created_by", user.id) // Adicionado filtro por created_by
+        .in("created_by", userIdsToFetch) // Filtrar por todos os IDs relevantes
         .order("receive_date", { ascending: true });
       
       if (error) throw error;
       return data;
     },
-    enabled: !!user?.id, // Habilita a query apenas se user.id existir
+    enabled: !!user?.id && !isLoadingProfile, // Habilita a query apenas se user.id existir e o perfil tiver carregado
   });
 
   // Buscar fontes de receita
@@ -548,6 +569,15 @@ export default function AccountsReceivable() {
   const monthlyForecast = processedAccounts.filter(account => !account.received).reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
+
+  console.log("AccountsReceivable: user", user);
+  console.log("AccountsReceivable: userProfile", userProfile);
+  console.log("AccountsReceivable: userIdsToFetch", userIdsToFetch);
+  console.log("AccountsReceivable: loadingAccounts", loadingAccounts);
+  console.log("AccountsReceivable: fetched accounts (raw)", accounts);
+  console.log("AccountsReceivable: selectedMonthYear", selectedMonthYear);
+  console.log("AccountsReceivable: selectedMonthDate", selectedMonthDate);
+  console.log("AccountsReceivable: processedAccounts (for display)", processedAccounts);
 
   return (
     <div className="min-h-screen bg-background">
