@@ -197,6 +197,12 @@ export default function AccountsPayable() {
   // Encontrar o ID do tipo de pagamento "cartao"
   const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name === "cartao")?.id;
 
+  // Debugging logs
+  console.log("Payment Types:", paymentTypes);
+  console.log("Credit Card Payment Type ID:", creditCardPaymentTypeId);
+  console.log("Selected Payment Type ID:", selectedPaymentTypeId);
+
+
   // Criar/Atualizar conta
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
@@ -611,15 +617,24 @@ export default function AccountsPayable() {
                                 {isLoadingCards ? (
                                   <SelectItem value="loading" disabled>Carregando...</SelectItem>
                                 ) : (
-                                  cards?.map((card) => (
-                                    <SelectItem key={card.id} value={card.id}>
-                                      {card.name} {card.last_digits ? `(**** ${card.last_digits})` : ""}
-                                    </SelectItem>
-                                  ))
+                                  cards && cards.length > 0 ? (
+                                    cards.map((card) => (
+                                      <SelectItem key={card.id} value={card.id}>
+                                        {card.name} {card.last_digits ? `(**** ${card.last_digits})` : ""}
+                                      </SelectItem>
+                                    ))
+                                  ) : (
+                                    <SelectItem value="no-cards" disabled>Nenhum cartão cadastrado.</SelectItem>
+                                  )
                                 )}
                               </SelectContent>
                             </Select>
                             <FormMessage />
+                            {!creditCardPaymentTypeId && (
+                              <FormDescription className="text-destructive">
+                                O tipo de pagamento "cartao" não foi encontrado nas configurações. Por favor, adicione-o em Configurações &gt; Tipos de Pagamento.
+                              </FormDescription>
+                            )}
                           </FormItem>
                         )}
                       />
