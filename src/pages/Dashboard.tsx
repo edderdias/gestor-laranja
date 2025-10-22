@@ -271,7 +271,7 @@ export default function Dashboard() {
                     <ArrowUpCircle className="h-6 w-6 text-income" />
                   </div>
                   <div>
-                    <CardTitle>Contas a Receber</Card_Title>
+                    <CardTitle>Contas a Receber</CardTitle> {/* Corrigido: </Card_Title> para </CardTitle> */}
                     <CardDescription>Gerenciar receitas</CardDescription>
                   </div>
                 </div>
