@@ -498,6 +498,7 @@ export type Database = {
           id: string
           type: Database["public"]["Enums"]["piggy_bank_entry_type"]
           user_id: string
+          bank_id: string | null // Adicionado
         }
         Insert: {
           amount: number
@@ -507,6 +508,7 @@ export type Database = {
           id?: string
           type: Database["public"]["Enums"]["piggy_bank_entry_type"]
           user_id: string
+          bank_id?: string | null // Adicionado
         }
         Update: {
           amount?: number
@@ -516,6 +518,7 @@ export type Database = {
           id?: string
           type?: Database["public"]["Enums"]["piggy_bank_entry_type"]
           user_id?: string
+          bank_id?: string | null // Adicionado
         }
         Relationships: [
           {
@@ -523,6 +526,13 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "piggy_bank_entries_bank_id_fkey" // Adicionado
+            columns: ["bank_id"]
+            isOneToOne: false
+            referencedRelation: "banks"
             referencedColumns: ["id"]
           },
         ]

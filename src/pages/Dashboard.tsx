@@ -32,12 +32,14 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Importar Select
 
 // Esquema de validação para o formulário de transferência para o cofrinho
 const transferToPiggyBankSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Valor inválido").transform(Number).refine(val => val > 0, "O valor deve ser positivo"),
   entry_date: z.date({ required_error: "Data é obrigatória" }),
+  bank_id: z.string().optional(), // Adicionado bank_id
 });
 
 type TransferToPiggyBankFormData = z.infer<typeof transferToPiggyBankSchema>;
@@ -57,6 +59,7 @@ export default function Dashboard() {
       description: "",
       amount: 0,
       entry_date: today,
+      bank_id: undefined, // Valor padrão para o novo campo
     },
   });
 
@@ -125,7 +128,21 @@ export default function Dashboard() {
     enabled: !!user?.id && !isLoadingProfile,
   });
 
-  const isLoading = isLoadingPayable || isLoadingReceivable || isLoadingCreditCards || isLoadingProfile;
+  // Buscar bancos
+  const { data: banks, isLoading: isLoadingBanks } = useQuery({
+    queryKey: ["banks"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("banks")
+        .select("*")
+        .order("name");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const isLoading = isLoadingPayable || isLoadingReceivable || isLoadingCreditCards || isLoadingProfile || isLoadingBanks;
 
   // Process data for summary cards and charts
   let totalConfirmedMonthlyIncome = 0;
@@ -216,6 +233,7 @@ export default function Dashboard() {
         entry_date: format(values.entry_date, "yyyy-MM-dd"),
         type: "deposit" as const, // Sempre um depósito
         user_id: user.id,
+        bank_id: values.bank_id || null, // Incluir bank_id
       };
 
       const { error } = await supabase
@@ -454,6 +472,35 @@ export default function Dashboard() {
                             />
                           </PopoverContent>
                         </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={transferForm.control}
+                    name="bank_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Banco (Opcional)</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione um banco" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="">Nenhum</SelectItem> {/* Opção para não selecionar banco */}
+                            {isLoadingBanks ? (
+                              <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                            ) : (
+                              banks?.map((bank) => (
+                                <SelectItem key={bank.id} value={bank.id}>
+                                  {bank.name}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
