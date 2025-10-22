@@ -338,6 +338,7 @@ export default function AccountsPayable() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-payable"] });
+      queryClient.invalidateQueries({ queryKey: ["credit-cards"] }); // Invalida o cache de cartões para atualizar limites
       queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] }); // Invalida o cache de transações de cartão
       toast.success("Pagamento confirmado com sucesso!");
       setShowConfirmPaidDateDialog(false);
@@ -361,6 +362,8 @@ export default function AccountsPayable() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-payable"] });
+      queryClient.invalidateQueries({ queryKey: ["credit-cards"] }); // Invalida o cache de cartões para atualizar limites
+      queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] }); // Invalida o cache de transações de cartão
       toast.success("Pagamento estornado com sucesso!");
     },
     onError: (error) => {
