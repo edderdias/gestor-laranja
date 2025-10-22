@@ -1,7 +1,7 @@
 import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LogOut, Settings as SettingsIcon, Users } from "lucide-react"; // Importar Users
+import { LogOut, Settings as SettingsIcon, Users, PiggyBank as PiggyBankIcon } from "lucide-react"; // Importar PiggyBankIcon
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -74,7 +74,12 @@ export function MainLayout() {
                   </Link>
                 </NavigationMenuItem>
                 <NavigationMenuItem>
-                  <Link to="/user-management" className={navigationMenuTriggerStyle()}> {/* Novo link */}
+                  <Link to="/piggy-bank" className={navigationMenuTriggerStyle()}> {/* Novo link */}
+                    <PiggyBankIcon className="mr-2 h-4 w-4" /> Cofrinho
+                  </Link>
+                </NavigationMenuItem>
+                <NavigationMenuItem>
+                  <Link to="/user-management" className={navigationMenuTriggerStyle()}>
                     <Users className="mr-2 h-4 w-4" /> Usuários
                   </Link>
                 </NavigationMenuItem>

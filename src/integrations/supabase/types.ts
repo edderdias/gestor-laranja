@@ -471,6 +471,44 @@ export type Database = {
         }
         Relationships: []
       }
+      piggy_bank_entries: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string
+          entry_date: string
+          id: string
+          type: Database["public"]["Enums"]["piggy_bank_entry_type"]
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description: string
+          entry_date?: string
+          id?: string
+          type: Database["public"]["Enums"]["piggy_bank_entry_type"]
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string
+          entry_date?: string
+          id?: string
+          type?: Database["public"]["Enums"]["piggy_bank_entry_type"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "piggy_bank_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -580,6 +618,7 @@ export type Database = {
       app_role: "admin" | "user"
       card_brand: "visa" | "master"
       expense_type: "fixa" | "variavel"
+      piggy_bank_entry_type: "deposit" | "withdrawal"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -710,6 +749,7 @@ export const Constants = {
       app_role: ["admin", "user"],
       card_brand: ["visa", "master"],
       expense_type: ["fixa", "variavel"],
+      piggy_bank_entry_type: ["deposit", "withdrawal"],
     },
   },
 } as const
