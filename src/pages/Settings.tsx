@@ -212,6 +212,12 @@ export default function Settings() {
             queryKey={["income-types"]}
             description="Gerencie os tipos de recebimento de suas receitas."
           />
+          <CrudSection
+            title="Bancos"
+            tableName="banks"
+            queryKey={["banks"]}
+            description="Gerencie os bancos utilizados em suas transações."
+          />
         </div>
       </div>
     </div>
