@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { CreditCard, Plus, Edit, Trash2 } from "lucide-react";
+import { CreditCard, Plus, Edit, Trash2, ShoppingCart, CalendarIcon } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,10 +7,18 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
+import { format, addMonths } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 // Helper function for formatting currency for display
 const formatCurrencyDisplay = (value: number | undefined): string => {
@@ -43,12 +51,22 @@ const cardSchema = z.object({
 
 type CardFormData = z.infer<typeof cardSchema>;
 
+const transactionSchema = z.object({
+  description: z.string().min(1, "Descrição é obrigatória"),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Valor inválido").transform(Number).refine(val => val > 0, "O valor deve ser positivo"),
+  category_id: z.string().min(1, "Categoria é obrigatória"),
+  purchase_date: z.date({ required_error: "Data da compra é obrigatória" }),
+  installments: z.string().transform(Number).refine(val => val >= 1, "Parcelas devem ser no mínimo 1"),
+});
+
+type TransactionFormData = z.infer<typeof transactionSchema>;
+
 export default function CreditCards() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isCardFormOpen, setIsCardFormOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<any>(null);
-  const [formData, setFormData] = useState<Partial<CardFormData>>({
+  const [cardFormData, setCardFormData] = useState<Partial<CardFormData>>({
     due_date: 10,
     best_purchase_date: 5,
     credit_limit: 0,
@@ -57,9 +75,24 @@ export default function CreditCards() {
   // Local state to manage the displayed string value of credit_limit
   const [creditLimitInput, setCreditLimitInput] = useState<string>("");
 
+  // State for transaction form
+  const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
+  const [selectedCardForTransaction, setSelectedCardForTransaction] = useState<any>(null);
+
+  const transactionForm = useForm<TransactionFormData>({
+    resolver: zodResolver(transactionSchema),
+    defaultValues: {
+      description: "",
+      amount: 0,
+      category_id: "",
+      purchase_date: new Date(),
+      installments: 1,
+    },
+  });
+
   useEffect(() => {
-    if (isFormOpen && editingCard) {
-      setFormData({
+    if (isCardFormOpen && editingCard) {
+      setCardFormData({
         name: editingCard.name,
         brand: editingCard.brand,
         due_date: editingCard.due_date,
@@ -69,10 +102,25 @@ export default function CreditCards() {
       });
       // Initialize creditLimitInput with formatted value
       setCreditLimitInput(formatCurrencyDisplay(editingCard.credit_limit));
-    } else if (!isFormOpen) {
-      resetForm();
+    } else if (!isCardFormOpen) {
+      resetCardForm();
     }
-  }, [isFormOpen, editingCard]);
+  }, [isCardFormOpen, editingCard]);
+
+  useEffect(() => {
+    if (isTransactionFormOpen && selectedCardForTransaction) {
+      transactionForm.reset({
+        description: "",
+        amount: 0,
+        category_id: "",
+        purchase_date: new Date(),
+        installments: 1,
+      });
+    } else if (!isTransactionFormOpen) {
+      transactionForm.reset();
+      setSelectedCardForTransaction(null);
+    }
+  }, [isTransactionFormOpen, selectedCardForTransaction, transactionForm]);
 
   // Buscar cartões
   const { data: cards, isLoading: isLoadingCards } = useQuery({
@@ -109,8 +157,21 @@ export default function CreditCards() {
     },
   });
 
-  // Mutation para salvar
-  const saveMutation = useMutation({
+  // Buscar categorias de despesa
+  const { data: expenseCategories, isLoading: isLoadingCategories } = useQuery({
+    queryKey: ["expense-categories"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("expense_categories")
+        .select("*")
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Mutation para salvar cartão
+  const saveCardMutation = useMutation({
     mutationFn: async (data: CardFormData) => {
       const cardData = {
         name: data.name,
@@ -138,7 +199,7 @@ export default function CreditCards() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["credit_cards"] });
       toast.success(editingCard ? "Cartão atualizado!" : "Cartão criado!");
-      resetForm();
+      resetCardForm();
     },
     onError: (error) => {
       toast.error("Erro ao salvar cartão");
@@ -146,8 +207,8 @@ export default function CreditCards() {
     },
   });
 
-  // Mutation para deletar
-  const deleteMutation = useMutation({
+  // Mutation para deletar cartão
+  const deleteCardMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
         .from("credit_cards")
@@ -164,11 +225,60 @@ export default function CreditCards() {
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Mutation para inserir transação de cartão de crédito
+  const insertCreditCardTransactionMutation = useMutation({
+    mutationFn: async (values: TransactionFormData) => {
+      if (!user?.id || !selectedCardForTransaction?.id) {
+        toast.error("Usuário ou cartão não selecionado. Não foi possível registrar a compra.");
+        throw new Error("User or card not selected.");
+      }
+
+      const numInstallments = values.installments;
+
+      for (let i = 0; i < numInstallments; i++) {
+        const currentPurchaseDate = addMonths(values.purchase_date, i);
+
+        const transactionDescription = numInstallments > 1
+          ? `${values.description} (${i + 1}/${numInstallments})`
+          : values.description;
+
+        const transactionData = {
+          description: transactionDescription,
+          amount: values.amount,
+          card_id: selectedCardForTransaction.id,
+          category_id: values.category_id,
+          purchase_date: format(currentPurchaseDate, "yyyy-MM-dd"),
+          installments: numInstallments,
+          current_installment: i + 1,
+          created_by: user.id,
+        };
+
+        const { error } = await supabase
+          .from("credit_card_transactions")
+          .insert(transactionData);
+
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["card_expenses"] }); // Invalida para atualizar o limite disponível
+      toast.success("Compra registrada com sucesso!");
+      setIsTransactionFormOpen(false);
+      setSelectedCardForTransaction(null);
+      transactionForm.reset();
+    },
+    onError: (error) => {
+      toast.error("Erro ao registrar compra: " + error.message);
+      console.error(error);
+    },
+  });
+
+  const handleCardSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const validatedData = cardSchema.parse(formData);
-      saveMutation.mutate(validatedData);
+      const validatedData = cardSchema.parse(cardFormData);
+      saveCardMutation.mutate(validatedData);
     } catch (error) {
       if (error instanceof z.ZodError) {
         error.errors.forEach((err) => {
@@ -178,8 +288,12 @@ export default function CreditCards() {
     }
   };
 
-  const resetForm = () => {
-    setFormData({
+  const handleTransactionSubmit = (values: TransactionFormData) => {
+    insertCreditCardTransactionMutation.mutate(values);
+  };
+
+  const resetCardForm = () => {
+    setCardFormData({
       name: "",
       brand: "visa",
       due_date: 10,
@@ -188,13 +302,18 @@ export default function CreditCards() {
       last_digits: "",
     });
     setEditingCard(null);
-    setIsFormOpen(false);
+    setIsCardFormOpen(false);
     setCreditLimitInput(""); // Reset local input state for currency
   };
 
   const handleEdit = (card: any) => {
     setEditingCard(card);
-    setIsFormOpen(true);
+    setIsCardFormOpen(true);
+  };
+
+  const handleLaunchPurchase = (card: any) => {
+    setSelectedCardForTransaction(card);
+    setIsTransactionFormOpen(true);
   };
 
   const getAvailableLimit = (cardId: string, creditLimit: number) => {
@@ -211,7 +330,7 @@ export default function CreditCards() {
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Cartões de Crédito</h1>
-          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+          <Dialog open={isCardFormOpen} onOpenChange={setIsCardFormOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => setEditingCard(null)}>
                 <Plus className="mr-2 h-4 w-4" />
@@ -222,14 +341,14 @@ export default function CreditCards() {
               <DialogHeader>
                 <DialogTitle>{editingCard ? "Editar Cartão" : "Novo Cartão"}</DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleCardSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="name">Descrição do Cartão *</Label>
                     <Input
                       id="name"
-                      value={formData.name || ""}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      value={cardFormData.name || ""}
+                      onChange={(e) => setCardFormData({ ...cardFormData, name: e.target.value })}
                       placeholder="Ex: Cartão principal"
                     />
                   </div>
@@ -237,9 +356,9 @@ export default function CreditCards() {
                   <div>
                     <Label htmlFor="brand">Bandeira *</Label>
                     <Select
-                      value={formData.brand}
+                      value={cardFormData.brand}
                       onValueChange={(value: "visa" | "master") => 
-                        setFormData({ ...formData, brand: value })
+                        setCardFormData({ ...cardFormData, brand: value })
                       }
                     >
                       <SelectTrigger>
@@ -256,8 +375,8 @@ export default function CreditCards() {
                     <Label htmlFor="last_digits">Últimos 4 dígitos</Label>
                     <Input
                       id="last_digits"
-                      value={formData.last_digits || ""}
-                      onChange={(e) => setFormData({ ...formData, last_digits: e.target.value })}
+                      value={cardFormData.last_digits || ""}
+                      onChange={(e) => setCardFormData({ ...cardFormData, last_digits: e.target.value })}
                       placeholder="1234"
                       maxLength={4}
                     />
@@ -270,8 +389,8 @@ export default function CreditCards() {
                       type="number"
                       min="1"
                       max="31"
-                      value={formData.due_date || ""}
-                      onChange={(e) => setFormData({ ...formData, due_date: parseInt(e.target.value) || 0 })}
+                      value={cardFormData.due_date || ""}
+                      onChange={(e) => setCardFormData({ ...cardFormData, due_date: parseInt(e.target.value) || 0 })}
                       placeholder="10"
                     />
                   </div>
@@ -283,8 +402,8 @@ export default function CreditCards() {
                       type="number"
                       min="1"
                       max="31"
-                      value={formData.best_purchase_date || ""}
-                      onChange={(e) => setFormData({ ...formData, best_purchase_date: parseInt(e.target.value) || 0 })}
+                      value={cardFormData.best_purchase_date || ""}
+                      onChange={(e) => setCardFormData({ ...cardFormData, best_purchase_date: parseInt(e.target.value) || 0 })}
                       placeholder="5"
                     />
                   </div>
@@ -299,11 +418,11 @@ export default function CreditCards() {
                         const rawValue = e.target.value;
                         setCreditLimitInput(rawValue); // Update local string state
                         const numericValue = parseCurrencyInput(rawValue);
-                        setFormData((prev) => ({ ...prev, credit_limit: numericValue })); // Update formData with numeric value
+                        setCardFormData((prev) => ({ ...prev, credit_limit: numericValue })); // Update cardFormData with numeric value
                       }}
                       onBlur={() => {
                         // Format on blur
-                        setCreditLimitInput(formatCurrencyDisplay(formData.credit_limit));
+                        setCreditLimitInput(formatCurrencyDisplay(cardFormData.credit_limit));
                       }}
                       placeholder="R$ 0,00"
                     />
@@ -311,10 +430,10 @@ export default function CreditCards() {
                 </div>
 
                 <div className="flex justify-end gap-2">
-                  <Button type="submit" disabled={saveMutation.isPending}>
-                    {saveMutation.isPending ? "Salvando..." : "Salvar"}
+                  <Button type="submit" disabled={saveCardMutation.isPending}>
+                    {saveCardMutation.isPending ? "Salvando..." : "Salvar"}
                   </Button>
-                  <Button type="button" variant="outline" onClick={resetForm}>
+                  <Button type="button" variant="outline" onClick={resetCardForm}>
                     Cancelar
                   </Button>
                 </div>
@@ -361,7 +480,7 @@ export default function CreditCards() {
                           size="icon"
                           onClick={() => {
                             if (confirm("Tem certeza que deseja excluir este cartão?")) {
-                              deleteMutation.mutate(card.id);
+                              deleteCardMutation.mutate(card.id);
                             }
                           }}
                         >
@@ -412,6 +531,15 @@ export default function CreditCards() {
                         {usedPercentage.toFixed(1)}% utilizado
                       </p>
                     </div>
+                    <div className="flex justify-end mt-4">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleLaunchPurchase(card)}
+                      >
+                        <ShoppingCart className="h-4 w-4 mr-2" /> Lançar Compra
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               );
@@ -425,6 +553,140 @@ export default function CreditCards() {
           </Card>
         )}
       </main>
+
+      {/* Dialog for launching a new credit card purchase */}
+      <Dialog open={isTransactionFormOpen} onOpenChange={setIsTransactionFormOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Lançar Compra no Cartão</DialogTitle>
+            <CardDescription>
+              Registrar uma nova compra para o cartão:{" "}
+              <span className="font-semibold">{selectedCardForTransaction?.name}</span>
+            </CardDescription>
+          </DialogHeader>
+          <Form {...transactionForm}>
+            <form onSubmit={transactionForm.handleSubmit(handleTransactionSubmit)} className="space-y-4">
+              <FormField
+                control={transactionForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Descrição da Compra</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Ex: Supermercado, Restaurante" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={transactionForm.control}
+                name="amount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Valor da Parcela</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={transactionForm.control}
+                name="category_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Categoria</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a categoria" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {isLoadingCategories ? (
+                          <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                        ) : (
+                          expenseCategories?.map((category) => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={transactionForm.control}
+                name="purchase_date"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Data da Compra</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "PPP", { locale: ptBR })
+                            ) : (
+                              <span>Selecione uma data</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          disabled={(date) =>
+                            date > new Date() || date < new Date("1900-01-01")
+                          }
+                          initialFocus
+                          locale={ptBR}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={transactionForm.control}
+                name="installments"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Quantidade de Parcelas</FormLabel>
+                    <FormControl>
+                      <Input type="number" min="1" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsTransactionFormOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={insertCreditCardTransactionMutation.isPending}>
+                  {insertCreditCardTransactionMutation.isPending ? "Registrando..." : "Registrar Compra"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
