@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tables } from "@/integrations/supabase/types"; // Importar tipos do Supabase
+import { Label } from "@/components/ui/label"; // Adicionado: Importação do componente Label
 
 // Estender o tipo de conta para incluir a flag de instância gerada e a nova coluna
 type AccountReceivableWithGeneratedFlag = Tables<'accounts_receivable'> & {
@@ -668,45 +669,45 @@ export default function AccountsReceivable() {
                               <FormLabel>Quantidade de Parcelas</FormLabel>
                               <FormControl>
                                 <Input type="number" min="1" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                        <FormField
-                          control={form.control}
-                          name="amount"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Valor da Parcela</FormLabel>
-                              <FormControl>
-                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                    )}
+                      <FormField
+                        control={form.control}
+                        name="amount"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Valor da Parcela</FormLabel>
+                            <FormControl>
+                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
 
-                    {isFixed && (
-                      <div className="grid grid-cols-1 gap-4">
-                        <FormField
-                          control={form.control}
-                          name="amount"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Valor da Parcela</FormLabel>
-                              <FormControl>
-                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                    )}
+                  {isFixed && (
+                    <div className="grid grid-cols-1 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="amount"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Valor da Parcela</FormLabel>
+                            <FormControl>
+                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
 
                     <div className="grid grid-cols-2 gap-4">
                       <FormField
