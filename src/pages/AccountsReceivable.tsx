@@ -61,8 +61,9 @@ export default function AccountsReceivable() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<any>(null);
   const queryClient = useQueryClient();
-  const currentMonth = getMonth(new Date());
-  const currentYear = getYear(new Date());
+  
+  // Estado para o mês e ano selecionados no filtro
+  const [selectedMonthYear, setSelectedMonthYear] = useState(format(new Date(), "yyyy-MM"));
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -394,120 +395,171 @@ export default function AccountsReceivable() {
                                   <SelectValue placeholder="Selecione o tipo" />
                                 </SelectTrigger>
                               </FormControl>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                              <SelectContent> {/* Corrigido: Adicionado a tag de fechamento */}
+                                {isLoadingIncomeTypes ? (
+                                  <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                                ) : (
+                                  incomeTypes?.map((type) => (
+                                    <SelectItem key={type.id} value={type.id}>
+                                      {type.name}
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                    <FormField
-                      control={form.control}
-                      name="is_fixed"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-                          <div className="space-y-0.5">
-                            <FormLabel className="text-base">Receita Fixa</FormLabel>
-                            <FormDescription>
-                              Marque se esta receita se repete todos os meses.
-                            </FormDescription>
-                          </div>
-                          <FormControl>
-                            <Switch
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                      <FormField
+                        control={form.control}
+                        name="is_fixed"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                            <div className="space-y-0.5">
+                              <FormLabel className="text-base">Receita Fixa</FormLabel>
+                              <FormDescription>
+                                Marque se esta receita se repete todos os meses.
+                              </FormDescription>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="receive_date"
-                      render={({ field }) => (
-                        <FormItem className={cn(isFixed && "col-span-2")}>
-                          <FormLabel>Data do Recebimento</FormLabel>
-                          <FormControl>
-                            <Input type="date" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="receive_date"
+                        render={({ field }) => (
+                          <FormItem className={cn(isFixed && "col-span-2")}>
+                            <FormLabel>Data do Recebimento</FormLabel>
+                            <FormControl>
+                              <Input type="date" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
 
-                  {!isFixed && (
+                    {!isFixed && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="installments"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Quantidade de Parcelas</FormLabel>
+                              <FormControl>
+                                <Input type="number" min="1" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="amount"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Valor da Parcela</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
+
+                    {isFixed && (
+                      <div className="grid grid-cols-1 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="amount"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Valor da Parcela</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
-                        name="installments"
+                        name="source_id"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Quantidade de Parcelas</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="1" {...field} />
-                            </FormControl>
+                            <FormLabel>Fonte de Receita</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value || ""}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione a fonte" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {sources?.map((source) => (
+                                  <SelectItem key={source.id} value={source.id}>
+                                    {source.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
 
-                      <FormField
-                        control={form.control}
-                        name="amount"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Valor da Parcela</FormLabel>
-                            <FormControl>
-                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                      <div className="bg-muted p-4 rounded-lg flex items-center">
+                        <p className="text-sm font-medium">
+                          Valor Total: R$ {(parseFloat(form.watch("amount") || "0") * (isFixed ? 1 : parseInt(form.watch("installments") || "1"))).toFixed(2)}
+                        </p>
+                      </div>
                     </div>
-                  )}
 
-                  {isFixed && (
-                    <div className="grid grid-cols-1 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="amount"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Valor da Parcela</FormLabel>
-                            <FormControl>
-                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
-                      name="source_id"
+                      name="payer_id"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Fonte de Receita</FormLabel>
+                          <FormLabel>Pagador</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value || ""}>
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Selecione a fonte" />
+                                <SelectValue placeholder="Selecione o pagador" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {sources?.map((source) => (
-                                <SelectItem key={source.id} value={source.id}>
-                                  {source.name}
-                                </SelectItem>
-                              ))}
+                              {isLoadingPayers ? (
+                                <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                              ) : (
+                                <>
+                                  {payers?.map((payer) => (
+                                    <SelectItem key={payer.id} value={payer.id}>
+                                      {payer.name}
+                                    </SelectItem>
+                                  ))}
+                                  <SelectItem value="new-payer">
+                                    + Novo Pagador
+                                  </SelectItem>
+                                </>
+                              )}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -515,104 +567,64 @@ export default function AccountsReceivable() {
                       )}
                     />
 
-                    <div className="bg-muted p-4 rounded-lg flex items-center">
-                      <p className="text-sm font-medium">
-                        Valor Total: R$ {(parseFloat(form.watch("amount") || "0") * (isFixed ? 1 : parseInt(form.watch("installments") || "1"))).toFixed(2)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <FormField
-                    control={form.control}
-                    name="payer_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Pagador</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ""}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o pagador" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {isLoadingPayers ? (
-                              <SelectItem value="loading" disabled>Carregando...</SelectItem>
-                            ) : (
-                              <>
-                                {payers?.map((payer) => (
-                                  <SelectItem key={payer.id} value={payer.id}>
-                                    {payer.name}
-                                  </SelectItem>
-                                ))}
-                                <SelectItem value="new-payer">
-                                  + Novo Pagador
-                                </SelectItem>
-                              </>
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
+                    {selectedPayerId === "new-payer" && (
+                      <FormField
+                        control={form.control}
+                        name="new_payer_name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Nome do Novo Pagador</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="Nome do novo pagador" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     )}
-                  />
 
-                  {selectedPayerId === "new-payer" && (
                     <FormField
                       control={form.control}
-                      name="new_payer_name"
+                      name="responsible_person_id"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Nome do Novo Pagador</FormLabel>
-                          <FormControl>
-                            <Input {...field} placeholder="Nome do novo pagador" />
-                          </FormControl>
+                          <FormLabel>Recebedor</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || ""}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione o recebedor" />
+                            </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {isLoadingResponsiblePersons ? (
+                                <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                              ) : (
+                                responsiblePersons?.map((person) => (
+                                  <SelectItem key={person.id} value={person.id}>
+                                    {person.name}
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                  )}
 
-                  <FormField
-                    control={form.control}
-                    name="responsible_person_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Recebedor</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ""}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o recebedor" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {isLoadingResponsiblePersons ? (
-                              <SelectItem value="loading" disabled>Carregando...</SelectItem>
-                            ) : (
-                              responsiblePersons?.map((person) => (
-                                <SelectItem key={person.id} value={person.id}>
-                                  {person.name}
-                                </SelectItem>
-                              ))
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="flex justify-end gap-2">
-                    <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
-                      Cancelar
-                    </Button>
-                    <Button type="submit" disabled={saveMutation.isPending}>
-                      {saveMutation.isPending ? "Salvando..." : editingAccount ? "Atualizar" : "Criar"}
-                    </Button>
-                  </div>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
+                        Cancelar
+                      </Button>
+                      <Button type="submit" disabled={saveMutation.isPending}>
+                        {saveMutation.isPending ? "Salvando..." : editingAccount ? "Atualizar" : "Criar"}
+                      </Button>
+                    </div>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </div>
 
