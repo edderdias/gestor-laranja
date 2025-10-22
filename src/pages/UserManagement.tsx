@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"; // Adicionado DialogDescription
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -69,16 +69,11 @@ export default function UserManagement() {
       // Fetch profiles of the current user and users invited by the current user
       const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
-        .select("id, full_name, email, is_family_member, invited_by_user_id")
-        .or(`id.eq.${currentUser.id},invited_by_user_id.eq.${currentUser.id}`);
+        .select("id, full_name, is_family_member, invited_by_user_id");
 
       if (profilesError) throw profilesError;
 
-      // Supabase RLS for profiles_select_policy_extended should handle this.
-      // We might need to fetch auth.users separately to get emails for all profiles,
-      // as profiles table doesn't directly store email.
-      // For simplicity, we'll assume email is available or fetch it if needed.
-      // A more robust solution would involve a join or a separate query for auth.users.
+      // Fetch auth.users separately to get emails for all profiles
       const { data: authUsers, error: authUsersError } = await supabase.auth.admin.listUsers();
       if (authUsersError) console.error("Error fetching auth users:", authUsersError);
 
