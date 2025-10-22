@@ -28,15 +28,15 @@ type AccountPayableWithGeneratedFlag = Tables<'accounts_payable'> & {
 
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
-  payment_type_id: z.string().min(1, "Tipo de pagamento é obrigatório"), // Alterado para ID
-  card_id: z.string().optional(),
+  payment_type_id: z.string().min(1, "Tipo de pagamento é obrigatório"),
+  card_id: z.string().optional(), // Optional by default, will be conditionally validated
   purchase_date: z.string().optional(),
   due_date: z.string().min(1, "Data de vencimento é obrigatória"),
   installments: z.string().optional(),
   amount: z.string().min(1, "Valor é obrigatório"),
   category_id: z.string().min(1, "Categoria é obrigatória"),
   is_fixed: z.boolean().default(false),
-  responsible_person_id: z.string().optional(), // Alterado para ID
+  responsible_person_id: z.string().optional(),
 }).superRefine((data, ctx) => {
   // Validação condicional para purchase_date
   if (!data.is_fixed && !data.purchase_date) {
@@ -54,9 +54,6 @@ const formSchema = z.object({
       path: ["installments"],
     });
   }
-  // Validação condicional para card_id se payment_type_id for "cartao"
-  // NOTE: payment_type_id é um UUID, então precisamos comparar com o ID do tipo "cartao"
-  // Isso será feito na lógica do componente, não diretamente no Zod.
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -78,14 +75,14 @@ export default function AccountsPayable() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       description: "",
-      payment_type_id: "", // Valor padrão vazio
+      payment_type_id: "",
       purchase_date: format(new Date(), "yyyy-MM-dd"),
       due_date: format(new Date(), "yyyy-MM-dd"),
       installments: "1",
       amount: "",
       category_id: "",
       is_fixed: false,
-      responsible_person_id: undefined, // Valor padrão para o novo campo
+      responsible_person_id: undefined,
     },
   });
 
@@ -128,7 +125,7 @@ export default function AccountsPayable() {
       if (!user?.id) return [];
       const { data, error } = await supabase
         .from("accounts_payable")
-        .select("*, expense_categories(name), credit_cards(name), payment_types(name), responsible_persons(name)") // Adicionado payment_types e responsible_persons
+        .select("*, expense_categories(name), credit_cards(name), payment_types(name), responsible_persons(name)")
         .eq("created_by", user.id)
         .order("due_date", { ascending: true });
       
@@ -139,7 +136,7 @@ export default function AccountsPayable() {
   });
 
   // Buscar cartões
-  const { data: cards } = useQuery({
+  const { data: cards, isLoading: isLoadingCards } = useQuery({
     queryKey: ["credit-cards"],
     queryFn: async () => {
       if (!user?.id) return [];
@@ -156,7 +153,7 @@ export default function AccountsPayable() {
   });
 
   // Buscar categorias
-  const { data: categories } = useQuery({
+  const { data: categories, isLoading: isLoadingCategories } = useQuery({
     queryKey: ["expense-categories"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -197,6 +194,9 @@ export default function AccountsPayable() {
     },
   });
 
+  // Encontrar o ID do tipo de pagamento "cartao"
+  const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name === "cartao")?.id;
+
   // Criar/Atualizar conta
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
@@ -205,12 +205,16 @@ export default function AccountsPayable() {
         throw new Error("User not authenticated.");
       }
 
-      const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name === "cartao")?.id;
+      // Validação condicional para card_id
+      if (values.payment_type_id === creditCardPaymentTypeId && !values.card_id) {
+        toast.error("Selecione um cartão de crédito para o tipo de pagamento 'Cartão'.");
+        throw new Error("Credit card selection required.");
+      }
 
       const accountData = {
         description: values.description,
         payment_type_id: values.payment_type_id,
-        card_id: values.payment_type_id === creditCardPaymentTypeId ? values.card_id : null, // Lógica para 'cartao'
+        card_id: values.payment_type_id === creditCardPaymentTypeId ? values.card_id : null,
         purchase_date: values.is_fixed ? null : values.purchase_date,
         due_date: values.due_date,
         installments: values.is_fixed ? 1 : parseInt(values.installments || "1"),
@@ -278,8 +282,8 @@ export default function AccountsPayable() {
 
       const formattedPaidDate = format(paidDate, "yyyy-MM-dd");
 
+      // Step 1: Update/Insert accounts_payable
       if (account.is_generated_fixed_instance) {
-        // Se for uma instância gerada, insere uma nova conta (não fixa)
         const { error } = await supabase
           .from("accounts_payable")
           .insert({
@@ -287,21 +291,20 @@ export default function AccountsPayable() {
             payment_type_id: account.payment_type_id,
             card_id: account.card_id,
             purchase_date: account.purchase_date,
-            due_date: format(parseISO(account.due_date), "yyyy-MM-dd"), // Usa a data ajustada para o mês
+            due_date: format(parseISO(account.due_date), "yyyy-MM-dd"),
             installments: account.installments,
             amount: account.amount,
             category_id: account.category_id,
             expense_type: account.expense_type,
-            is_fixed: false, // A ocorrência é uma entrada única
+            is_fixed: false,
             responsible_person_id: account.responsible_person_id,
             created_by: user.id,
             paid: true,
             paid_date: formattedPaidDate,
-            original_fixed_account_id: account.original_fixed_account_id || account.id, // Link para o modelo fixo original
+            original_fixed_account_id: account.original_fixed_account_id || account.id,
           });
         if (error) throw error;
       } else {
-        // Se for uma conta existente (fixa original ou não fixa), atualiza
         const { error } = await supabase
           .from("accounts_payable")
           .update({ paid: true, paid_date: formattedPaidDate })
@@ -309,13 +312,37 @@ export default function AccountsPayable() {
         
         if (error) throw error;
       }
+
+      // Step 2: If paid with credit card, record transaction
+      if (account.payment_type_id === creditCardPaymentTypeId && account.card_id) {
+        const transactionData = {
+          description: account.description,
+          amount: account.amount,
+          card_id: account.card_id,
+          category_id: account.category_id,
+          purchase_date: formattedPaidDate,
+          installments: account.installments || 1,
+          current_installment: account.current_installment || 1,
+          created_by: user.id,
+        };
+
+        const { error: transactionError } = await supabase
+          .from("credit_card_transactions")
+          .insert(transactionData);
+
+        if (transactionError) {
+          console.error("Error inserting credit card transaction:", transactionError);
+          toast.error("Erro ao registrar transação no cartão de crédito.");
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-payable"] });
+      queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] }); // Invalida o cache de transações de cartão
       toast.success("Pagamento confirmado com sucesso!");
-      setShowConfirmPaidDateDialog(false); // Fecha o diálogo
+      setShowConfirmPaidDateDialog(false);
       setCurrentConfirmingAccount(null);
-      setSelectedPaidDate(new Date()); // Reseta a data
+      setSelectedPaidDate(new Date());
     },
     onError: (error) => {
       toast.error("Erro ao confirmar pagamento: " + error.message);
@@ -342,6 +369,11 @@ export default function AccountsPayable() {
   });
 
   const onSubmit = (values: FormData) => {
+    // Validação condicional para card_id antes de mutar
+    if (values.payment_type_id === creditCardPaymentTypeId && !values.card_id) {
+      toast.error("Selecione um cartão de crédito para o tipo de pagamento 'Cartão'.");
+      return;
+    }
     saveMutation.mutate(values);
   };
 
@@ -559,7 +591,7 @@ export default function AccountsPayable() {
                       />
                     </div>
 
-                    {selectedPaymentTypeId === paymentTypes?.find(pt => pt.name === "cartao")?.id && (
+                    {selectedPaymentTypeId === creditCardPaymentTypeId && (
                       <FormField
                         control={form.control}
                         name="card_id"
@@ -573,11 +605,15 @@ export default function AccountsPayable() {
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                {cards?.map((card) => (
-                                  <SelectItem key={card.id} value={card.id}>
-                                    {card.name} {card.last_digits ? `(**** ${card.last_digits})` : ""}
-                                  </SelectItem>
-                                ))}
+                                {isLoadingCards ? (
+                                  <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                                ) : (
+                                  cards?.map((card) => (
+                                    <SelectItem key={card.id} value={card.id}>
+                                      {card.name} {card.last_digits ? `(**** ${card.last_digits})` : ""}
+                                    </SelectItem>
+                                  ))
+                                )}
                               </SelectContent>
                             </Select>
                             <FormMessage />
@@ -680,11 +716,15 @@ export default function AccountsPayable() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {categories?.map((category) => (
-                                <SelectItem key={category.id} value={category.id}>
-                                  {category.name}
-                                </SelectItem>
-                              ))}
+                              {isLoadingCategories ? (
+                                <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                              ) : (
+                                categories?.map((category) => (
+                                  <SelectItem key={category.id} value={category.id}>
+                                    {category.name}
+                                  </SelectItem>
+                                ))
+                              )}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -787,7 +827,7 @@ export default function AccountsPayable() {
         {loadingAccounts ? (
           <p className="text-muted-foreground">Carregando contas...</p>
         ) : processedAccounts && processedAccounts.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2"> {/* Alterado para 2 colunas */}
+          <div className="grid gap-4 md:grid-cols-2">
             {processedAccounts.map((account) => (
               <Card key={account.id} className={cn(account.paid ? "border-l-4 border-income" : "border-l-4 border-destructive")}>
                 <CardContent className="pt-6">
@@ -846,7 +886,7 @@ export default function AccountsPayable() {
                           variant="outline" 
                           size="sm" 
                           onClick={() => handleReverse(account)}
-                          disabled={reversePaidMutation.isPending || account.is_generated_fixed_instance} // Desabilita estorno para geradas
+                          disabled={reversePaidMutation.isPending || account.is_generated_fixed_instance}
                           className="text-destructive border-destructive hover:bg-destructive/10"
                         >
                           <RotateCcw className="h-4 w-4 mr-2" /> Estornar
@@ -866,7 +906,7 @@ export default function AccountsPayable() {
                         variant="ghost" 
                         size="icon" 
                         onClick={() => handleEdit(account)}
-                        disabled={account.is_generated_fixed_instance} // Desabilita edição para geradas
+                        disabled={account.is_generated_fixed_instance}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -874,7 +914,7 @@ export default function AccountsPayable() {
                         variant="ghost" 
                         size="icon" 
                         onClick={() => handleDelete(account)}
-                        disabled={deleteMutation.isPending || account.is_generated_fixed_instance} // Desabilita exclusão para geradas
+                        disabled={deleteMutation.isPending || account.is_generated_fixed_instance}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
