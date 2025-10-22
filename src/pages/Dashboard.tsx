@@ -7,10 +7,12 @@ import {
   CreditCard, 
   Wallet,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  PiggyBank as PiggyBankIcon, // Importar PiggyBankIcon
+  CalendarIcon // Importar CalendarIcon
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO, getMonth, getYear, isSameMonth, isSameYear } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -18,11 +20,45 @@ import { MonthlyExpensesChart } from "@/components/charts/MonthlyExpensesChart";
 import { CategoryExpensesChart } from "@/components/charts/CategoryExpensesChart";
 import { Tables } from "@/integrations/supabase/types"; // Importar tipos do Supabase
 
+// Imports para o formulário de transferência
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
+
+// Esquema de validação para o formulário de transferência para o cofrinho
+const transferToPiggyBankSchema = z.object({
+  description: z.string().min(1, "Descrição é obrigatória"),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Valor inválido").transform(Number).refine(val => val > 0, "O valor deve ser positivo"),
+  entry_date: z.date({ required_error: "Data é obrigatória" }),
+});
+
+type TransferToPiggyBankFormData = z.infer<typeof transferToPiggyBankSchema>;
+
 export default function Dashboard() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const today = new Date();
   const currentMonth = getMonth(today);
   const currentYear = getYear(today);
+
+  const [isTransferFormOpen, setIsTransferFormOpen] = useState(false);
+
+  const transferForm = useForm<TransferToPiggyBankFormData>({
+    resolver: zodResolver(transferToPiggyBankSchema),
+    defaultValues: {
+      description: "",
+      amount: 0,
+      entry_date: today,
+    },
+  });
 
   // Fetch current user's profile to check family status
   const { data: userProfile, isLoading: isLoadingProfile } = useQuery({
@@ -166,6 +202,43 @@ export default function Dashboard() {
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value);
 
+  // Mutation para transferir para o cofrinho
+  const transferToPiggyBankMutation = useMutation({
+    mutationFn: async (values: TransferToPiggyBankFormData) => {
+      if (!user?.id) {
+        toast.error("Usuário não autenticado. Não foi possível transferir para o cofrinho.");
+        throw new Error("User not authenticated.");
+      }
+
+      const entryData = {
+        description: values.description,
+        amount: values.amount,
+        entry_date: format(values.entry_date, "yyyy-MM-dd"),
+        type: "deposit" as const, // Sempre um depósito
+        user_id: user.id,
+      };
+
+      const { error } = await supabase
+        .from("piggy_bank_entries")
+        .insert(entryData);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["piggy_bank_entries"] }); // Invalida o cache do cofrinho
+      toast.success("Valor transferido para o cofrinho com sucesso!");
+      setIsTransferFormOpen(false);
+      transferForm.reset();
+    },
+    onError: (error) => {
+      toast.error("Erro ao transferir para o cofrinho: " + error.message);
+    },
+  });
+
+  const onTransferSubmit = (values: TransferToPiggyBankFormData) => {
+    transferToPiggyBankMutation.mutate(values);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-8">
@@ -293,6 +366,110 @@ export default function Dashboard() {
               </CardHeader>
             </Card>
           </Link>
+
+          {/* Novo Card para Transferir para Cofrinho */}
+          <Dialog open={isTransferFormOpen} onOpenChange={setIsTransferFormOpen}>
+            <DialogTrigger asChild>
+              <Card className="hover:border-neutral transition-colors cursor-pointer h-full">
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="bg-neutral/10 p-3 rounded-lg">
+                      <PiggyBankIcon className="h-6 w-6 text-neutral" />
+                    </div>
+                    <div>
+                      <CardTitle>Transferir para Cofrinho</CardTitle>
+                      <CardDescription>Adicione um valor ao seu cofrinho</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+              </Card>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Transferir para Cofrinho</DialogTitle>
+              </DialogHeader>
+              <Form {...transferForm}>
+                <form onSubmit={transferForm.handleSubmit(onTransferSubmit)} className="space-y-4">
+                  <FormField
+                    control={transferForm.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Descrição</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="Ex: Economia extra, Bônus" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={transferForm.control}
+                    name="amount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Valor</FormLabel>
+                        <FormControl>
+                          <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={transferForm.control}
+                    name="entry_date"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Data da Transferência</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={"outline"}
+                                className={cn(
+                                  "w-full pl-3 text-left font-normal",
+                                  !field.value && "text-muted-foreground"
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, "PPP", { locale: ptBR })
+                                ) : (
+                                  <span>Selecione uma data</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              disabled={(date) =>
+                                date > new Date() || date < new Date("1900-01-01")
+                              }
+                              initialFocus
+                              locale={ptBR}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setIsTransferFormOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button type="submit" disabled={transferToPiggyBankMutation.isPending}>
+                      {transferToPiggyBankMutation.isPending ? "Transferindo..." : "Transferir"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
         </div>
       </main>
     </div>
