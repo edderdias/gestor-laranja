@@ -969,106 +969,108 @@ export default function AccountsReceivable() {
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Dialog open={isTransferToPiggyBankFormOpen && transferringAccount?.id === account.id} onOpenChange={setIsTransferToPiggyBankFormOpen}>
-                        <DialogTrigger asChild>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => handleTransferToPiggyBankClick(account)}
-                            disabled={transferToPiggyBankMutation.isPending || account.is_generated_fixed_instance} // Desabilita para geradas
-                          >
-                            <PiggyBankIcon className="h-4 w-4 text-neutral" />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-md">
-                          <DialogHeader>
-                            <DialogTitle>Transferir para Cofrinho</DialogTitle>
-                            <CardDescription>
-                              Adicione o valor de "{transferringAccount?.description}" ao seu cofrinho.
-                            </CardDescription>
-                          </DialogHeader>
-                          <Form {...transferForm}>
-                            <form onSubmit={transferForm.handleSubmit(onTransferSubmit)} className="space-y-4">
-                              <FormField
-                                control={transferForm.control}
-                                name="description"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Descrição</FormLabel>
-                                    <FormControl>
-                                      <Input {...field} placeholder="Ex: Economia extra, Bônus" />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={transferForm.control}
-                                name="amount"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Valor</FormLabel>
-                                    <FormControl>
-                                      <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={transferForm.control}
-                                name="entry_date"
-                                render={({ field }) => (
-                                  <FormItem className="flex flex-col">
-                                    <FormLabel>Data da Transferência</FormLabel>
-                                    <Popover>
-                                      <PopoverTrigger asChild>
-                                        <FormControl>
-                                          <Button
-                                            variant={"outline"}
-                                            className={cn(
-                                              "w-full pl-3 text-left font-normal",
-                                              !field.value && "text-muted-foreground"
-                                            )}
-                                          >
-                                            {field.value ? (
-                                              format(field.value, "PPP", { locale: ptBR })
-                                            ) : (
-                                              <span>Selecione uma data</span>
-                                            )}
-                                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                          </Button>
-                                        </FormControl>
-                                      </PopoverTrigger>
-                                      <PopoverContent className="w-auto p-0" align="start">
-                                        <Calendar
-                                          mode="single"
-                                          selected={field.value}
-                                          onSelect={field.onChange}
-                                          disabled={(date) =>
-                                            date > new Date() || date < new Date("1900-01-01")
-                                          }
-                                          initialFocus
-                                          locale={ptBR}
-                                        />
-                                      </PopoverContent>
-                                    </Popover>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <DialogFooter>
-                                <Button type="button" variant="outline" onClick={() => setIsTransferToPiggyBankFormOpen(false)}>
-                                  Cancelar
-                                </Button>
-                                <Button type="submit" disabled={transferToPiggyBankMutation.isPending}>
-                                  {transferToPiggyBankMutation.isPending ? "Transferindo..." : "Transferir"}
-                                </Button>
-                              </DialogFooter>
-                            </form>
-                          </Form>
-                        </DialogContent>
-                      </Dialog>
+                      {account.received && ( // Condição adicionada aqui
+                        <Dialog open={isTransferToPiggyBankFormOpen && transferringAccount?.id === account.id} onOpenChange={setIsTransferToPiggyBankFormOpen}>
+                          <DialogTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleTransferToPiggyBankClick(account)}
+                              disabled={transferToPiggyBankMutation.isPending || account.is_generated_fixed_instance} // Desabilita para geradas
+                            >
+                              <PiggyBankIcon className="h-4 w-4 text-neutral" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-md">
+                            <DialogHeader>
+                              <DialogTitle>Transferir para Cofrinho</DialogTitle>
+                              <CardDescription>
+                                Adicione o valor de "{transferringAccount?.description}" ao seu cofrinho.
+                              </CardDescription>
+                            </DialogHeader>
+                            <Form {...transferForm}>
+                              <form onSubmit={transferForm.handleSubmit(onTransferSubmit)} className="space-y-4">
+                                <FormField
+                                  control={transferForm.control}
+                                  name="description"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Descrição</FormLabel>
+                                      <FormControl>
+                                        <Input {...field} placeholder="Ex: Economia extra, Bônus" />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={transferForm.control}
+                                  name="amount"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Valor</FormLabel>
+                                      <FormControl>
+                                        <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={transferForm.control}
+                                  name="entry_date"
+                                  render={({ field }) => (
+                                    <FormItem className="flex flex-col">
+                                      <FormLabel>Data da Transferência</FormLabel>
+                                      <Popover>
+                                        <PopoverTrigger asChild>
+                                          <FormControl>
+                                            <Button
+                                              variant={"outline"}
+                                              className={cn(
+                                                "w-full pl-3 text-left font-normal",
+                                                !field.value && "text-muted-foreground"
+                                              )}
+                                            >
+                                              {field.value ? (
+                                                format(field.value, "PPP", { locale: ptBR })
+                                              ) : (
+                                                <span>Selecione uma data</span>
+                                              )}
+                                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                            </Button>
+                                          </FormControl>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start">
+                                          <Calendar
+                                            mode="single"
+                                            selected={field.value}
+                                            onSelect={field.onChange}
+                                            disabled={(date) =>
+                                              date > new Date() || date < new Date("1900-01-01")
+                                            }
+                                            initialFocus
+                                            locale={ptBR}
+                                          />
+                                        </PopoverContent>
+                                      </Popover>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <DialogFooter>
+                                  <Button type="button" variant="outline" onClick={() => setIsTransferToPiggyBankFormOpen(false)}>
+                                    Cancelar
+                                  </Button>
+                                  <Button type="submit" disabled={transferToPiggyBankMutation.isPending}>
+                                    {transferToPiggyBankMutation.isPending ? "Transferindo..." : "Transferir"}
+                                  </Button>
+                                </DialogFooter>
+                              </form>
+                            </Form>
+                          </DialogContent>
+                        </Dialog>
+                      )}
                       <Button 
                         variant="ghost" 
                         size="icon" 
