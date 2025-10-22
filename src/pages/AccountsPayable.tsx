@@ -32,7 +32,7 @@ const formSchema = z.object({
   card_id: z.string().optional(), // Optional by default, will be conditionally validated
   purchase_date: z.string().optional(),
   due_date: z.string().min(1, "Data de vencimento é obrigatória"),
-  installments: z.string().optional(),
+  installments: z.string().optional(), // Make optional here, refine later
   amount: z.string().min(1, "Valor é obrigatório"),
   category_id: z.string().min(1, "Categoria é obrigatória"),
   is_fixed: z.boolean().default(false),
@@ -47,12 +47,15 @@ const formSchema = z.object({
     });
   }
   // Validação condicional para installments
-  if (!data.is_fixed && (!data.installments || parseInt(data.installments) < 1)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Quantidade de parcelas é obrigatória para contas não fixas",
-      path: ["installments"],
-    });
+  if (!data.is_fixed) { // Only validate installments if not fixed
+    const numInstallments = parseInt(data.installments || "0");
+    if (numInstallments < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Quantidade de parcelas é obrigatória e deve ser no mínimo 1 para contas não fixas",
+        path: ["installments"],
+      });
+    }
   }
 });
 
@@ -97,7 +100,7 @@ export default function AccountsPayable() {
         card_id: editingAccount.card_id || "",
         purchase_date: editingAccount.purchase_date || format(new Date(), "yyyy-MM-dd"),
         due_date: editingAccount.due_date,
-        installments: editingAccount.installments?.toString() || (editingAccount.is_fixed ? "" : "1"),
+        installments: editingAccount.installments?.toString() || "1", // Set to "1" if null/undefined
         amount: editingAccount.amount.toString(),
         category_id: editingAccount.category_id || "",
         is_fixed: editingAccount.is_fixed || false,
@@ -197,12 +200,6 @@ export default function AccountsPayable() {
   // Encontrar o ID do tipo de pagamento "cartao"
   const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name === "cartao")?.id;
 
-  // Debugging logs
-  console.log("Payment Types:", paymentTypes);
-  console.log("Credit Card Payment Type ID:", creditCardPaymentTypeId);
-  console.log("Selected Payment Type ID:", selectedPaymentTypeId);
-
-
   // Criar/Atualizar conta
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
@@ -217,34 +214,86 @@ export default function AccountsPayable() {
         throw new Error("Credit card selection required.");
       }
 
-      const accountData = {
-        description: values.description,
+      const baseAccountData = {
         payment_type_id: values.payment_type_id,
         card_id: values.payment_type_id === creditCardPaymentTypeId ? values.card_id : null,
-        purchase_date: values.is_fixed ? null : values.purchase_date,
-        due_date: values.due_date,
-        installments: values.is_fixed ? 1 : parseInt(values.installments || "1"),
         amount: parseFloat(values.amount),
         category_id: values.category_id,
         expense_type: "variavel" as const, // Mantido como enum fixo
-        is_fixed: values.is_fixed,
         responsible_person_id: values.responsible_person_id || null,
         created_by: user.id,
       };
 
       if (editingAccount) {
+        // Se estiver editando uma conta existente (fixa original ou não fixa)
+        // Não permite editar instâncias geradas (is_generated_fixed_instance)
         const { error } = await supabase
           .from("accounts_payable")
-          .update(accountData)
+          .update({
+            ...baseAccountData,
+            description: editingAccount.is_fixed ? values.description : editingAccount.description, // Only update description for original fixed
+            purchase_date: values.is_fixed ? null : values.purchase_date,
+            due_date: values.due_date,
+            installments: values.is_fixed ? 1 : parseInt(values.installments || "1"),
+            is_fixed: values.is_fixed,
+          })
           .eq("id", editingAccount.id);
         
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from("accounts_payable")
-          .insert(accountData);
-        
-        if (error) throw error;
+        // Criar nova conta
+        if (values.is_fixed) {
+          // Inserir uma única conta fixa (template)
+          const { error } = await supabase
+            .from("accounts_payable")
+            .insert({
+              ...baseAccountData,
+              description: values.description,
+              purchase_date: null, // Fixed accounts don't have a single purchase date
+              due_date: values.due_date,
+              installments: 1, // Fixed accounts always have 1 installment in DB
+              current_installment: 1,
+              is_fixed: true,
+              original_fixed_account_id: null,
+            });
+          if (error) throw error;
+        } else {
+          // Lidar com contas não fixas com múltiplas parcelas
+          const numInstallments = parseInt(values.installments || "1");
+          let firstInstallmentId: string | null = null;
+
+          for (let i = 0; i < numInstallments; i++) {
+            const currentDueDate = addMonths(parseISO(values.due_date), i);
+            const currentPurchaseDate = values.purchase_date ? addMonths(parseISO(values.purchase_date), i) : null;
+
+            const installmentDescription = numInstallments > 1
+              ? `${values.description} (${i + 1}/${numInstallments})`
+              : values.description;
+
+            const installmentData = {
+              ...baseAccountData,
+              description: installmentDescription,
+              due_date: format(currentDueDate, "yyyy-MM-dd"),
+              purchase_date: currentPurchaseDate ? format(currentPurchaseDate, "yyyy-MM-dd") : null,
+              installments: numInstallments, // Total installments for the series
+              current_installment: i + 1, // Current installment number
+              is_fixed: false,
+              original_fixed_account_id: firstInstallmentId, // Link to the first installment
+            };
+
+            const { data: insertedData, error } = await supabase
+              .from("accounts_payable")
+              .insert(installmentData)
+              .select("id") // Select the ID to link subsequent installments
+              .single();
+
+            if (error) throw error;
+
+            if (i === 0) {
+              firstInstallmentId = insertedData.id; // Capturar o ID da primeira parcela
+            }
+          }
+        }
       }
     },
     onSuccess: () => {
@@ -868,7 +917,7 @@ export default function AccountsPayable() {
                         </div>
                         {!account.is_fixed && (
                           <div>
-                            <span className="font-medium">Parcelas:</span> {account.installments}x
+                            <span className="font-medium">Parcelas:</span> {account.current_installment}/{account.installments}
                           </div>
                         )}
                         <div>
