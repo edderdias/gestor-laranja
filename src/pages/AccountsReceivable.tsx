@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2, CheckCircle, RotateCcw, CalendarIcon } from "lucide-react";
+import { Plus, Pencil, Trash2, CheckCircle, RotateCcw, CalendarIcon, PiggyBank as PiggyBankIcon } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -62,6 +62,15 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
+// Esquema de validação para o formulário de transferência para o cofrinho
+const transferToPiggyBankSchema = z.object({
+  description: z.string().min(1, "Descrição é obrigatória"),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Valor inválido").transform(Number).refine(val => val > 0, "O valor deve ser positivo"),
+  entry_date: z.date({ required_error: "Data é obrigatória" }),
+});
+
+type TransferToPiggyBankFormData = z.infer<typeof transferToPiggyBankSchema>;
+
 export default function AccountsReceivable() {
   const { user } = useAuth();
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -74,6 +83,19 @@ export default function AccountsReceivable() {
   const [showConfirmDateDialog, setShowConfirmDateDialog] = useState(false);
   const [currentConfirmingAccount, setCurrentConfirmingAccount] = useState<AccountReceivableWithGeneratedFlag | null>(null);
   const [selectedReceivedDate, setSelectedReceivedDate] = useState<Date | undefined>(new Date());
+
+  // Estados e formulário para a transferência para o cofrinho
+  const [isTransferToPiggyBankFormOpen, setIsTransferToPiggyBankFormOpen] = useState(false);
+  const [transferringAccount, setTransferringAccount] = useState<AccountReceivableWithGeneratedFlag | null>(null);
+
+  const transferForm = useForm<TransferToPiggyBankFormData>({
+    resolver: zodResolver(transferToPiggyBankSchema),
+    defaultValues: {
+      description: "",
+      amount: 0,
+      entry_date: new Date(),
+    },
+  });
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -123,6 +145,24 @@ export default function AccountsReceivable() {
       });
     }
   }, [isFormOpen, editingAccount, form]);
+
+  // Efeito para preencher o formulário de transferência para o cofrinho
+  useEffect(() => {
+    if (isTransferToPiggyBankFormOpen && transferringAccount) {
+      transferForm.reset({
+        description: `Transferência de ${transferringAccount.description}`,
+        amount: transferringAccount.amount,
+        entry_date: new Date(), // Data atual como padrão
+      });
+    } else if (!isTransferToPiggyBankFormOpen) {
+      transferForm.reset({
+        description: "",
+        amount: 0,
+        entry_date: new Date(),
+      });
+    }
+  }, [isTransferToPiggyBankFormOpen, transferringAccount, transferForm]);
+
 
   // Buscar contas a receber
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
@@ -347,8 +387,46 @@ export default function AccountsReceivable() {
     },
   });
 
+  // Mutation para transferir para o cofrinho
+  const transferToPiggyBankMutation = useMutation({
+    mutationFn: async (values: TransferToPiggyBankFormData) => {
+      if (!user?.id) {
+        toast.error("Usuário não autenticado. Não foi possível transferir para o cofrinho.");
+        throw new Error("User not authenticated.");
+      }
+
+      const entryData = {
+        description: values.description,
+        amount: values.amount,
+        entry_date: format(values.entry_date, "yyyy-MM-dd"),
+        type: "deposit" as const, // Sempre um depósito
+        user_id: user.id,
+      };
+
+      const { error } = await supabase
+        .from("piggy_bank_entries")
+        .insert(entryData);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["piggy_bank_entries"] }); // Invalida o cache do cofrinho
+      toast.success("Valor transferido para o cofrinho com sucesso!");
+      setIsTransferToPiggyBankFormOpen(false);
+      setTransferringAccount(null);
+      transferForm.reset();
+    },
+    onError: (error) => {
+      toast.error("Erro ao transferir para o cofrinho: " + error.message);
+    },
+  });
+
   const onSubmit = (values: FormData) => {
     saveMutation.mutate(values);
+  };
+
+  const onTransferSubmit = (values: TransferToPiggyBankFormData) => {
+    transferToPiggyBankMutation.mutate(values);
   };
 
   const handleEdit = (account: AccountReceivableWithGeneratedFlag) => {
@@ -386,6 +464,12 @@ export default function AccountsReceivable() {
     setCurrentConfirmingAccount(account);
     setSelectedReceivedDate(new Date()); // Define a data padrão como hoje
     setShowConfirmDateDialog(true);
+  };
+
+  // Função para abrir o diálogo de transferência para o cofrinho
+  const handleTransferToPiggyBankClick = (account: AccountReceivableWithGeneratedFlag) => {
+    setTransferringAccount(account);
+    setIsTransferToPiggyBankFormOpen(true);
   };
 
   // Lógica para o seletor de mês
@@ -885,6 +969,106 @@ export default function AccountsReceivable() {
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
+                      <Dialog open={isTransferToPiggyBankFormOpen && transferringAccount?.id === account.id} onOpenChange={setIsTransferToPiggyBankFormOpen}>
+                        <DialogTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleTransferToPiggyBankClick(account)}
+                            disabled={transferToPiggyBankMutation.isPending || account.is_generated_fixed_instance} // Desabilita para geradas
+                          >
+                            <PiggyBankIcon className="h-4 w-4 text-neutral" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-md">
+                          <DialogHeader>
+                            <DialogTitle>Transferir para Cofrinho</DialogTitle>
+                            <CardDescription>
+                              Adicione o valor de "{transferringAccount?.description}" ao seu cofrinho.
+                            </CardDescription>
+                          </DialogHeader>
+                          <Form {...transferForm}>
+                            <form onSubmit={transferForm.handleSubmit(onTransferSubmit)} className="space-y-4">
+                              <FormField
+                                control={transferForm.control}
+                                name="description"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Descrição</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} placeholder="Ex: Economia extra, Bônus" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={transferForm.control}
+                                name="amount"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Valor</FormLabel>
+                                    <FormControl>
+                                      <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={transferForm.control}
+                                name="entry_date"
+                                render={({ field }) => (
+                                  <FormItem className="flex flex-col">
+                                    <FormLabel>Data da Transferência</FormLabel>
+                                    <Popover>
+                                      <PopoverTrigger asChild>
+                                        <FormControl>
+                                          <Button
+                                            variant={"outline"}
+                                            className={cn(
+                                              "w-full pl-3 text-left font-normal",
+                                              !field.value && "text-muted-foreground"
+                                            )}
+                                          >
+                                            {field.value ? (
+                                              format(field.value, "PPP", { locale: ptBR })
+                                            ) : (
+                                              <span>Selecione uma data</span>
+                                            )}
+                                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                          </Button>
+                                        </FormControl>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar
+                                          mode="single"
+                                          selected={field.value}
+                                          onSelect={field.onChange}
+                                          disabled={(date) =>
+                                            date > new Date() || date < new Date("1900-01-01")
+                                          }
+                                          initialFocus
+                                          locale={ptBR}
+                                        />
+                                      </PopoverContent>
+                                    </Popover>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <DialogFooter>
+                                <Button type="button" variant="outline" onClick={() => setIsTransferToPiggyBankFormOpen(false)}>
+                                  Cancelar
+                                </Button>
+                                <Button type="submit" disabled={transferToPiggyBankMutation.isPending}>
+                                  {transferToPiggyBankMutation.isPending ? "Transferindo..." : "Transferir"}
+                                </Button>
+                              </DialogFooter>
+                            </form>
+                          </Form>
+                        </DialogContent>
+                      </Dialog>
                       <Button 
                         variant="ghost" 
                         size="icon" 
