@@ -147,26 +147,30 @@ export default function AccountsReceivable() {
   });
 
   // Determine which user IDs to fetch data for
-  const userIdsToFetch = [user?.id];
+  const userIdsToFetch: string[] = [];
+  if (user?.id) {
+    userIdsToFetch.push(user.id);
+  }
   if (userProfile?.is_family_member && userProfile?.invited_by_user_id) {
     userIdsToFetch.push(userProfile.invited_by_user_id);
   }
+  // Ensure uniqueness and filter out any potential null/undefined values
+  const finalUserIdsToFetch = Array.from(new Set(userIdsToFetch.filter(id => typeof id === 'string' && id.length > 0)));
 
   // Buscar contas a receber
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
-    queryKey: ["accounts-receivable", userIdsToFetch], // Usar userIdsToFetch
+    queryKey: ["accounts-receivable", finalUserIdsToFetch], // Usar finalUserIdsToFetch
     queryFn: async () => {
-      if (!user?.id || userIdsToFetch.length === 0) return [];
       const { data, error } = await supabase
         .from("accounts_receivable")
         .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(id, name), banks(id, name)")
-        .in("created_by", userIdsToFetch) // Filtrar por todos os IDs relevantes
+        .in("created_by", finalUserIdsToFetch) // Filtrar por todos os IDs relevantes
         .order("receive_date", { ascending: true });
       
       if (error) throw error;
       return data;
     },
-    enabled: !!user?.id && !isLoadingProfile, // Habilita a query apenas se user.id existir e o perfil tiver carregado
+    enabled: !!user?.id && !isLoadingProfile && finalUserIdsToFetch.length > 0, // Habilita a query apenas se user.id existir, o perfil tiver carregado E houver IDs para buscar
   });
 
   // Buscar fontes de receita
@@ -505,18 +509,54 @@ export default function AccountsReceivable() {
   const [selectedYear, selectedMonth] = selectedMonthYear.split('-').map(Number);
   const selectedMonthDate = parseISO(`${selectedMonthYear}-01`);
 
-  // TEMPORARY: Bypass processedAccounts logic for debugging
-  const accountsToDisplay = accounts || [];
+  // Processar contas para exibição, incluindo a replicação de contas fixas
+  const processedAccounts = accounts?.flatMap(account => {
+    const accountReceiveDate = parseISO(account.receive_date);
+    const currentMonthAccounts: AccountReceivableWithGeneratedFlag[] = [];
+
+    // 1. Incluir contas não fixas que pertencem ao mês selecionado
+    if (!account.is_fixed && isSameMonth(accountReceiveDate, selectedMonthDate) && isSameYear(accountReceiveDate, selectedMonthDate)) {
+      currentMonthAccounts.push(account);
+    } 
+    // 2. Incluir contas fixas originais que pertencem ao mês selecionado
+    else if (account.is_fixed && isSameMonth(accountReceiveDate, selectedMonthDate) && isSameYear(accountReceiveDate, selectedMonthDate)) {
+      currentMonthAccounts.push(account);
+    }
+    // 3. Gerar ocorrências para contas fixas em meses futuros
+    else if (account.is_fixed && accountReceiveDate <= endOfMonth(selectedMonthDate)) {
+      // Verificar se já existe uma ocorrência real para este mês e esta conta fixa
+      const existingOccurrence = accounts.find(
+        (a) => a.original_fixed_account_id === account.id &&
+               isSameMonth(parseISO(a.receive_date), selectedMonthDate) &&
+               isSameYear(parseISO(a.receive_date), selectedMonthDate)
+      );
+
+      if (!existingOccurrence) {
+        // Se não existe uma ocorrência real, cria uma instância gerada para exibição
+        const displayDate = new Date(selectedYear, selectedMonth - 1, accountReceiveDate.getDate());
+        // Ajusta o dia se o mês selecionado não tiver aquele dia (ex: 31 de fevereiro)
+        if (displayDate.getMonth() !== selectedMonth - 1) {
+          displayDate.setDate(0); // Vai para o último dia do mês anterior
+          displayDate.setDate(displayDate.getDate() + 1); // Adiciona 1 dia para o último dia do mês atual
+        }
+
+        currentMonthAccounts.push({
+          ...account,
+          id: `temp-${account.id}-${selectedMonthYear}`, // ID temporário para instâncias geradas
+          receive_date: format(displayDate, "yyyy-MM-dd"),
+          received: false, // Instâncias geradas são sempre não recebidas por padrão
+          received_date: null,
+          is_generated_fixed_instance: true,
+          original_fixed_account_id: account.id, // Referência ao modelo fixo original
+          transferred_to_piggy_bank: false, // Instâncias geradas não são transferidas
+        });
+      }
+    }
+    return currentMonthAccounts;
+  }).sort((a, b) => parseISO(a.receive_date).getTime() - parseISO(b.receive_date).getTime()) || [];
 
   // Filtrar contas recebidas para o resumo total (apenas do mês selecionado e NÃO transferidas)
-  // Esta lógica ainda usa o filtro de mês, mas para os dados brutos.
-  const receivedAccounts = accountsToDisplay.filter(account => 
-    account.received && 
-    !account.transferred_to_piggy_bank &&
-    isSameMonth(parseISO(account.receive_date), selectedMonthDate) &&
-    isSameYear(parseISO(account.receive_date), selectedMonthDate)
-  ) || [];
-
+  const receivedAccounts = processedAccounts.filter(account => account.received && !account.transferred_to_piggy_bank) || [];
   const totalAmount = receivedAccounts.reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
@@ -530,22 +570,19 @@ export default function AccountsReceivable() {
   }, {});
 
   // Calcular previsão de recebimento do mês (contas NÃO recebidas para o mês selecionado)
-  const monthlyForecast = accountsToDisplay.filter(account => 
-    !account.received &&
-    isSameMonth(parseISO(account.receive_date), selectedMonthDate) &&
-    isSameYear(parseISO(account.receive_date), selectedMonthDate)
-  ).reduce((sum, account) => {
+  const monthlyForecast = processedAccounts.filter(account => !account.received).reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
 
   console.log("AccountsReceivable: user", user);
   console.log("AccountsReceivable: userProfile", userProfile);
   console.log("AccountsReceivable: userIdsToFetch", userIdsToFetch);
+  console.log("AccountsReceivable: finalUserIdsToFetch", finalUserIdsToFetch); // Novo log
   console.log("AccountsReceivable: loadingAccounts", loadingAccounts);
-  console.log("AccountsReceivable: fetched accounts (raw from Supabase)", accounts); // Log dos dados brutos
+  console.log("AccountsReceivable: fetched accounts (raw from Supabase)", accounts);
   console.log("AccountsReceivable: selectedMonthYear", selectedMonthYear);
   console.log("AccountsReceivable: selectedMonthDate", selectedMonthDate);
-  console.log("AccountsReceivable: accountsToDisplay (for rendering)", accountsToDisplay); // Log dos dados a serem exibidos
+  console.log("AccountsReceivable: processedAccounts (for display)", processedAccounts);
 
   return (
     <div className="min-h-screen bg-background">
@@ -878,9 +915,9 @@ export default function AccountsReceivable() {
 
         {loadingAccounts ? (
           <p className="text-muted-foreground">Carregando contas...</p>
-        ) : accountsToDisplay && accountsToDisplay.length > 0 ? (
+        ) : processedAccounts && processedAccounts.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2">
-            {accountsToDisplay.map((account) => (
+            {processedAccounts.map((account) => (
               <Card key={account.id} className={cn(account.received ? "border-l-4 border-income" : "border-l-4 border-muted")}>
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between">
@@ -1006,7 +1043,7 @@ export default function AccountsReceivable() {
         ) : (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
-              Nenhuma conta a receber cadastrada ou encontrada para o(s) usuário(s) atual(is).
+              Nenhuma conta a receber cadastrada para o mês selecionado.
             </CardContent>
           </Card>
         )}
