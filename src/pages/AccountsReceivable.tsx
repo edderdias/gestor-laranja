@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2, CheckCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, CheckCircle, RotateCcw } from "lucide-react"; // Adicionado RotateCcw para o ícone de estorno
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { format, getMonth, getYear, subMonths, parseISO, addMonths } from "date-fns"; // Adicionado addMonths
+import { format, getMonth, getYear, subMonths, parseISO, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale"; // Importar locale para formatação de data
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -280,6 +280,25 @@ export default function AccountsReceivable() {
     },
   });
 
+  // Estornar recebimento
+  const reverseReceiveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("accounts_receivable")
+        .update({ received: false, received_date: null })
+        .eq("id", id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
+      toast.success("Recebimento estornado com sucesso!");
+    },
+    onError: (error) => {
+      toast.error("Erro ao estornar recebimento: " + error.message);
+    },
+  });
+
   const onSubmit = (values: FormData) => {
     saveMutation.mutate(values);
   };
@@ -292,6 +311,12 @@ export default function AccountsReceivable() {
   const handleDelete = (id: string) => {
     if (confirm("Tem certeza que deseja deletar esta conta?")) {
       deleteMutation.mutate(id);
+    }
+  };
+
+  const handleReverse = (id: string) => {
+    if (confirm("Tem certeza que deseja estornar este recebimento? Ele voltará para o status de 'não recebido'.")) {
+      reverseReceiveMutation.mutate(id);
     }
   };
 
@@ -395,7 +420,7 @@ export default function AccountsReceivable() {
                                   <SelectValue placeholder="Selecione o tipo" />
                                 </SelectTrigger>
                               </FormControl>
-                              <SelectContent> {/* Corrigido: Adicionado a tag de fechamento */}
+                              <SelectContent>
                                 {isLoadingIncomeTypes ? (
                                   <SelectItem value="loading" disabled>Carregando...</SelectItem>
                                 ) : (
@@ -723,7 +748,17 @@ export default function AccountsReceivable() {
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 ml-4">
-                      {!account.received && (
+                      {account.received ? (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => handleReverse(account.id)}
+                          disabled={reverseReceiveMutation.isPending}
+                          className="text-destructive border-destructive hover:bg-destructive/10"
+                        >
+                          <RotateCcw className="h-4 w-4 mr-2" /> Estornar
+                        </Button>
+                      ) : (
                         <Button 
                           variant="outline" 
                           size="sm" 
