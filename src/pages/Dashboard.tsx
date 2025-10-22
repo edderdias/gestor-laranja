@@ -143,7 +143,6 @@ export default function Dashboard() {
 
       if (isSameMonth(receiveDate, today) && isSameYear(receiveDate, today)) {
         if (account.received) {
-          // Apenas adiciona à receita confirmada
           totalConfirmedMonthlyIncome += amount;
           numIncomeTransactions++;
         } else {
@@ -202,7 +201,7 @@ export default function Dashboard() {
                 <TrendingDown className="h-4 w-4" />
                 <span>{numExpenseTransactions} pagamentos</span>
                 {monthlyExpensesForecast > 0 && (
-                  <span className="ml-auto text-muted-foreground">Previsão: R$ ${monthlyExpensesForecast.toFixed(2)}</span>
+                  <span className="ml-auto text-muted-foreground">Previsão: R$ {monthlyExpensesForecast.toFixed(2)}</span>
                 )}
               </div>
             </CardContent>
@@ -271,7 +270,7 @@ export default function Dashboard() {
                     <ArrowUpCircle className="h-6 w-6 text-income" />
                   </div>
                   <div>
-                    <CardTitle>Contas a Receber</CardTitle> {/* Corrigido: </Card_Title> para </CardTitle> */}
+                    <CardTitle>Contas a Receber</CardTitle>
                     <CardDescription>Gerenciar receitas</CardDescription>
                   </div>
                 </div>

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { format, subMonths, parseISO, addMonths, endOfMonth, isSameMonth, isSameYear } from "date-fns";
+import { format, getMonth, getYear, subMonths, parseISO, addMonths, endOfMonth, isSameMonth, isSameYear } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,9 +19,9 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tables } from "@/integrations/supabase/types";
-import { Label } from "@/components/ui/label";
+import { Tables } from "@/integrations/supabase/types"; // Importar tipos do Supabase
 
+// Estender o tipo de conta para incluir a flag de instância gerada
 type AccountReceivableWithGeneratedFlag = Tables<'accounts_receivable'> & {
   is_generated_fixed_instance?: boolean;
 };
@@ -124,58 +124,18 @@ export default function AccountsReceivable() {
     }
   }, [isFormOpen, editingAccount, form]);
 
-  // Fetch current user's profile to check family status
-  const { data: userProfile, isLoading: isLoadingProfile } = useQuery({
-    queryKey: ["user-profile", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return null;
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, is_family_member, invited_by_user_id")
-        .eq("id", user.id)
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user?.id,
-  });
-
-  // Determine which user IDs to fetch data for
-  const userIdsToFetch: string[] = [];
-  if (user?.id) {
-    userIdsToFetch.push(user.id);
-  }
-  if (userProfile?.is_family_member && userProfile?.invited_by_user_id) {
-    userIdsToFetch.push(userProfile.invited_by_user_id);
-  }
-  // Ensure uniqueness and filter out any potential null/undefined values
-  const finalUserIdsToFetch = Array.from(new Set(userIdsToFetch.filter(id => typeof id === 'string' && id.length > 0)));
-
   // Buscar contas a receber
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
-    queryKey: ["accounts-receivable", finalUserIdsToFetch],
+    queryKey: ["accounts-receivable"],
     queryFn: async () => {
-      if (finalUserIdsToFetch.length === 0) return []; // No IDs to fetch for
-
-      let query = supabase
+      const { data, error } = await supabase
         .from("accounts_receivable")
-        .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(id, name)");
-      
-      // Apply filter based on the number of user IDs
-      if (finalUserIdsToFetch.length === 1) {
-        query = query.eq("created_by", finalUserIdsToFetch[0]);
-      } else {
-        query = query.in("created_by", finalUserIdsToFetch);
-      }
-
-      query = query.order("receive_date", { ascending: true });
-      
-      const { data, error } = await query;
+        .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(id, name)")
+        .order("receive_date", { ascending: true });
       
       if (error) throw error;
       return data;
     },
-    enabled: !!user?.id && !isLoadingProfile && finalUserIdsToFetch.length > 0, // Habilita a query apenas se user.id existir, o perfil tiver carregado E houver IDs para buscar
   });
 
   // Buscar fontes de receita
@@ -380,7 +340,6 @@ export default function AccountsReceivable() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
-      queryClient.invalidateQueries({ queryKey: ["piggy_bank_entries"] }); // Invalida cofrinho também
       toast.success("Recebimento estornado com sucesso!");
     },
     onError: (error) => {
@@ -395,6 +354,7 @@ export default function AccountsReceivable() {
   const handleEdit = (account: AccountReceivableWithGeneratedFlag) => {
     if (account.is_generated_fixed_instance) {
       toast.info("Edite a conta fixa original para alterar esta ocorrência.");
+      // Poderíamos redirecionar para a edição da conta original se tivéssemos o ID
       return;
     }
     setEditingAccount(account);
@@ -633,45 +593,45 @@ export default function AccountsReceivable() {
                               <FormLabel>Quantidade de Parcelas</FormLabel>
                               <FormControl>
                                 <Input type="number" min="1" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
 
-                      <FormField
-                        control={form.control}
-                        name="amount"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Valor da Parcela</FormLabel>
-                            <FormControl>
-                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  )}
+                        <FormField
+                          control={form.control}
+                          name="amount"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Valor da Parcela</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
 
-                  {isFixed && (
-                    <div className="grid grid-cols-1 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="amount"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Valor da Parcela</FormLabel>
-                            <FormControl>
-                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  )}
+                    {isFixed && (
+                      <div className="grid grid-cols-1 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="amount"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Valor da Parcela</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-4">
                       <FormField
@@ -890,18 +850,18 @@ export default function AccountsReceivable() {
                         {account.received && (
                           <div className="col-span-2 flex items-center gap-1 text-income">
                             <CheckCircle className="h-4 w-4" />
-                            <span className="font-medium">Recebido em: {format(new Date(account.received_date!), "dd/MM/yyyy")}</span>
+                            <span className="font-medium">Recebido em: {format(new Date(account.received_date), "dd/MM/yyyy")}</span>
                           </div>
                         )}
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 ml-4">
-                      {account.received ? ( // Simplificado: se recebido, só pode estornar
+                      {account.received ? (
                         <Button 
                           variant="outline" 
                           size="sm" 
                           onClick={() => handleReverse(account)}
-                          disabled={reverseReceiveMutation.isPending || account.is_generated_fixed_instance}
+                          disabled={reverseReceiveMutation.isPending || account.is_generated_fixed_instance} // Desabilita estorno para geradas
                           className="text-destructive border-destructive hover:bg-destructive/10"
                         >
                           <RotateCcw className="h-4 w-4 mr-2" /> Estornar
@@ -921,7 +881,7 @@ export default function AccountsReceivable() {
                         variant="ghost" 
                         size="icon" 
                         onClick={() => handleEdit(account)}
-                        disabled={account.is_generated_fixed_instance || account.received} {/* Desabilita edição se já recebido */}
+                        disabled={account.is_generated_fixed_instance} // Desabilita edição para geradas
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -929,7 +889,7 @@ export default function AccountsReceivable() {
                         variant="ghost" 
                         size="icon" 
                         onClick={() => handleDelete(account)}
-                        disabled={deleteMutation.isPending || account.is_generated_fixed_instance || account.received} {/* Desabilita exclusão se já recebido */}
+                        disabled={deleteMutation.isPending || account.is_generated_fixed_instance} // Desabilita exclusão para geradas
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>

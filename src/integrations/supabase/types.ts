@@ -267,6 +267,24 @@ export type Database = {
           },
         ]
       }
+      banks: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       credit_card_transactions: {
         Row: {
           amount: number
@@ -516,8 +534,8 @@ export type Database = {
           full_name: string | null
           id: string
           updated_at: string | null
-          invited_by_user_id: string | null
-          is_family_member: boolean | null
+          invited_by_user_id: string | null // Adicionado
+          is_family_member: boolean | null // Adicionado
         }
         Insert: {
           avatar_url?: string | null
@@ -525,8 +543,8 @@ export type Database = {
           full_name?: string | null
           id: string
           updated_at?: string | null
-          invited_by_user_id?: string | null
-          is_family_member?: boolean | null
+          invited_by_user_id?: string | null // Adicionado
+          is_family_member?: boolean | null // Adicionado
         }
         Update: {
           avatar_url?: string | null
@@ -534,8 +552,8 @@ export type Database = {
           full_name?: string | null
           id?: string
           updated_at?: string | null
-          invited_by_user_id?: string | null
-          is_family_member?: boolean | null
+          invited_by_user_id?: string | null // Adicionado
+          is_family_member?: boolean | null // Adicionado
         }
         Relationships: [
           {
