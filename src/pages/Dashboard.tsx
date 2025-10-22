@@ -12,7 +12,7 @@ import {
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, parseISO, getMonth, getYear } from "date-fns";
+import { format, parseISO, getMonth, getYear, isSameMonth, isSameYear } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { MonthlyExpensesChart } from "@/components/charts/MonthlyExpensesChart";
 import { CategoryExpensesChart } from "@/components/charts/CategoryExpensesChart";
@@ -20,8 +20,9 @@ import { Tables } from "@/integrations/supabase/types"; // Importar tipos do Sup
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const currentMonth = getMonth(new Date());
-  const currentYear = getYear(new Date());
+  const today = new Date();
+  const currentMonth = getMonth(today);
+  const currentYear = getYear(today);
 
   // Fetch current user's profile to check family status
   const { data: userProfile, isLoading: isLoadingProfile } = useQuery({
@@ -91,40 +92,46 @@ export default function Dashboard() {
   const isLoading = isLoadingPayable || isLoadingReceivable || isLoadingCreditCards || isLoadingProfile;
 
   // Process data for summary cards and charts
-  let totalMonthlyIncome = 0;
-  let totalMonthlyExpenses = 0;
-  let totalCreditCardUsage = 0;
-  let totalCreditLimit = 0;
+  let totalConfirmedMonthlyIncome = 0;
+  let monthlyIncomeForecast = 0;
   let numIncomeTransactions = 0;
+
+  let totalConfirmedMonthlyExpenses = 0;
+  let monthlyExpensesForecast = 0;
   let numExpenseTransactions = 0;
 
-  const monthlyExpensesMap = new Map<string, number>();
-  const categoryExpensesMap = new Map<string, number>();
+  let totalMonthlyCreditCardDebits = 0;
+  let numCreditCards = 0;
+
+  const monthlyPaidExpensesChartDataMap = new Map<string, number>();
+  const categoryPaidExpensesChartDataMap = new Map<string, number>();
 
   if (accountsPayable) {
     accountsPayable.forEach(account => {
       const amount = account.amount * (account.installments || 1);
       const dueDate = parseISO(account.due_date);
 
-      // Monthly expenses for current month
-      if (getMonth(dueDate) === currentMonth && getYear(dueDate) === currentYear) {
-        totalMonthlyExpenses += amount;
-        numExpenseTransactions++;
-      }
+      if (isSameMonth(dueDate, today) && isSameYear(dueDate, today)) {
+        if (account.paid) {
+          totalConfirmedMonthlyExpenses += amount;
+          numExpenseTransactions++;
 
-      // Monthly expenses for chart
-      const monthKey = format(dueDate, "MMM/yyyy", { locale: ptBR });
-      monthlyExpensesMap.set(monthKey, (monthlyExpensesMap.get(monthKey) || 0) + amount);
+          // For charts, only use paid expenses
+          const monthKey = format(dueDate, "MMM/yyyy", { locale: ptBR });
+          monthlyPaidExpensesChartDataMap.set(monthKey, (monthlyPaidExpensesChartDataMap.get(monthKey) || 0) + amount);
 
-      // Category expenses for chart
-      if (account.expense_categories) {
-        const categoryName = account.expense_categories.name;
-        categoryExpensesMap.set(categoryName, (categoryExpensesMap.get(categoryName) || 0) + amount);
-      }
+          if (account.expense_categories) {
+            const categoryName = account.expense_categories.name;
+            categoryPaidExpensesChartDataMap.set(categoryName, (categoryPaidExpensesChartDataMap.get(categoryName) || 0) + amount);
+          }
+        } else {
+          monthlyExpensesForecast += amount;
+        }
 
-      // Credit card usage - check if payment_types exists and its name is 'cartao'
-      if (account.payment_types?.name === "cartao") {
-        totalCreditCardUsage += amount;
+        // Credit card debits for the month (only if paid)
+        if (account.card_id && account.paid) {
+          totalMonthlyCreditCardDebits += amount;
+        }
       }
     });
   }
@@ -134,35 +141,33 @@ export default function Dashboard() {
       const amount = account.amount * (account.installments || 1);
       const receiveDate = parseISO(account.receive_date);
 
-      // Monthly income for current month
-      if (getMonth(receiveDate) === currentMonth && getYear(receiveDate) === currentYear) {
-        totalMonthlyIncome += amount;
-        numIncomeTransactions++;
+      if (isSameMonth(receiveDate, today) && isSameYear(receiveDate, today)) {
+        if (account.received) {
+          totalConfirmedMonthlyIncome += amount;
+          numIncomeTransactions++;
+        } else {
+          monthlyIncomeForecast += amount;
+        }
       }
     });
   }
 
   if (creditCards) {
-    creditCards.forEach(card => {
-      totalCreditLimit += card.credit_limit || 0;
-    });
+    numCreditCards = creditCards.length;
   }
 
-  const balance = totalMonthlyIncome - totalMonthlyExpenses;
+  const balance = totalConfirmedMonthlyIncome - totalConfirmedMonthlyExpenses;
 
-  const monthlyExpensesChartData = Array.from(monthlyExpensesMap.entries())
+  const monthlyExpensesChartData = Array.from(monthlyPaidExpensesChartDataMap.entries())
     .map(([month, total]) => ({ month, total }))
     .sort((a, b) => parseISO(`01-${a.month.replace('/', '-')}`).getTime() - parseISO(`01-${b.month.replace('/', '-')}`).getTime());
 
-  const categoryExpensesChartData = Array.from(categoryExpensesMap.entries())
+  const categoryExpensesChartData = Array.from(categoryPaidExpensesChartDataMap.entries())
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value);
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header removido, agora gerenciado por MainLayout */}
-
-      {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         {/* Cards de Resumo */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
@@ -170,13 +175,16 @@ export default function Dashboard() {
             <CardHeader className="pb-3">
               <CardDescription className="text-income">Receitas do Mês</CardDescription>
               <CardTitle className="text-3xl text-income">
-                {isLoading ? "Carregando..." : `R$ ${totalMonthlyIncome.toFixed(2)}`}
+                {isLoading ? "Carregando..." : `R$ ${totalConfirmedMonthlyIncome.toFixed(2)}`}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2 text-sm text-income">
                 <TrendingUp className="h-4 w-4" />
                 <span>{numIncomeTransactions} recebimentos</span>
+                {monthlyIncomeForecast > 0 && (
+                  <span className="ml-auto text-muted-foreground">Previsão: R$ {monthlyIncomeForecast.toFixed(2)}</span>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -185,13 +193,16 @@ export default function Dashboard() {
             <CardHeader className="pb-3">
               <CardDescription className="text-expense">Despesas do Mês</CardDescription>
               <CardTitle className="text-3xl text-expense">
-                {isLoading ? "Carregando..." : `R$ ${totalMonthlyExpenses.toFixed(2)}`}
+                {isLoading ? "Carregando..." : `R$ ${totalConfirmedMonthlyExpenses.toFixed(2)}`}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2 text-sm text-expense">
                 <TrendingDown className="h-4 w-4" />
                 <span>{numExpenseTransactions} pagamentos</span>
+                {monthlyExpensesForecast > 0 && (
+                  <span className="ml-auto text-muted-foreground">Previsão: R$ {monthlyExpensesForecast.toFixed(2)}</span>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -213,15 +224,15 @@ export default function Dashboard() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardDescription>Cartões de Crédão</CardDescription>
+              <CardDescription>Cartões de Crédito</CardDescription>
               <CardTitle className="text-3xl">
-                {isLoading ? "Carregando..." : `R$ ${totalCreditCardUsage.toFixed(2)}`}
+                {isLoading ? "Carregando..." : `R$ ${totalMonthlyCreditCardDebits.toFixed(2)}`}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <CreditCard className="h-4 w-4" />
-                <span>{creditCards?.length || 0} cartões</span>
+                <span>{numCreditCards} cartões</span>
               </div>
             </CardContent>
           </Card>
