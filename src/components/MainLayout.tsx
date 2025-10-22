@@ -1,7 +1,7 @@
 import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
+import { LogOut, Settings as SettingsIcon } from "lucide-react"; // Importar SettingsIcon
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -74,6 +74,11 @@ export function MainLayout() {
                   {/* Removido NavigationMenuLink asChild */}
                   <Link to="/credit-cards" className={navigationMenuTriggerStyle()}>
                     Cartões de Crédito
+                  </Link>
+                </NavigationMenuItem>
+                <NavigationMenuItem>
+                  <Link to="/settings" className={navigationMenuTriggerStyle()}>
+                    <SettingsIcon className="mr-2 h-4 w-4" /> Configurações
                   </Link>
                 </NavigationMenuItem>
               </NavigationMenuList>
