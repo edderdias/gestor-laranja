@@ -39,7 +39,7 @@ const transferToPiggyBankSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Valor inválido").transform(Number).refine(val => val > 0, "O valor deve ser positivo"),
   entry_date: z.date({ required_error: "Data é obrigatória" }),
-  bank_id: z.string().optional(), // Adicionado bank_id
+  bank_id: z.string().min(1, "Banco é obrigatório"), // Alterado para obrigatório
 });
 
 type TransferToPiggyBankFormData = z.infer<typeof transferToPiggyBankSchema>;
@@ -59,7 +59,7 @@ export default function Dashboard() {
       description: "",
       amount: 0,
       entry_date: today,
-      bank_id: undefined, // Valor padrão para o novo campo
+      bank_id: "", // Valor padrão vazio para campo obrigatório
     },
   });
 
@@ -233,7 +233,7 @@ export default function Dashboard() {
         entry_date: format(values.entry_date, "yyyy-MM-dd"),
         type: "deposit" as const, // Sempre um depósito
         user_id: user.id,
-        bank_id: values.bank_id || null, // Incluir bank_id
+        bank_id: values.bank_id, // Incluir bank_id
       };
 
       const { error } = await supabase
@@ -481,8 +481,8 @@ export default function Dashboard() {
                     name="bank_id"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Banco (Opcional)</FormLabel>
-                        <Select onValueChange={(val) => field.onChange(val === "" ? undefined : val)} value={field.value || ""}>
+                        <FormLabel>Banco *</FormLabel> {/* Marcado como obrigatório */}
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Selecione um banco" />
