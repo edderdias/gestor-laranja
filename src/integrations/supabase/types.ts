@@ -142,7 +142,7 @@ export type Database = {
           is_fixed: boolean | null
           responsible_person_id: string | null
           original_fixed_account_id: string | null
-          transferred_to_piggy_bank: boolean | null
+          // REMOVIDO: transferred_to_piggy_bank: boolean | null
         }
         Insert: {
           amount: number
@@ -162,7 +162,7 @@ export type Database = {
           is_fixed?: boolean | null
           responsible_person_id?: string | null
           original_fixed_account_id?: string | null
-          transferred_to_piggy_bank?: boolean | null
+          // REMOVIDO: transferred_to_piggy_bank?: boolean | null
         }
         Update: {
           amount?: number
@@ -182,7 +182,7 @@ export type Database = {
           is_fixed?: boolean | null
           responsible_person_id?: string | null
           original_fixed_account_id?: string | null
-          transferred_to_piggy_bank?: boolean | null
+          // REMOVIDO: transferred_to_piggy_bank?: boolean | null
         }
         Relationships: [
           {
@@ -270,7 +270,7 @@ export type Database = {
           },
         ]
       }
-      banks: {
+      banks: { // REMOVIDO: banks table definition
         Row: {
           created_at: string
           id: string
@@ -501,7 +501,7 @@ export type Database = {
           id: string
           type: Database["public"]["Enums"]["piggy_bank_entry_type"]
           user_id: string
-          bank_id: string | null
+          // REMOVIDO: bank_id: string | null
         }
         Insert: {
           amount: number
@@ -511,7 +511,7 @@ export type Database = {
           id?: string
           type: Database["public"]["Enums"]["piggy_bank_entry_type"]
           user_id: string
-          bank_id?: string | null
+          // REMOVIDO: bank_id?: string | null
         }
         Update: {
           amount?: number
@@ -521,16 +521,17 @@ export type Database = {
           id?: string
           type?: Database["public"]["Enums"]["piggy_bank_entry_type"]
           user_id?: string
-          bank_id?: string | null
+          // REMOVIDO: bank_id?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "piggy_bank_entries_bank_id_fkey"
-            columns: ["bank_id"]
-            isOneToOne: false
-            referencedRelation: "banks"
-            referencedColumns: ["id"]
-          },
+          // REMOVIDO: piggy_bank_entries_bank_id_fkey
+          // {
+          //   foreignKeyName: "piggy_bank_entries_bank_id_fkey"
+          //   columns: ["bank_id"]
+          //   isOneToOne: false
+          //   referencedRelation: "banks"
+          //   referencedColumns: ["id"]
+          // },
           {
             foreignKeyName: "piggy_bank_entries_user_id_fkey"
             columns: ["user_id"]

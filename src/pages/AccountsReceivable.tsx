@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2, CheckCircle, RotateCcw, CalendarIcon, PiggyBank as PiggyBankIcon } from "lucide-react";
+import { Plus, Pencil, Trash2, CheckCircle, RotateCcw, CalendarIcon } from "lucide-react"; // Removido PiggyBankIcon
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -75,10 +75,10 @@ export default function AccountsReceivable() {
   const [currentConfirmingAccount, setCurrentConfirmingAccount] = useState<AccountReceivableWithGeneratedFlag | null>(null);
   const [selectedReceivedDate, setSelectedReceivedDate] = useState<Date | undefined>(new Date());
 
-  // Estados para o diálogo de transferência para cofrinho
-  const [showTransferToPiggyBankDialog, setShowTransferToPiggyBankDialog] = useState(false);
-  const [currentTransferAccount, setCurrentTransferAccount] = useState<AccountReceivableWithGeneratedFlag | null>(null);
-  const [selectedBankId, setSelectedBankId] = useState<string | undefined>(undefined);
+  // REMOVIDOS: Estados para o diálogo de transferência para cofrinho
+  // const [showTransferToPiggyBankDialog, setShowTransferToPiggyBankDialog] = useState(false);
+  // const [currentTransferAccount, setCurrentTransferAccount] = useState<AccountReceivableWithGeneratedFlag | null>(null);
+  // const [selectedBankId, setSelectedBankId] = useState<string | undefined>(undefined);
 
 
   const form = useForm<FormData>({
@@ -165,7 +165,7 @@ export default function AccountsReceivable() {
 
       let query = supabase
         .from("accounts_receivable")
-        .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(id, name), banks(id, name)");
+        .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(id, name)"); // Removido banks(id, name)
       
       // Apply filter based on the number of user IDs
       if (finalUserIdsToFetch.length === 1) {
@@ -240,19 +240,19 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Buscar bancos
-  const { data: banks, isLoading: isLoadingBanks } = useQuery({
-    queryKey: ["banks"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("banks")
-        .select("*")
-        .order("name");
+  // REMOVIDO: Buscar bancos
+  // const { data: banks, isLoading: isLoadingBanks } = useQuery({
+  //   queryKey: ["banks"],
+  //   queryFn: async () => {
+  //     const { data, error } = await supabase
+  //       .from("banks")
+  //       .select("*")
+  //       .order("name");
       
-      if (error) throw error;
-      return data;
-    },
-  });
+  //     if (error) throw error;
+  //     return data;
+  //   },
+  // });
 
   // Criar/Atualizar conta
   const saveMutation = useMutation({
@@ -364,13 +364,14 @@ export default function AccountsReceivable() {
             received: true,
             received_date: formattedReceivedDate,
             original_fixed_account_id: account.original_fixed_account_id || account.id, // Link para o modelo fixo original
+            // REMOVIDO: transferred_to_piggy_bank: false,
           });
         if (error) throw error;
       } else {
         // Se for uma conta existente (fixa original ou não fixa), atualiza
         const { error } = await supabase
           .from("accounts_receivable")
-          .update({ received: true, received_date: formattedReceivedDate })
+          .update({ received: true, received_date: formattedReceivedDate }) // REMOVIDO: transferred_to_piggy_bank: false
           .eq("id", account.id);
         
         if (error) throw error;
@@ -393,7 +394,7 @@ export default function AccountsReceivable() {
     mutationFn: async (id: string) => {
       const { error } = await supabase
         .from("accounts_receivable")
-        .update({ received: false, received_date: null, transferred_to_piggy_bank: false }) // Também reseta a flag de transferência
+        .update({ received: false, received_date: null }) // Removido transferred_to_piggy_bank: false
         .eq("id", id);
       
       if (error) throw error;
@@ -408,52 +409,52 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Mutação para transferir para o cofrinho
-  const transferToPiggyBankMutation = useMutation({
-    mutationFn: async ({ accountId, bankId }: { accountId: string; bankId: string }) => {
-      if (!user?.id) {
-        toast.error("Usuário não autenticado. Não foi possível transferir para o cofrinho.");
-        throw new Error("User not authenticated.");
-      }
+  // REMOVIDO: Mutação para transferir para o cofrinho
+  // const transferToPiggyBankMutation = useMutation({
+  //   mutationFn: async ({ accountId, bankId }: { accountId: string; bankId: string }) => {
+  //     if (!user?.id) {
+  //       toast.error("Usuário não autenticado. Não foi possível transferir para o cofrinho.");
+  //       throw new Error("User not authenticated.");
+  //     }
 
-      const account = accounts?.find(acc => acc.id === accountId);
-      if (!account) {
-        throw new Error("Conta a receber não encontrada.");
-      }
+  //     const account = accounts?.find(acc => acc.id === accountId);
+  //     if (!account) {
+  //       throw new Error("Conta a receber não encontrada.");
+  //     }
 
-      // 1. Inserir no cofrinho
-      const { error: piggyBankError } = await supabase
-        .from("piggy_bank_entries")
-        .insert({
-          user_id: user.id,
-          description: `Transferência de Recebimento: ${account.description}`,
-          amount: account.amount,
-          entry_date: format(new Date(), "yyyy-MM-dd"), // Data da transferência
-          type: "deposit",
-          bank_id: bankId,
-        });
-      if (piggyBankError) throw piggyBankError;
+  //     // 1. Inserir no cofrinho
+  //     const { error: piggyBankError } = await supabase
+  //       .from("piggy_bank_entries")
+  //       .insert({
+  //         user_id: user.id,
+  //         description: `Transferência de Recebimento: ${account.description}`,
+  //         amount: account.amount,
+  //         entry_date: format(new Date(), "yyyy-MM-dd"), // Data da transferência
+  //         type: "deposit",
+  //         bank_id: bankId,
+  //       });
+  //     if (piggyBankError) throw piggyBankError;
 
-      // 2. Atualizar conta a receber
-      const { error: updateAccountError } = await supabase
-        .from("accounts_receivable")
-        .update({ transferred_to_piggy_bank: true })
-        .eq("id", accountId);
-      if (updateAccountError) throw updateAccountError;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
-      queryClient.invalidateQueries({ queryKey: ["piggy_bank_entries"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-accounts-receivable"] }); // Invalida dashboard para atualizar total
-      toast.success("Valor transferido para o cofrinho com sucesso!");
-      setShowTransferToPiggyBankDialog(false);
-      setCurrentTransferAccount(null);
-      setSelectedBankId(undefined);
-    },
-    onError: (error) => {
-      toast.error("Erro ao transferir para o cofrinho: " + error.message);
-    },
-  });
+  //     // 2. Atualizar conta a receber
+  //     const { error: updateAccountError } = await supabase
+  //       .from("accounts_receivable")
+  //       .update({ transferred_to_piggy_bank: true })
+  //       .eq("id", accountId);
+  //     if (updateAccountError) throw updateAccountError;
+  //   },
+  //   onSuccess: () => {
+  //     queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
+  //     queryClient.invalidateQueries({ queryKey: ["piggy_bank_entries"] });
+  //     queryClient.invalidateQueries({ queryKey: ["dashboard-accounts-receivable"] }); // Invalida dashboard para atualizar total
+  //     toast.success("Valor transferido para o cofrinho com sucesso!");
+  //     setShowTransferToPiggyBankDialog(false);
+  //     setCurrentTransferAccount(null);
+  //     setSelectedBankId(undefined);
+  //   },
+  //   onError: (error) => {
+  //     toast.error("Erro ao transferir para o cofrinho: " + error.message);
+  //   },
+  // });
 
   const onSubmit = (values: FormData) => {
     saveMutation.mutate(values);
@@ -495,12 +496,12 @@ export default function AccountsReceivable() {
     setShowConfirmDateDialog(true);
   };
 
-  // Função para abrir o diálogo de transferência para cofrinho
-  const handleTransferToPiggyBankClick = (account: AccountReceivableWithGeneratedFlag) => {
-    setCurrentTransferAccount(account);
-    setSelectedBankId(undefined); // Reseta a seleção do banco
-    setShowTransferToPiggyBankDialog(true);
-  };
+  // REMOVIDO: Função para abrir o diálogo de transferência para cofrinho
+  // const handleTransferToPiggyBankClick = (account: AccountReceivableWithGeneratedFlag) => {
+  //   setCurrentTransferAccount(account);
+  //   setSelectedBankId(undefined); // Reseta a seleção do banco
+  //   setShowTransferToPiggyBankDialog(true);
+  // };
 
   // Lógica para o seletor de mês
   const generateMonthOptions = () => {
@@ -559,20 +560,20 @@ export default function AccountsReceivable() {
           received_date: null,
           is_generated_fixed_instance: true,
           original_fixed_account_id: account.id, // Referência ao modelo fixo original
-          transferred_to_piggy_bank: false, // Instâncias geradas não são transferidas
+          // REMOVIDO: transferred_to_piggy_bank: false,
         });
       }
     }
     return currentMonthAccounts;
   }).sort((a, b) => parseISO(a.receive_date).getTime() - parseISO(b.receive_date).getTime()) || [];
 
-  // Filtrar contas recebidas para o resumo total (apenas do mês selecionado e NÃO transferidas)
-  const receivedAccounts = processedAccounts.filter(account => account.received && !account.transferred_to_piggy_bank) || [];
+  // Filtrar contas recebidas para o resumo total (apenas do mês selecionado)
+  const receivedAccounts = processedAccounts.filter(account => account.received) || []; // Removido !account.transferred_to_piggy_bank
   const totalAmount = receivedAccounts.reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
 
-  // Calcular o valor recebido por cada recebedor (apenas contas recebidas do mês selecionado e NÃO transferidas)
+  // Calcular o valor recebido por cada recebedor (apenas contas recebidas do mês selecionado)
   const receivedByResponsiblePerson = receivedAccounts.reduce((acc: { [key: string]: number }, account) => {
     const personName = account.responsible_persons?.name || "Não Atribuído";
     const amount = account.amount * (account.installments || 1);
@@ -978,37 +979,17 @@ export default function AccountsReceivable() {
                             <span className="font-medium">Recebido em: {format(new Date(account.received_date!), "dd/MM/yyyy")}</span>
                           </div>
                         )}
-                        {account.transferred_to_piggy_bank && (
+                        {/* REMOVIDO: transferred_to_piggy_bank display */}
+                        {/* {account.transferred_to_piggy_bank && (
                           <div className="col-span-2 flex items-center gap-1 text-primary">
                             <PiggyBankIcon className="h-4 w-4" />
                             <span className="font-medium">Transferido para Cofrinho</span>
                           </div>
-                        )}
+                        )} */}
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 ml-4">
-                      {account.received && !account.transferred_to_piggy_bank ? (
-                        <>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => handleTransferToPiggyBankClick(account)}
-                            disabled={transferToPiggyBankMutation.isPending || account.is_generated_fixed_instance}
-                            className="text-primary border-primary hover:bg-primary/10"
-                          >
-                            <PiggyBankIcon className="h-4 w-4 mr-2" /> Transferir
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => handleReverse(account)}
-                            disabled={reverseReceiveMutation.isPending || account.is_generated_fixed_instance}
-                            className="text-destructive border-destructive hover:bg-destructive/10"
-                          >
-                            <RotateCcw className="h-4 w-4 mr-2" /> Estornar
-                          </Button>
-                        </>
-                      ) : account.received && account.transferred_to_piggy_bank ? (
+                      {account.received ? ( // Simplificado: se recebido, só pode estornar
                         <Button 
                           variant="outline" 
                           size="sm" 
@@ -1033,7 +1014,7 @@ export default function AccountsReceivable() {
                         variant="ghost" 
                         size="icon" 
                         onClick={() => handleEdit(account)}
-                        disabled={account.is_generated_fixed_instance || account.transferred_to_piggy_bank}
+                        disabled={account.is_generated_fixed_instance || account.received} {/* Desabilita edição se já recebido */}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -1041,7 +1022,7 @@ export default function AccountsReceivable() {
                         variant="ghost" 
                         size="icon" 
                         onClick={() => handleDelete(account)}
-                        disabled={deleteMutation.isPending || account.is_generated_fixed_instance || account.transferred_to_piggy_bank}
+                        disabled={deleteMutation.isPending || account.is_generated_fixed_instance || account.received} {/* Desabilita exclusão se já recebido */}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -1115,8 +1096,8 @@ export default function AccountsReceivable() {
         </DialogContent>
       </Dialog>
 
-      {/* Diálogo para transferir para o cofrinho */}
-      <Dialog open={showTransferToPiggyBankDialog} onOpenChange={setShowTransferToPiggyBankDialog}>
+      {/* REMOVIDO: Diálogo para transferir para o cofrinho */}
+      {/* <Dialog open={showTransferToPiggyBankDialog} onOpenChange={setShowTransferToPiggyBankDialog}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Transferir para Cofrinho</DialogTitle>
@@ -1162,7 +1143,7 @@ export default function AccountsReceivable() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog> */}
     </div>
   );
 }

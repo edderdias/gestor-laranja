@@ -143,10 +143,8 @@ export default function Dashboard() {
 
       if (isSameMonth(receiveDate, today) && isSameYear(receiveDate, today)) {
         if (account.received) {
-          // Apenas adiciona à receita confirmada se não foi transferido para o cofrinho
-          if (!account.transferred_to_piggy_bank) {
-            totalConfirmedMonthlyIncome += amount;
-          }
+          // Apenas adiciona à receita confirmada
+          totalConfirmedMonthlyIncome += amount; // REMOVIDO: if (!account.transferred_to_piggy_bank)
           numIncomeTransactions++;
         } else {
           monthlyIncomeForecast += amount;
