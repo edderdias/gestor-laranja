@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, CheckCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { format } from "date-fns";
+import { format, getMonth, getYear } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -60,6 +61,8 @@ export default function AccountsReceivable() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<any>(null);
   const queryClient = useQueryClient();
+  const currentMonth = getMonth(new Date());
+  const currentYear = getYear(new Date());
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -257,6 +260,25 @@ export default function AccountsReceivable() {
     },
   });
 
+  // Confirmar recebimento
+  const confirmReceiveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("accounts_receivable")
+        .update({ received: true, received_date: format(new Date(), "yyyy-MM-dd") })
+        .eq("id", id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
+      toast.success("Recebimento confirmado com sucesso!");
+    },
+    onError: (error) => {
+      toast.error("Erro ao confirmar recebimento: " + error.message);
+    },
+  });
+
   const onSubmit = (values: FormData) => {
     saveMutation.mutate(values);
   };
@@ -272,12 +294,14 @@ export default function AccountsReceivable() {
     }
   };
 
-  const totalAmount = accounts?.reduce((sum, account) => {
+  // Filtrar contas recebidas para o resumo total
+  const receivedAccounts = accounts?.filter(account => account.received) || [];
+  const totalAmount = receivedAccounts.reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
 
-  // Calcular o valor recebido por cada recebedor
-  const receivedByResponsiblePerson = accounts?.reduce((acc: { [key: string]: number }, account) => {
+  // Calcular o valor recebido por cada recebedor (apenas contas recebidas)
+  const receivedByResponsiblePerson = receivedAccounts.reduce((acc: { [key: string]: number }, account) => {
     const personId = account.responsible_persons?.id;
     const personName = account.responsible_persons?.name || "Não Atribuído";
     const amount = account.amount * (account.installments || 1);
@@ -289,6 +313,16 @@ export default function AccountsReceivable() {
     }
     return acc;
   }, {});
+
+  // Calcular previsão de recebimento do mês (contas NÃO recebidas para o mês atual)
+  const monthlyForecast = accounts?.filter(account => {
+    const receiveDate = new Date(account.receive_date);
+    return !account.received && 
+           getMonth(receiveDate) === currentMonth && 
+           getYear(receiveDate) === currentYear;
+  }).reduce((sum, account) => {
+    return sum + (account.amount * (account.installments || 1));
+  }, 0) || 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -570,12 +604,16 @@ export default function AccountsReceivable() {
       <main className="container mx-auto px-4 py-8">
         <div className="grid gap-6 md:grid-cols-2 mb-6">
           <Card>
-            <CardHeader>
+            <CardHeader className="relative pb-3">
               <CardTitle>Resumo Total</CardTitle>
+              <div className="absolute top-4 right-4 text-sm text-muted-foreground flex items-center gap-1">
+                <span className="font-medium">Previsão do Mês:</span>
+                <span className="font-bold text-income">R$ {monthlyForecast.toFixed(2)}</span>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-income">
-                Total: R$ {totalAmount.toFixed(2)}
+                Total Recebido: R$ {totalAmount.toFixed(2)}
               </div>
             </CardContent>
           </Card>
@@ -606,7 +644,7 @@ export default function AccountsReceivable() {
         ) : accounts && accounts.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2"> {/* Alterado para 2 colunas */}
             {accounts.map((account) => (
-              <Card key={account.id}>
+              <Card key={account.id} className={cn(account.received ? "border-l-4 border-income" : "border-l-4 border-muted")}>
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -649,14 +687,26 @@ export default function AccountsReceivable() {
                             <span className="font-medium">Recebedor:</span> {account.responsible_persons.name}
                           </div>
                         )}
-                        {account.is_fixed && (
-                          <div className="col-span-2">
-                            <span className="font-medium text-income">Receita Fixa</span>
+                        {account.received && (
+                          <div className="col-span-2 flex items-center gap-1 text-income">
+                            <CheckCircle className="h-4 w-4" />
+                            <span className="font-medium">Recebido em: {format(new Date(account.received_date), "dd/MM/yyyy")}</span>
                           </div>
                         )}
                       </div>
                     </div>
-                    <div className="flex gap-2 ml-4">
+                    <div className="flex flex-col gap-2 ml-4">
+                      {!account.received && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => confirmReceiveMutation.mutate(account.id)}
+                          disabled={confirmReceiveMutation.isPending}
+                          className="text-income border-income hover:bg-income/10"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" /> Confirmar
+                        </Button>
+                      )}
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(account)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -666,7 +716,7 @@ export default function AccountsReceivable() {
                         onClick={() => handleDelete(account.id)}
                         disabled={deleteMutation.isPending}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </div>
                   </div>
