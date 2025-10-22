@@ -116,7 +116,7 @@ export default function AccountsReceivable() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("accounts_receivable")
-        .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(name)") // Adicionado income_types e responsible_persons
+        .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(id, name)") // Adicionado income_types e responsible_persons
         .order("receive_date", { ascending: true });
       
       if (error) throw error;
@@ -275,6 +275,20 @@ export default function AccountsReceivable() {
   const totalAmount = accounts?.reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
+
+  // Calcular o valor recebido por cada recebedor
+  const receivedByResponsiblePerson = accounts?.reduce((acc: { [key: string]: number }, account) => {
+    const personId = account.responsible_persons?.id;
+    const personName = account.responsible_persons?.name || "Não Atribuído";
+    const amount = account.amount * (account.installments || 1);
+
+    if (personId) {
+      acc[personName] = (acc[personName] || 0) + amount;
+    } else {
+      acc["Não Atribuído"] = (acc["Não Atribuído"] || 0) + amount;
+    }
+    return acc;
+  }, {});
 
   return (
     <div className="min-h-screen bg-background">
@@ -554,21 +568,43 @@ export default function AccountsReceivable() {
       </div>
 
       <main className="container mx-auto px-4 py-8">
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Resumo</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-income">
-              Total: R$ {totalAmount.toFixed(2)}
-            </div>
-          </CardContent>
-        </Card>
+        <div className="grid gap-6 md:grid-cols-2 mb-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Resumo Total</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-income">
+                Total: R$ {totalAmount.toFixed(2)}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Recebido por Recebedor</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {receivedByResponsiblePerson && Object.keys(receivedByResponsiblePerson).length > 0 ? (
+                <ul className="space-y-2">
+                  {Object.entries(receivedByResponsiblePerson).map(([name, amount]) => (
+                    <li key={name} className="flex justify-between text-sm">
+                      <span>{name}:</span>
+                      <span className="font-semibold text-income">R$ {(amount as number).toFixed(2)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-muted-foreground text-sm">Nenhum valor recebido por recebedor.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
         {loadingAccounts ? (
           <p className="text-muted-foreground">Carregando contas...</p>
         ) : accounts && accounts.length > 0 ? (
-          <div className="grid gap-4">
+          <div className="grid gap-4 md:grid-cols-2"> {/* Alterado para 2 colunas */}
             {accounts.map((account) => (
               <Card key={account.id}>
                 <CardContent className="pt-6">
