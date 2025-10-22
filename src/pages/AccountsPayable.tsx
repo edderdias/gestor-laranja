@@ -859,7 +859,7 @@ export default function AccountsPayable() {
                           disabled={confirmPaidMutation.isPending}
                           className="text-income border-income hover:bg-income/10"
                         >
-                          <CheckCircle className="h-4 w-4 mr-2" /> Confirmar
+                          <CheckCircle className="h-4 w-4 mr-2" /> Pago
                         </Button>
                       )}
                       <Button 
