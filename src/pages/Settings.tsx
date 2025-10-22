@@ -137,9 +137,10 @@ function CrudSection({ title, tableName, queryKey, description }: CrudSectionPro
                   </Button>
                 </div>
               </form>
-            </DialogContent>
-          </Dialog>
-        </CardHeader>
+            </Form>
+          </DialogContent>
+        </Dialog>
+      </CardHeader>
       <CardContent>
         {description && <p className="text-sm text-muted-foreground mb-4">{description}</p>}
         {isLoading ? (
