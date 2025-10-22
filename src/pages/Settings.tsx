@@ -137,10 +137,9 @@ function CrudSection({ title, tableName, queryKey, description }: CrudSectionPro
                   </Button>
                 </div>
               </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
-      </CardHeader>
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
       <CardContent>
         {description && <p className="text-sm text-muted-foreground mb-4">{description}</p>}
         {isLoading ? (
@@ -193,6 +192,24 @@ export default function Settings() {
             tableName="payers"
             queryKey={["payers"]}
             description="Gerencie as entidades que pagam suas contas a receber."
+          />
+          <CrudSection
+            title="Tipos de Pagamento"
+            tableName="payment_types"
+            queryKey={["payment-types"]}
+            description="Gerencie os tipos de pagamento disponíveis."
+          />
+          <CrudSection
+            title="Recebedores/Responsáveis"
+            tableName="responsible_persons"
+            queryKey={["responsible-persons"]}
+            description="Gerencie as pessoas responsáveis por contas."
+          />
+          <CrudSection
+            title="Tipos de Recebimento"
+            tableName="income_types"
+            queryKey={["income-types"]}
+            description="Gerencie os tipos de recebimento de suas receitas."
           />
         </div>
       </div>

@@ -14,21 +14,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch"; // Importar o Switch
-import { cn } from "@/lib/utils"; // Importar cn para classes condicionais
-import { Constants } from "@/integrations/supabase/types"; // Importar Constants para os enums
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
-  income_type: z.enum(["salario", "extra", "aluguel", "vendas", "comissao"], { required_error: "Tipo de recebimento é obrigatório" }),
+  income_type_id: z.string().min(1, "Tipo de recebimento é obrigatório"), // Alterado para ID
   receive_date: z.string().min(1, "Data do recebimento é obrigatória"),
-  installments: z.string().optional(), // Tornar opcional para lidar com conta fixa
+  installments: z.string().optional(),
   amount: z.string().min(1, "Valor é obrigatório"),
   source_id: z.string().min(1, "Fonte de receita é obrigatória"),
   payer_id: z.string().optional(),
   new_payer_name: z.string().optional(),
-  is_fixed: z.boolean().default(false), // Novo campo
-  responsible_person: z.enum(Constants.public.Enums.responsible_person_enum).optional(), // Novo campo
+  is_fixed: z.boolean().default(false),
+  responsible_person_id: z.string().optional(), // Alterado para ID
 }).superRefine((data, ctx) => {
   // Validação condicional para payer_id e new_payer_name
   if (data.payer_id === "new-payer" && !data.new_payer_name) {
@@ -66,39 +65,39 @@ export default function AccountsReceivable() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       description: "",
-      income_type: "extra",
+      income_type_id: "", // Valor padrão vazio
       receive_date: format(new Date(), "yyyy-MM-dd"),
       installments: "1",
       amount: "",
       source_id: "",
       payer_id: "",
       new_payer_name: "",
-      is_fixed: false, // Valor padrão inicial
-      responsible_person: undefined, // Valor padrão para o novo campo
+      is_fixed: false,
+      responsible_person_id: undefined,
     },
   });
 
   const selectedPayerId = form.watch("payer_id");
-  const isFixed = form.watch("is_fixed"); // Observar o estado do switch
+  const isFixed = form.watch("is_fixed");
 
   useEffect(() => {
     if (isFormOpen && editingAccount) {
       form.reset({
         description: editingAccount.description,
-        income_type: editingAccount.income_type || "extra",
+        income_type_id: editingAccount.income_type_id || "",
         receive_date: editingAccount.receive_date,
-        installments: editingAccount.installments?.toString() || (editingAccount.is_fixed ? "" : "1"), // Ajuste para conta fixa
+        installments: editingAccount.installments?.toString() || (editingAccount.is_fixed ? "" : "1"),
         amount: editingAccount.amount.toString(),
         source_id: editingAccount.source_id || "",
         payer_id: editingAccount.payer_id || "",
         new_payer_name: "",
-        is_fixed: editingAccount.is_fixed || false, // Carrega o valor existente
-        responsible_person: editingAccount.responsible_person || undefined, // Carrega o valor existente
+        is_fixed: editingAccount.is_fixed || false,
+        responsible_person_id: editingAccount.responsible_person_id || undefined,
       });
     } else if (!isFormOpen) {
       form.reset({
         description: "",
-        income_type: "extra",
+        income_type_id: "",
         receive_date: format(new Date(), "yyyy-MM-dd"),
         installments: "1",
         amount: "",
@@ -106,7 +105,7 @@ export default function AccountsReceivable() {
         payer_id: "",
         new_payer_name: "",
         is_fixed: false,
-        responsible_person: undefined,
+        responsible_person_id: undefined,
       });
     }
   }, [isFormOpen, editingAccount, form]);
@@ -117,7 +116,7 @@ export default function AccountsReceivable() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("accounts_receivable")
-        .select("*, income_sources(id, name), payers(name)")
+        .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(name)") // Adicionado income_types e responsible_persons
         .order("receive_date", { ascending: true });
       
       if (error) throw error;
@@ -153,6 +152,34 @@ export default function AccountsReceivable() {
     },
   });
 
+  // Buscar tipos de recebimento
+  const { data: incomeTypes, isLoading: isLoadingIncomeTypes } = useQuery({
+    queryKey: ["income-types"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("income_types")
+        .select("*")
+        .order("name");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Buscar responsáveis
+  const { data: responsiblePersons, isLoading: isLoadingResponsiblePersons } = useQuery({
+    queryKey: ["responsible-persons"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("responsible_persons")
+        .select("*")
+        .order("name");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
   // Criar/Atualizar conta
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
@@ -173,15 +200,15 @@ export default function AccountsReceivable() {
 
       const accountData = {
         description: values.description,
-        income_type: values.income_type,
+        income_type_id: values.income_type_id,
         receive_date: values.receive_date,
-        installments: values.is_fixed ? 1 : parseInt(values.installments || "1"), // Ajuste para conta fixa
+        installments: values.is_fixed ? 1 : parseInt(values.installments || "1"),
         amount: parseFloat(values.amount),
         source_id: values.source_id,
         payer_id: finalPayerId,
         created_by: user?.id,
-        is_fixed: values.is_fixed, // Salva o novo campo
-        responsible_person: values.responsible_person || null, // Salva o novo campo
+        is_fixed: values.is_fixed,
+        responsible_person_id: values.responsible_person_id || null,
       };
 
       if (editingAccount) {
@@ -249,17 +276,6 @@ export default function AccountsReceivable() {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
 
-  const getIncomeTypeLabel = (type: string) => {
-    const types: Record<string, string> = {
-      salario: "Salário",
-      extra: "Extra",
-      aluguel: "Aluguel",
-      vendas: "Vendas",
-      comissao: "Comissão",
-    };
-    return types[type] || type;
-  };
-
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-4">
@@ -295,7 +311,7 @@ export default function AccountsReceivable() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
-                      name="income_type"
+                      name="income_type_id"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Tipo de Recebimento</FormLabel>
@@ -306,11 +322,15 @@ export default function AccountsReceivable() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="salario">Salário</SelectItem>
-                              <SelectItem value="extra">Extra</SelectItem>
-                              <SelectItem value="aluguel">Aluguel</SelectItem>
-                              <SelectItem value="vendas">Vendas</SelectItem>
-                              <SelectItem value="comissão">Comissão</SelectItem>
+                              {isLoadingIncomeTypes ? (
+                                <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                              ) : (
+                                incomeTypes?.map((type) => (
+                                  <SelectItem key={type.id} value={type.id}>
+                                    {type.name}
+                                  </SelectItem>
+                                ))
+                              )}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -356,7 +376,7 @@ export default function AccountsReceivable() {
                     />
                   </div>
 
-                  {!isFixed && ( // Oculta o campo de parcelas se for conta fixa
+                  {!isFixed && (
                     <div className="grid grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
@@ -388,7 +408,7 @@ export default function AccountsReceivable() {
                     </div>
                   )}
 
-                  {isFixed && ( // Exibe apenas o valor da parcela para contas fixas
+                  {isFixed && (
                     <div className="grid grid-cols-1 gap-4">
                       <FormField
                         control={form.control}
@@ -489,10 +509,9 @@ export default function AccountsReceivable() {
                     />
                   )}
 
-                  {/* Novo campo para Responsible Person */}
                   <FormField
                     control={form.control}
-                    name="responsible_person"
+                    name="responsible_person_id"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Recebedor</FormLabel>
@@ -503,11 +522,15 @@ export default function AccountsReceivable() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {Constants.public.Enums.responsible_person_enum.map((person) => (
-                              <SelectItem key={person} value={person}>
-                                {person}
-                              </SelectItem>
-                            ))}
+                            {isLoadingResponsiblePersons ? (
+                              <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                            ) : (
+                              responsiblePersons?.map((person) => (
+                                <SelectItem key={person.id} value={person.id}>
+                                  {person.name}
+                                </SelectItem>
+                              ))
+                            )}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -555,13 +578,13 @@ export default function AccountsReceivable() {
                       <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
                         <div>
                           <span className="font-medium">Tipo:</span>{" "}
-                          {getIncomeTypeLabel(account.income_type)}
+                          {account.income_types?.name || "N/A"}
                         </div>
                         <div>
                           <span className="font-medium">Recebimento:</span>{" "}
                           {format(new Date(account.receive_date), "dd/MM/yyyy")}
                         </div>
-                        {!account.is_fixed && ( // Oculta parcelas se for conta fixa
+                        {!account.is_fixed && (
                           <div>
                             <span className="font-medium">Parcelas:</span> {account.installments || 1}x
                           </div>
@@ -585,12 +608,12 @@ export default function AccountsReceivable() {
                             <span className="font-medium">Pagador:</span> {account.payers.name}
                           </div>
                         )}
-                        {account.responsible_person && ( // Exibe o recebedor
+                        {account.responsible_persons && (
                           <div>
-                            <span className="font-medium">Recebedor:</span> {account.responsible_person}
+                            <span className="font-medium">Recebedor:</span> {account.responsible_persons.name}
                           </div>
                         )}
-                        {account.is_fixed && ( // Exibe "Receita Fixa"
+                        {account.is_fixed && (
                           <div className="col-span-2">
                             <span className="font-medium text-income">Receita Fixa</span>
                           </div>

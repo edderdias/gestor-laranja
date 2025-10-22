@@ -29,10 +29,10 @@ export type Database = {
           installments: number | null
           paid: boolean | null
           paid_date: string | null
-          payment_type: Database["public"]["Enums"]["payment_type"] | null
+          payment_type_id: string
           updated_at: string
           is_fixed: boolean | null
-          responsible_person: Database["public"]["Enums"]["responsible_person_enum"] | null
+          responsible_person_id: string | null
           purchase_date: string | null
         }
         Insert: {
@@ -49,10 +49,10 @@ export type Database = {
           installments?: number | null
           paid?: boolean | null
           paid_date?: string | null
-          payment_type?: Database["public"]["Enums"]["payment_type"] | null
+          payment_type_id: string
           updated_at?: string
           is_fixed?: boolean | null
-          responsible_person?: Database["public"]["Enums"]["responsible_person_enum"] | null
+          responsible_person_id?: string | null
           purchase_date?: string | null
         }
         Update: {
@@ -69,10 +69,10 @@ export type Database = {
           installments?: number | null
           paid?: boolean | null
           paid_date?: string | null
-          payment_type?: Database["public"]["Enums"]["payment_type"] | null
+          payment_type_id?: string
           updated_at?: string
           is_fixed?: boolean | null
-          responsible_person?: Database["public"]["Enums"]["responsible_person_enum"] | null
+          responsible_person_id?: string | null
           purchase_date?: string | null
         }
         Relationships: [
@@ -97,6 +97,20 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "accounts_payable_payment_type_id_fkey"
+            columns: ["payment_type_id"]
+            isOneToOne: false
+            referencedRelation: "payment_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounts_payable_responsible_person_id_fkey"
+            columns: ["responsible_person_id"]
+            isOneToOne: false
+            referencedRelation: "responsible_persons"
+            referencedColumns: ["id"]
+          },
         ]
       }
       accounts_receivable: {
@@ -107,7 +121,7 @@ export type Database = {
           current_installment: number | null
           description: string
           id: string
-          income_type: Database["public"]["Enums"]["income_type"]
+          income_type_id: string
           installments: number | null
           payer_id: string | null
           receive_date: string
@@ -116,7 +130,7 @@ export type Database = {
           source_id: string
           updated_at: string
           is_fixed: boolean | null
-          responsible_person: Database["public"]["Enums"]["responsible_person_enum"] | null
+          responsible_person_id: string | null
         }
         Insert: {
           amount: number
@@ -125,7 +139,7 @@ export type Database = {
           current_installment?: number | null
           description: string
           id?: string
-          income_type?: Database["public"]["Enums"]["income_type"]
+          income_type_id: string
           installments?: number | null
           payer_id?: string | null
           receive_date: string
@@ -134,7 +148,7 @@ export type Database = {
           source_id: string
           updated_at?: string
           is_fixed?: boolean | null
-          responsible_person?: Database["public"]["Enums"]["responsible_person_enum"] | null
+          responsible_person_id?: string | null
         }
         Update: {
           amount?: number
@@ -143,7 +157,7 @@ export type Database = {
           current_installment?: number | null
           description?: string
           id?: string
-          income_type?: Database["public"]["Enums"]["income_type"]
+          income_type_id?: string
           installments?: number | null
           payer_id?: string | null
           receive_date?: string
@@ -152,7 +166,7 @@ export type Database = {
           source_id?: string
           updated_at?: string
           is_fixed?: boolean | null
-          responsible_person?: Database["public"]["Enums"]["responsible_person_enum"] | null
+          responsible_person_id?: string | null
         }
         Relationships: [
           {
@@ -163,10 +177,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "accounts_receivable_income_type_id_fkey"
+            columns: ["income_type_id"]
+            isOneToOne: false
+            referencedRelation: "income_types"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "accounts_receivable_payer_id_fkey"
             columns: ["payer_id"]
             isOneToOne: false
             referencedRelation: "payers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounts_receivable_responsible_person_id_fkey"
+            columns: ["responsible_person_id"]
+            isOneToOne: false
+            referencedRelation: "responsible_persons"
             referencedColumns: ["id"]
           },
           {
@@ -369,7 +397,43 @@ export type Database = {
         }
         Relationships: []
       }
+      income_types: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       payers: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      payment_types: {
         Row: {
           created_at: string
           id: string
@@ -419,6 +483,24 @@ export type Database = {
           },
         ]
       }
+      responsible_persons: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -465,9 +547,6 @@ export type Database = {
       app_role: "admin" | "user"
       card_brand: "visa" | "master"
       expense_type: "fixa" | "variavel"
-      income_type: "salario" | "extra" | "aluguel" | "vendas" | "comissao"
-      payment_type: "cartao" | "promissoria" | "boleto"
-      responsible_person_enum: "Eder" | "Monalisa" | "Luiz" | "Elizabeth" | "Tosta"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -598,9 +677,6 @@ export const Constants = {
       app_role: ["admin", "user"],
       card_brand: ["visa", "master"],
       expense_type: ["fixa", "variavel"],
-      income_type: ["salario", "extra", "aluguel", "vendas", "comissao"],
-      payment_type: ["cartao", "promissoria", "boleto"],
-      responsible_person_enum: ["Eder", "Monalisa", "Luiz", "Elizabeth", "Tosta"],
     },
   },
 } as const

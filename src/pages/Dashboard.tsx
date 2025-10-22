@@ -29,7 +29,7 @@ export default function Dashboard() {
       if (!user?.id) return [];
       const { data, error } = await supabase
         .from("accounts_payable")
-        .select("*, expense_categories(name)")
+        .select("*, expense_categories(name), payment_types(name)") // Adicionado payment_types
         .eq("created_by", user.id);
       if (error) throw error;
       return data;
@@ -43,7 +43,7 @@ export default function Dashboard() {
       if (!user?.id) return [];
       const { data, error } = await supabase
         .from("accounts_receivable")
-        .select("*")
+        .select("*, income_types(name)") // Adicionado income_types
         .eq("created_by", user.id);
       if (error) throw error;
       return data;
@@ -99,8 +99,8 @@ export default function Dashboard() {
         categoryExpensesMap.set(categoryName, (categoryExpensesMap.get(categoryName) || 0) + amount);
       }
 
-      // Credit card usage
-      if (account.payment_type === "cartao") {
+      // Credit card usage - check if payment_types exists and its name is 'cartao'
+      if (account.payment_types?.name === "cartao") {
         totalCreditCardUsage += amount;
       }
     });

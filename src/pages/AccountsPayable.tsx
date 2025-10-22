@@ -14,20 +14,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch"; // Importar o Switch
-import { cn } from "@/lib/utils"; // Importar cn para classes condicionais
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
-  payment_type: z.enum(["cartao", "promissoria", "boleto"]),
+  payment_type_id: z.string().min(1, "Tipo de pagamento é obrigatório"), // Alterado para ID
   card_id: z.string().optional(),
-  purchase_date: z.string().optional(), // Tornar opcional inicialmente
+  purchase_date: z.string().optional(),
   due_date: z.string().min(1, "Data de vencimento é obrigatória"),
-  installments: z.string().optional(), // Tornar opcional para lidar com conta fixa
+  installments: z.string().optional(),
   amount: z.string().min(1, "Valor é obrigatório"),
   category_id: z.string().min(1, "Categoria é obrigatória"),
   is_fixed: z.boolean().default(false),
-  responsible_person: z.enum(["Eder", "Monalisa", "Luiz", "Elizabeth", "Tosta"]).optional(), // Novo campo
+  responsible_person_id: z.string().optional(), // Alterado para ID
 }).superRefine((data, ctx) => {
   // Validação condicional para purchase_date
   if (!data.is_fixed && !data.purchase_date) {
@@ -45,6 +45,14 @@ const formSchema = z.object({
       path: ["installments"],
     });
   }
+  // Validação condicional para card_id se payment_type_id for "cartao"
+  if (data.payment_type_id && data.payment_type_id === "cartao" && !data.card_id) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Cartão de crédito é obrigatório para pagamento com cartão",
+      path: ["card_id"],
+    });
+  }
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -59,25 +67,25 @@ export default function AccountsPayable() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       description: "",
-      payment_type: "boleto",
+      payment_type_id: "", // Valor padrão vazio
       purchase_date: format(new Date(), "yyyy-MM-dd"),
       due_date: format(new Date(), "yyyy-MM-dd"),
       installments: "1",
       amount: "",
       category_id: "",
       is_fixed: false,
-      responsible_person: undefined, // Valor padrão para o novo campo
+      responsible_person_id: undefined, // Valor padrão para o novo campo
     },
   });
 
-  const paymentType = form.watch("payment_type");
-  const isFixed = form.watch("is_fixed"); // Observar o estado do switch
+  const selectedPaymentTypeId = form.watch("payment_type_id");
+  const isFixed = form.watch("is_fixed");
 
   useEffect(() => {
     if (isFormOpen && editingAccount) {
       form.reset({
         description: editingAccount.description,
-        payment_type: editingAccount.payment_type || "boleto",
+        payment_type_id: editingAccount.payment_type_id || "",
         card_id: editingAccount.card_id || "",
         purchase_date: editingAccount.purchase_date || format(new Date(), "yyyy-MM-dd"),
         due_date: editingAccount.due_date,
@@ -85,19 +93,19 @@ export default function AccountsPayable() {
         amount: editingAccount.amount.toString(),
         category_id: editingAccount.category_id || "",
         is_fixed: editingAccount.is_fixed || false,
-        responsible_person: editingAccount.responsible_person || undefined, // Carrega o valor existente
+        responsible_person_id: editingAccount.responsible_person_id || undefined,
       });
     } else if (!isFormOpen) {
       form.reset({
         description: "",
-        payment_type: "boleto",
+        payment_type_id: "",
         purchase_date: format(new Date(), "yyyy-MM-dd"),
         due_date: format(new Date(), "yyyy-MM-dd"),
         installments: "1",
         amount: "",
         category_id: "",
         is_fixed: false,
-        responsible_person: undefined,
+        responsible_person_id: undefined,
       });
     }
   }, [isFormOpen, editingAccount, form]);
@@ -109,7 +117,7 @@ export default function AccountsPayable() {
       if (!user?.id) return [];
       const { data, error } = await supabase
         .from("accounts_payable")
-        .select("*, expense_categories(name), credit_cards(name)")
+        .select("*, expense_categories(name), credit_cards(name), payment_types(name), responsible_persons(name)") // Adicionado payment_types e responsible_persons
         .eq("created_by", user.id)
         .order("due_date", { ascending: true });
       
@@ -150,6 +158,34 @@ export default function AccountsPayable() {
     },
   });
 
+  // Buscar tipos de pagamento
+  const { data: paymentTypes, isLoading: isLoadingPaymentTypes } = useQuery({
+    queryKey: ["payment-types"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("payment_types")
+        .select("*")
+        .order("name");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Buscar responsáveis
+  const { data: responsiblePersons, isLoading: isLoadingResponsiblePersons } = useQuery({
+    queryKey: ["responsible-persons"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("responsible_persons")
+        .select("*")
+        .order("name");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
   // Criar/Atualizar conta
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
@@ -160,16 +196,16 @@ export default function AccountsPayable() {
 
       const accountData = {
         description: values.description,
-        payment_type: values.payment_type,
-        card_id: values.payment_type === "cartao" ? values.card_id : null,
+        payment_type_id: values.payment_type_id,
+        card_id: selectedPaymentTypeId === paymentTypes?.find(pt => pt.name === "cartao")?.id ? values.card_id : null, // Lógica para 'cartao'
         purchase_date: values.is_fixed ? null : values.purchase_date,
         due_date: values.due_date,
         installments: values.is_fixed ? 1 : parseInt(values.installments || "1"),
         amount: parseFloat(values.amount),
         category_id: values.category_id,
-        expense_type: "variavel" as const,
+        expense_type: "variavel" as const, // Mantido como enum fixo
         is_fixed: values.is_fixed,
-        responsible_person: values.responsible_person || null, // Salva o novo campo
+        responsible_person_id: values.responsible_person_id || null,
         created_by: user.id,
       };
 
@@ -238,6 +274,8 @@ export default function AccountsPayable() {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
 
+  const isCreditCardPayment = selectedPaymentTypeId === paymentTypes?.find(pt => pt.name === "cartao")?.id;
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-4">
@@ -273,7 +311,7 @@ export default function AccountsPayable() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
-                      name="payment_type"
+                      name="payment_type_id"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Tipo de Pagamento</FormLabel>
@@ -284,9 +322,15 @@ export default function AccountsPayable() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="cartao">Cartão de Crédito</SelectItem>
-                              <SelectItem value="promissoria">Promissória</SelectItem>
-                              <SelectItem value="boleto">Boleto</SelectItem>
+                              {isLoadingPaymentTypes ? (
+                                <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                              ) : (
+                                paymentTypes?.map((type) => (
+                                  <SelectItem key={type.id} value={type.id}>
+                                    {type.name}
+                                  </SelectItem>
+                                ))
+                              )}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -316,7 +360,7 @@ export default function AccountsPayable() {
                     />
                   </div>
 
-                  {paymentType === "cartao" && (
+                  {isCreditCardPayment && (
                     <FormField
                       control={form.control}
                       name="card_id"
@@ -449,10 +493,9 @@ export default function AccountsPayable() {
                     )}
                   />
 
-                  {/* Novo campo para Responsible Person */}
                   <FormField
                     control={form.control}
-                    name="responsible_person"
+                    name="responsible_person_id"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Responsável</FormLabel>
@@ -463,11 +506,15 @@ export default function AccountsPayable() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="Eder">Eder</SelectItem>
-                            <SelectItem value="Monalisa">Monalisa</SelectItem>
-                            <SelectItem value="Luiz">Luiz</SelectItem>
-                            <SelectItem value="Elizabeth">Elizabeth</SelectItem>
-                            <SelectItem value="Tosta">Tosta</SelectItem>
+                            {isLoadingResponsiblePersons ? (
+                              <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                            ) : (
+                              responsiblePersons?.map((person) => (
+                                <SelectItem key={person.id} value={person.id}>
+                                  {person.name}
+                                </SelectItem>
+                              ))
+                            )}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -521,8 +568,7 @@ export default function AccountsPayable() {
                       <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
                         <div>
                           <span className="font-medium">Tipo:</span>{" "}
-                          {account.payment_type === "cartao" ? "Cartão de Crédito" : 
-                           account.payment_type === "promissoria" ? "Promissória" : "Boleto"}
+                          {account.payment_types?.name || "N/A"}
                         </div>
                         {account.credit_cards && (
                           <div>
@@ -552,9 +598,9 @@ export default function AccountsPayable() {
                             <span className="font-medium">Categoria:</span> {account.expense_categories.name}
                           </div>
                         )}
-                        {account.responsible_person && ( // Exibe o responsável
+                        {account.responsible_persons && (
                           <div>
-                            <span className="font-medium">Responsável:</span> {account.responsible_person}
+                            <span className="font-medium">Responsável:</span> {account.responsible_persons.name}
                           </div>
                         )}
                         {account.is_fixed && (
