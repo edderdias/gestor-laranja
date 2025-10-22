@@ -133,16 +133,19 @@ export default function AccountsReceivable() {
 
   // Buscar contas a receber
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
-    queryKey: ["accounts-receivable"],
+    queryKey: ["accounts-receivable", user?.id], // Adicionado user?.id ao queryKey
     queryFn: async () => {
+      if (!user?.id) return []; // Adicionado guard clause
       const { data, error } = await supabase
         .from("accounts_receivable")
-        .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(id, name), banks(id, name)") // Adicionado banks
+        .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(id, name), banks(id, name)")
+        .eq("created_by", user.id) // Adicionado filtro por created_by
         .order("receive_date", { ascending: true });
       
       if (error) throw error;
       return data;
     },
+    enabled: !!user?.id, // Habilita a query apenas se user.id existir
   });
 
   // Buscar fontes de receita
