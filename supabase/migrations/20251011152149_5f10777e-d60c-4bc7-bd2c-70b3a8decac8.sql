@@ -46,7 +46,7 @@ ALTER COLUMN income_type TYPE text;
 DROP TYPE IF EXISTS public.income_type;
 
 -- Criar novo enum com os tipos corretos
-CREATE TYPE public.income_type AS ENUM ('salario', 'extra', 'aluguel', 'vendas', 'comissao');
+CREATE TYPE public.income_type AS ENUM ('salário', 'extra', 'aluguel', 'vendas', 'comissão');
 
 -- Voltar a coluna para o enum
 ALTER TABLE public.accounts_receivable 
@@ -58,6 +58,6 @@ ALTER COLUMN income_type SET DEFAULT 'extra'::income_type;
 
 -- Inserir alguns pagadores padrão
 INSERT INTO public.payers (name) VALUES 
-('Cliente A'),
-('Cliente B'),
-('Empresa X');
+('Maxus Sistemas'),
+('Pollo Contabil'),
+('ACtion Express');

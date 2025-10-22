@@ -1,5 +1,5 @@
 -- Criar enum para tipo de pagamento
-CREATE TYPE public.payment_type AS ENUM ('cartao', 'promissoria', 'boleto');
+CREATE TYPE public.payment_type AS ENUM ('cartão', 'promissoria', 'boleto');
 
 -- Adicionar campo de tipo de pagamento na tabela accounts_payable
 ALTER TABLE public.accounts_payable 
