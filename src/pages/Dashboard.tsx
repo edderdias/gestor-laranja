@@ -482,14 +482,13 @@ export default function Dashboard() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Banco (Opcional)</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                        <Select onValueChange={(val) => field.onChange(val === "" ? undefined : val)} value={field.value || ""}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Selecione um banco" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="">Nenhum</SelectItem> {/* Opção para não selecionar banco */}
                             {isLoadingBanks ? (
                               <SelectItem value="loading" disabled>Carregando...</SelectItem>
                             ) : (
