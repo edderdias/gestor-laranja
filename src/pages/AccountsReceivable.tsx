@@ -159,13 +159,24 @@ export default function AccountsReceivable() {
 
   // Buscar contas a receber
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
-    queryKey: ["accounts-receivable", finalUserIdsToFetch], // Usar finalUserIdsToFetch
+    queryKey: ["accounts-receivable", finalUserIdsToFetch],
     queryFn: async () => {
-      const { data, error } = await supabase
+      if (finalUserIdsToFetch.length === 0) return []; // No IDs to fetch for
+
+      let query = supabase
         .from("accounts_receivable")
-        .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(id, name), banks(id, name)")
-        .in("created_by", finalUserIdsToFetch) // Filtrar por todos os IDs relevantes
-        .order("receive_date", { ascending: true });
+        .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(id, name), banks(id, name)");
+      
+      // Apply filter based on the number of user IDs
+      if (finalUserIdsToFetch.length === 1) {
+        query = query.eq("created_by", finalUserIdsToFetch[0]);
+      } else {
+        query = query.in("created_by", finalUserIdsToFetch);
+      }
+
+      query = query.order("receive_date", { ascending: true });
+      
+      const { data, error } = await query;
       
       if (error) throw error;
       return data;
@@ -577,7 +588,7 @@ export default function AccountsReceivable() {
   console.log("AccountsReceivable: user", user);
   console.log("AccountsReceivable: userProfile", userProfile);
   console.log("AccountsReceivable: userIdsToFetch", userIdsToFetch);
-  console.log("AccountsReceivable: finalUserIdsToFetch", finalUserIdsToFetch); // Novo log
+  console.log("AccountsReceivable: finalUserIdsToFetch", finalUserIdsToFetch);
   console.log("AccountsReceivable: loadingAccounts", loadingAccounts);
   console.log("AccountsReceivable: fetched accounts (raw from Supabase)", accounts);
   console.log("AccountsReceivable: selectedMonthYear", selectedMonthYear);
