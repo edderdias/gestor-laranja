@@ -1,26 +1,28 @@
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2, CheckCircle, RotateCcw } from "lucide-react"; // Adicionado RotateCcw para o ícone de estorno
+import { Plus, Pencil, Trash2, CheckCircle, RotateCcw, CalendarIcon } from "lucide-react"; // Adicionado CalendarIcon
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format, getMonth, getYear, subMonths, parseISO, addMonths } from "date-fns";
-import { ptBR } from "date-fns/locale"; // Importar locale para formatação de data
+import { ptBR } from "date-fns/locale";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"; // Adicionado DialogFooter
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { Calendar } from "@/components/ui/calendar"; // Importado Calendar
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Importado Popover
 
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
-  income_type_id: z.string().min(1, "Tipo de recebimento é obrigatório"), // Alterado para ID
+  income_type_id: z.string().min(1, "Tipo de recebimento é obrigatório"),
   receive_date: z.string().min(1, "Data do recebimento é obrigatória"),
   installments: z.string().optional(),
   amount: z.string().min(1, "Valor é obrigatório"),
@@ -28,9 +30,8 @@ const formSchema = z.object({
   payer_id: z.string().optional(),
   new_payer_name: z.string().optional(),
   is_fixed: z.boolean().default(false),
-  responsible_person_id: z.string().optional(), // Alterado para ID
+  responsible_person_id: z.string().optional(),
 }).superRefine((data, ctx) => {
-  // Validação condicional para payer_id e new_payer_name
   if (data.payer_id === "new-payer" && !data.new_payer_name) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -44,7 +45,6 @@ const formSchema = z.object({
       path: ["payer_id"],
     });
   }
-  // Validação condicional para installments
   if (!data.is_fixed && (!data.installments || parseInt(data.installments) < 1)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -62,14 +62,18 @@ export default function AccountsReceivable() {
   const [editingAccount, setEditingAccount] = useState<any>(null);
   const queryClient = useQueryClient();
   
-  // Estado para o mês e ano selecionados no filtro
   const [selectedMonthYear, setSelectedMonthYear] = useState(format(new Date(), "yyyy-MM"));
+
+  // Estados para o diálogo de confirmação de data
+  const [showConfirmDateDialog, setShowConfirmDateDialog] = useState(false);
+  const [currentConfirmingAccountId, setCurrentConfirmingAccountId] = useState<string | null>(null);
+  const [selectedReceivedDate, setSelectedReceivedDate] = useState<Date | undefined>(new Date());
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       description: "",
-      income_type_id: "", // Valor padrão vazio
+      income_type_id: "",
       receive_date: format(new Date(), "yyyy-MM-dd"),
       installments: "1",
       amount: "",
@@ -189,7 +193,6 @@ export default function AccountsReceivable() {
     mutationFn: async (values: FormData) => {
       let finalPayerId = values.payer_id;
 
-      // Se "Novo Pagador" foi selecionado e um nome foi fornecido
       if (values.payer_id === "new-payer" && values.new_payer_name) {
         const { data: newPayer, error: newPayerError } = await supabase
           .from("payers")
@@ -261,12 +264,12 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Confirmar recebimento
+  // Confirmar recebimento (agora com data selecionável)
   const confirmReceiveMutation = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, receivedDate }: { id: string; receivedDate: Date }) => {
       const { error } = await supabase
         .from("accounts_receivable")
-        .update({ received: true, received_date: format(new Date(), "yyyy-MM-dd") })
+        .update({ received: true, received_date: format(receivedDate, "yyyy-MM-dd") })
         .eq("id", id);
       
       if (error) throw error;
@@ -274,6 +277,9 @@ export default function AccountsReceivable() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
       toast.success("Recebimento confirmado com sucesso!");
+      setShowConfirmDateDialog(false); // Fecha o diálogo
+      setCurrentConfirmingAccountId(null);
+      setSelectedReceivedDate(new Date()); // Reseta a data
     },
     onError: (error) => {
       toast.error("Erro ao confirmar recebimento: " + error.message);
@@ -318,6 +324,13 @@ export default function AccountsReceivable() {
     if (confirm("Tem certeza que deseja estornar este recebimento? Ele voltará para o status de 'não recebido'.")) {
       reverseReceiveMutation.mutate(id);
     }
+  };
+
+  // Função para abrir o diálogo de confirmação de data
+  const handleConfirmReceiveClick = (id: string) => {
+    setCurrentConfirmingAccountId(id);
+    setSelectedReceivedDate(new Date()); // Define a data padrão como hoje
+    setShowConfirmDateDialog(true);
   };
 
   // Lógica para o seletor de mês
@@ -694,7 +707,7 @@ export default function AccountsReceivable() {
         {loadingAccounts ? (
           <p className="text-muted-foreground">Carregando contas...</p>
         ) : filteredAccounts && filteredAccounts.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2"> {/* Alterado para 2 colunas */}
+          <div className="grid gap-4 md:grid-cols-2">
             {filteredAccounts.map((account) => (
               <Card key={account.id} className={cn(account.received ? "border-l-4 border-income" : "border-l-4 border-muted")}>
                 <CardContent className="pt-6">
@@ -762,7 +775,7 @@ export default function AccountsReceivable() {
                         <Button 
                           variant="outline" 
                           size="sm" 
-                          onClick={() => confirmReceiveMutation.mutate(account.id)}
+                          onClick={() => handleConfirmReceiveClick(account.id)} // Chama a nova função
                           disabled={confirmReceiveMutation.isPending}
                           className="text-income border-income hover:bg-income/10"
                         >
@@ -794,6 +807,61 @@ export default function AccountsReceivable() {
           </Card>
         )}
       </main>
+
+      {/* Diálogo para selecionar a data de recebimento */}
+      <Dialog open={showConfirmDateDialog} onOpenChange={setShowConfirmDateDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Confirmar Data de Recebimento</DialogTitle>
+            <CardDescription>Selecione a data em que o recebimento ocorreu.</CardDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={"outline"}
+                  className={cn(
+                    "w-full justify-start text-left font-normal",
+                    !selectedReceivedDate && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {selectedReceivedDate ? format(selectedReceivedDate, "PPP", { locale: ptBR }) : <span>Selecione uma data</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  selected={selectedReceivedDate}
+                  onSelect={setSelectedReceivedDate}
+                  initialFocus
+                  locale={ptBR}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+          <DialogFooter>
+            <Button 
+              onClick={() => {
+                if (currentConfirmingAccountId && selectedReceivedDate) {
+                  confirmReceiveMutation.mutate({ 
+                    id: currentConfirmingAccountId, 
+                    receivedDate: selectedReceivedDate 
+                  });
+                } else {
+                  toast.error("Selecione uma data para confirmar o recebimento.");
+                }
+              }}
+              disabled={confirmReceiveMutation.isPending || !selectedReceivedDate}
+            >
+              {confirmReceiveMutation.isPending ? "Confirmando..." : "Confirmar Recebimento"}
+            </Button>
+            <Button variant="outline" onClick={() => setShowConfirmDateDialog(false)}>
+              Cancelar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
