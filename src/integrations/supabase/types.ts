@@ -34,7 +34,7 @@ export type Database = {
           is_fixed: boolean | null
           responsible_person_id: string | null
           purchase_date: string | null
-          original_fixed_account_id: string | null // Adicionado
+          original_fixed_account_id: string | null
         }
         Insert: {
           amount: number
@@ -55,7 +55,7 @@ export type Database = {
           is_fixed?: boolean | null
           responsible_person_id?: string | null
           purchase_date?: string | null
-          original_fixed_account_id?: string | null // Adicionado
+          original_fixed_account_id?: string | null
         }
         Update: {
           amount?: number
@@ -76,7 +76,7 @@ export type Database = {
           is_fixed?: boolean | null
           responsible_person_id?: string | null
           purchase_date?: string | null
-          original_fixed_account_id?: string | null // Adicionado
+          original_fixed_account_id?: string | null
         }
         Relationships: [
           {
@@ -141,7 +141,7 @@ export type Database = {
           updated_at: string
           is_fixed: boolean | null
           responsible_person_id: string | null
-          original_fixed_account_id: string | null // Adicionado
+          original_fixed_account_id: string | null
         }
         Insert: {
           amount: number
@@ -160,7 +160,7 @@ export type Database = {
           updated_at?: string
           is_fixed?: boolean | null
           responsible_person_id?: string | null
-          original_fixed_account_id?: string | null // Adicionado
+          original_fixed_account_id?: string | null
         }
         Update: {
           amount?: number
@@ -179,7 +179,7 @@ export type Database = {
           updated_at?: string
           is_fixed?: boolean | null
           responsible_person_id?: string | null
-          original_fixed_account_id?: string | null // Adicionado
+          original_fixed_account_id?: string | null
         }
         Relationships: [
           {
@@ -478,6 +478,8 @@ export type Database = {
           full_name: string | null
           id: string
           updated_at: string | null
+          invited_by_user_id: string | null // Adicionado
+          is_family_member: boolean | null // Adicionado
         }
         Insert: {
           avatar_url?: string | null
@@ -485,6 +487,8 @@ export type Database = {
           full_name?: string | null
           id: string
           updated_at?: string | null
+          invited_by_user_id?: string | null // Adicionado
+          is_family_member?: boolean | null // Adicionado
         }
         Update: {
           avatar_url?: string | null
@@ -492,12 +496,21 @@ export type Database = {
           full_name?: string | null
           id?: string
           updated_at?: string | null
+          invited_by_user_id?: string | null // Adicionado
+          is_family_member?: boolean | null // Adicionado
         }
         Relationships: [
           {
             foreignKeyName: "profiles_id_fkey"
             columns: ["id"]
             isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_invited_by_user_id_fkey"
+            columns: ["invited_by_user_id"]
+            isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
           },

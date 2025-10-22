@@ -16,56 +16,79 @@ import { format, parseISO, getMonth, getYear } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { MonthlyExpensesChart } from "@/components/charts/MonthlyExpensesChart";
 import { CategoryExpensesChart } from "@/components/charts/CategoryExpensesChart";
+import { Tables } from "@/integrations/supabase/types"; // Importar tipos do Supabase
 
 export default function Dashboard() {
   const { user } = useAuth();
   const currentMonth = getMonth(new Date());
   const currentYear = getYear(new Date());
 
+  // Fetch current user's profile to check family status
+  const { data: userProfile, isLoading: isLoadingProfile } = useQuery({
+    queryKey: ["user-profile", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, is_family_member, invited_by_user_id")
+        .eq("id", user.id)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Determine which user IDs to fetch data for
+  const userIdsToFetch = [user?.id];
+  if (userProfile?.is_family_member && userProfile?.invited_by_user_id) {
+    userIdsToFetch.push(userProfile.invited_by_user_id);
+  }
+
   // Fetch all necessary data for the dashboard
   const { data: accountsPayable, isLoading: isLoadingPayable } = useQuery({
-    queryKey: ["dashboard-accounts-payable", user?.id],
+    queryKey: ["dashboard-accounts-payable", userIdsToFetch],
     queryFn: async () => {
       if (!user?.id) return [];
       const { data, error } = await supabase
         .from("accounts_payable")
-        .select("*, expense_categories(name), payment_types(name)") // Adicionado payment_types
-        .eq("created_by", user.id);
+        .select("*, expense_categories(name), payment_types(name)")
+        .in("created_by", userIdsToFetch); // Fetch for all relevant user IDs
       if (error) throw error;
       return data;
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && !isLoadingProfile,
   });
 
   const { data: accountsReceivable, isLoading: isLoadingReceivable } = useQuery({
-    queryKey: ["dashboard-accounts-receivable", user?.id],
+    queryKey: ["dashboard-accounts-receivable", userIdsToFetch],
     queryFn: async () => {
       if (!user?.id) return [];
       const { data, error } = await supabase
         .from("accounts_receivable")
-        .select("*, income_types(name)") // Adicionado income_types
-        .eq("created_by", user.id);
+        .select("*, income_types(name)")
+        .in("created_by", userIdsToFetch); // Fetch for all relevant user IDs
       if (error) throw error;
       return data;
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && !isLoadingProfile,
   });
 
   const { data: creditCards, isLoading: isLoadingCreditCards } = useQuery({
-    queryKey: ["dashboard-credit-cards", user?.id],
+    queryKey: ["dashboard-credit-cards", userIdsToFetch],
     queryFn: async () => {
       if (!user?.id) return [];
       const { data, error } = await supabase
         .from("credit_cards")
         .select("id, credit_limit")
-        .eq("created_by", user.id);
+        .in("created_by", userIdsToFetch); // Fetch for all relevant user IDs
       if (error) throw error;
       return data;
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && !isLoadingProfile,
   });
 
-  const isLoading = isLoadingPayable || isLoadingReceivable || isLoadingCreditCards;
+  const isLoading = isLoadingPayable || isLoadingReceivable || isLoadingCreditCards || isLoadingProfile;
 
   // Process data for summary cards and charts
   let totalMonthlyIncome = 0;
@@ -190,7 +213,7 @@ export default function Dashboard() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardDescription>Cartões de Crédito</CardDescription>
+              <CardDescription>Cartões de Crédão</CardDescription>
               <CardTitle className="text-3xl">
                 {isLoading ? "Carregando..." : `R$ ${totalCreditCardUsage.toFixed(2)}`}
               </CardTitle>

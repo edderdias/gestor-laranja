@@ -1,7 +1,7 @@
 import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LogOut, Settings as SettingsIcon } from "lucide-react"; // Importar SettingsIcon
+import { LogOut, Settings as SettingsIcon, Users } from "lucide-react"; // Importar Users
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -59,21 +59,23 @@ export function MainLayout() {
             <NavigationMenu>
               <NavigationMenuList>
                 <NavigationMenuItem>
-                  {/* Removido NavigationMenuLink asChild */}
                   <Link to="/accounts-payable" className={navigationMenuTriggerStyle()}>
                     Contas a Pagar
                   </Link>
                 </NavigationMenuItem>
                 <NavigationMenuItem>
-                  {/* Removido NavigationMenuLink asChild */}
                   <Link to="/accounts-receivable" className={navigationMenuTriggerStyle()}>
                     Contas a Receber
                   </Link>
                 </NavigationMenuItem>
                 <NavigationMenuItem>
-                  {/* Removido NavigationMenuLink asChild */}
                   <Link to="/credit-cards" className={navigationMenuTriggerStyle()}>
                     Cartões de Crédito
+                  </Link>
+                </NavigationMenuItem>
+                <NavigationMenuItem>
+                  <Link to="/user-management" className={navigationMenuTriggerStyle()}> {/* Novo link */}
+                    <Users className="mr-2 h-4 w-4" /> Usuários
                   </Link>
                 </NavigationMenuItem>
                 <NavigationMenuItem>
