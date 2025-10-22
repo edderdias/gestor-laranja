@@ -4,13 +4,13 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { format, getMonth, getYear, subMonths, parseISO, addMonths } from "date-fns";
+import { format, getMonth, getYear, subMonths, parseISO, addMonths, endOfMonth, isSameMonth, isSameYear } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"; // Adicionado CardDescription
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,12 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tables } from "@/integrations/supabase/types"; // Importar tipos do Supabase
+
+// Estender o tipo de conta para incluir a flag de instância gerada
+type AccountReceivableWithGeneratedFlag = Tables<'accounts_receivable'> & {
+  is_generated_fixed_instance?: boolean;
+};
 
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -59,14 +65,14 @@ type FormData = z.infer<typeof formSchema>;
 export default function AccountsReceivable() {
   const { user } = useAuth();
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<any>(null);
+  const [editingAccount, setEditingAccount] = useState<AccountReceivableWithGeneratedFlag | null>(null);
   const queryClient = useQueryClient();
   
   const [selectedMonthYear, setSelectedMonthYear] = useState(format(new Date(), "yyyy-MM"));
 
   // Estados para o diálogo de confirmação de data
   const [showConfirmDateDialog, setShowConfirmDateDialog] = useState(false);
-  const [currentConfirmingAccountId, setCurrentConfirmingAccountId] = useState<string | null>(null);
+  const [currentConfirmingAccount, setCurrentConfirmingAccount] = useState<AccountReceivableWithGeneratedFlag | null>(null);
   const [selectedReceivedDate, setSelectedReceivedDate] = useState<Date | undefined>(new Date());
 
   const form = useForm<FormData>({
@@ -191,6 +197,11 @@ export default function AccountsReceivable() {
   // Criar/Atualizar conta
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
+      if (!user?.id) {
+        toast.error("Usuário não autenticado. Não foi possível salvar conta.");
+        throw new Error("User not authenticated.");
+      }
+
       let finalPayerId = values.payer_id;
 
       if (values.payer_id === "new-payer" && values.new_payer_name) {
@@ -213,12 +224,13 @@ export default function AccountsReceivable() {
         amount: parseFloat(values.amount),
         source_id: values.source_id,
         payer_id: finalPayerId,
-        created_by: user?.id,
+        created_by: user.id,
         is_fixed: values.is_fixed,
         responsible_person_id: values.responsible_person_id || null,
+        original_fixed_account_id: editingAccount?.original_fixed_account_id || null, // Manter o link se for uma edição de ocorrência
       };
 
-      if (editingAccount) {
+      if (editingAccount && !editingAccount.is_generated_fixed_instance) { // Só edita se não for uma instância gerada
         const { error } = await supabase
           .from("accounts_receivable")
           .update(accountData)
@@ -264,21 +276,51 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Confirmar recebimento (agora com data selecionável)
+  // Confirmar recebimento (agora com data selecionável e lógica para instâncias geradas)
   const confirmReceiveMutation = useMutation({
-    mutationFn: async ({ id, receivedDate }: { id: string; receivedDate: Date }) => {
-      const { error } = await supabase
-        .from("accounts_receivable")
-        .update({ received: true, received_date: format(receivedDate, "yyyy-MM-dd") })
-        .eq("id", id);
-      
-      if (error) throw error;
+    mutationFn: async ({ account, receivedDate }: { account: AccountReceivableWithGeneratedFlag; receivedDate: Date }) => {
+      if (!user?.id) {
+        toast.error("Usuário não autenticado. Não foi possível confirmar recebimento.");
+        throw new Error("User not authenticated.");
+      }
+
+      const formattedReceivedDate = format(receivedDate, "yyyy-MM-dd");
+
+      if (account.is_generated_fixed_instance) {
+        // Se for uma instância gerada, insere uma nova conta (não fixa)
+        const { error } = await supabase
+          .from("accounts_receivable")
+          .insert({
+            description: account.description,
+            income_type_id: account.income_type_id,
+            receive_date: format(parseISO(account.receive_date), "yyyy-MM-dd"), // Usa a data ajustada para o mês
+            installments: account.installments,
+            amount: account.amount,
+            source_id: account.source_id,
+            payer_id: account.payer_id,
+            created_by: user.id,
+            is_fixed: false, // A ocorrência é uma entrada única
+            responsible_person_id: account.responsible_person_id,
+            received: true,
+            received_date: formattedReceivedDate,
+            original_fixed_account_id: account.original_fixed_account_id || account.id, // Link para o modelo fixo original
+          });
+        if (error) throw error;
+      } else {
+        // Se for uma conta existente (fixa original ou não fixa), atualiza
+        const { error } = await supabase
+          .from("accounts_receivable")
+          .update({ received: true, received_date: formattedReceivedDate })
+          .eq("id", account.id);
+        
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
       toast.success("Recebimento confirmado com sucesso!");
       setShowConfirmDateDialog(false); // Fecha o diálogo
-      setCurrentConfirmingAccountId(null);
+      setCurrentConfirmingAccount(null);
       setSelectedReceivedDate(new Date()); // Reseta a data
     },
     onError: (error) => {
@@ -309,26 +351,39 @@ export default function AccountsReceivable() {
     saveMutation.mutate(values);
   };
 
-  const handleEdit = (account: any) => {
+  const handleEdit = (account: AccountReceivableWithGeneratedFlag) => {
+    if (account.is_generated_fixed_instance) {
+      toast.info("Edite a conta fixa original para alterar esta ocorrência.");
+      // Poderíamos redirecionar para a edição da conta original se tivéssemos o ID
+      return;
+    }
     setEditingAccount(account);
     setIsFormOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = (account: AccountReceivableWithGeneratedFlag) => {
+    if (account.is_generated_fixed_instance) {
+      toast.info("Não é possível excluir uma ocorrência gerada. Exclua a conta fixa original se desejar.");
+      return;
+    }
     if (confirm("Tem certeza que deseja deletar esta conta?")) {
-      deleteMutation.mutate(id);
+      deleteMutation.mutate(account.id);
     }
   };
 
-  const handleReverse = (id: string) => {
+  const handleReverse = (account: AccountReceivableWithGeneratedFlag) => {
+    if (account.is_generated_fixed_instance) {
+      toast.info("Não é possível estornar uma ocorrência gerada que ainda não foi confirmada.");
+      return;
+    }
     if (confirm("Tem certeza que deseja estornar este recebimento? Ele voltará para o status de 'não recebido'.")) {
-      reverseReceiveMutation.mutate(id);
+      reverseReceiveMutation.mutate(account.id);
     }
   };
 
   // Função para abrir o diálogo de confirmação de data
-  const handleConfirmReceiveClick = (id: string) => {
-    setCurrentConfirmingAccountId(id);
+  const handleConfirmReceiveClick = (account: AccountReceivableWithGeneratedFlag) => {
+    setCurrentConfirmingAccount(account);
     setSelectedReceivedDate(new Date()); // Define a data padrão como hoje
     setShowConfirmDateDialog(true);
   };
@@ -349,15 +404,55 @@ export default function AccountsReceivable() {
 
   const monthOptions = generateMonthOptions();
   const [selectedYear, selectedMonth] = selectedMonthYear.split('-').map(Number);
+  const selectedMonthDate = parseISO(`${selectedMonthYear}-01`);
 
-  // Filtrar contas com base no mês e ano selecionados
-  const filteredAccounts = accounts?.filter(account => {
-    const accountDate = parseISO(account.receive_date);
-    return getMonth(accountDate) + 1 === selectedMonth && getYear(accountDate) === selectedYear;
-  }) || [];
+  // Processar contas para exibição, incluindo a replicação de contas fixas
+  const processedAccounts = accounts?.flatMap(account => {
+    const accountReceiveDate = parseISO(account.receive_date);
+    const currentMonthAccounts: AccountReceivableWithGeneratedFlag[] = [];
+
+    // 1. Incluir contas não fixas que pertencem ao mês selecionado
+    if (!account.is_fixed && isSameMonth(accountReceiveDate, selectedMonthDate) && isSameYear(accountReceiveDate, selectedMonthDate)) {
+      currentMonthAccounts.push(account);
+    } 
+    // 2. Incluir contas fixas originais que pertencem ao mês selecionado
+    else if (account.is_fixed && isSameMonth(accountReceiveDate, selectedMonthDate) && isSameYear(accountReceiveDate, selectedMonthDate)) {
+      currentMonthAccounts.push(account);
+    }
+    // 3. Gerar ocorrências para contas fixas em meses futuros
+    else if (account.is_fixed && accountReceiveDate <= endOfMonth(selectedMonthDate)) {
+      // Verificar se já existe uma ocorrência real para este mês e esta conta fixa
+      const existingOccurrence = accounts.find(
+        (a) => a.original_fixed_account_id === account.id &&
+               isSameMonth(parseISO(a.receive_date), selectedMonthDate) &&
+               isSameYear(parseISO(a.receive_date), selectedMonthDate)
+      );
+
+      if (!existingOccurrence) {
+        // Se não existe uma ocorrência real, cria uma instância gerada para exibição
+        const displayDate = new Date(selectedYear, selectedMonth - 1, accountReceiveDate.getDate());
+        // Ajusta o dia se o mês selecionado não tiver aquele dia (ex: 31 de fevereiro)
+        if (displayDate.getMonth() !== selectedMonth - 1) {
+          displayDate.setDate(0); // Vai para o último dia do mês anterior
+          displayDate.setDate(displayDate.getDate() + 1); // Adiciona 1 dia para o último dia do mês atual
+        }
+
+        currentMonthAccounts.push({
+          ...account,
+          id: `temp-${account.id}-${selectedMonthYear}`, // ID temporário para instâncias geradas
+          receive_date: format(displayDate, "yyyy-MM-dd"),
+          received: false, // Instâncias geradas são sempre não recebidas por padrão
+          received_date: null,
+          is_generated_fixed_instance: true,
+          original_fixed_account_id: account.id, // Referência ao modelo fixo original
+        });
+      }
+    }
+    return currentMonthAccounts;
+  }).sort((a, b) => parseISO(a.receive_date).getTime() - parseISO(b.receive_date).getTime()) || [];
 
   // Filtrar contas recebidas para o resumo total (apenas do mês selecionado)
-  const receivedAccounts = filteredAccounts.filter(account => account.received) || [];
+  const receivedAccounts = processedAccounts.filter(account => account.received) || [];
   const totalAmount = receivedAccounts.reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
@@ -371,7 +466,7 @@ export default function AccountsReceivable() {
   }, {});
 
   // Calcular previsão de recebimento do mês (contas NÃO recebidas para o mês selecionado)
-  const monthlyForecast = filteredAccounts.filter(account => !account.received).reduce((sum, account) => {
+  const monthlyForecast = processedAccounts.filter(account => !account.received).reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
 
@@ -706,9 +801,9 @@ export default function AccountsReceivable() {
 
         {loadingAccounts ? (
           <p className="text-muted-foreground">Carregando contas...</p>
-        ) : filteredAccounts && filteredAccounts.length > 0 ? (
+        ) : processedAccounts && processedAccounts.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2">
-            {filteredAccounts.map((account) => (
+            {processedAccounts.map((account) => (
               <Card key={account.id} className={cn(account.received ? "border-l-4 border-income" : "border-l-4 border-muted")}>
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between">
@@ -765,8 +860,8 @@ export default function AccountsReceivable() {
                         <Button 
                           variant="outline" 
                           size="sm" 
-                          onClick={() => handleReverse(account.id)}
-                          disabled={reverseReceiveMutation.isPending}
+                          onClick={() => handleReverse(account)}
+                          disabled={reverseReceiveMutation.isPending || account.is_generated_fixed_instance} // Desabilita estorno para geradas
                           className="text-destructive border-destructive hover:bg-destructive/10"
                         >
                           <RotateCcw className="h-4 w-4 mr-2" /> Estornar
@@ -775,21 +870,26 @@ export default function AccountsReceivable() {
                         <Button 
                           variant="outline" 
                           size="sm" 
-                          onClick={() => handleConfirmReceiveClick(account.id)} // Chama a nova função
+                          onClick={() => handleConfirmReceiveClick(account)}
                           disabled={confirmReceiveMutation.isPending}
                           className="text-income border-income hover:bg-income/10"
                         >
                           <CheckCircle className="h-4 w-4 mr-2" /> Confirmar
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(account)}>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => handleEdit(account)}
+                        disabled={account.is_generated_fixed_instance} // Desabilita edição para geradas
+                      >
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <Button 
                         variant="ghost" 
                         size="icon" 
-                        onClick={() => handleDelete(account.id)}
-                        disabled={deleteMutation.isPending}
+                        onClick={() => handleDelete(account)}
+                        disabled={deleteMutation.isPending || account.is_generated_fixed_instance} // Desabilita exclusão para geradas
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -843,9 +943,9 @@ export default function AccountsReceivable() {
           <DialogFooter>
             <Button 
               onClick={() => {
-                if (currentConfirmingAccountId && selectedReceivedDate) {
+                if (currentConfirmingAccount && selectedReceivedDate) {
                   confirmReceiveMutation.mutate({ 
-                    id: currentConfirmingAccountId, 
+                    account: currentConfirmingAccount, 
                     receivedDate: selectedReceivedDate 
                   });
                 } else {

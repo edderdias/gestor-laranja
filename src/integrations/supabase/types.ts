@@ -34,6 +34,7 @@ export type Database = {
           is_fixed: boolean | null
           responsible_person_id: string | null
           purchase_date: string | null
+          original_fixed_account_id: string | null // Adicionado
         }
         Insert: {
           amount: number
@@ -54,6 +55,7 @@ export type Database = {
           is_fixed?: boolean | null
           responsible_person_id?: string | null
           purchase_date?: string | null
+          original_fixed_account_id?: string | null // Adicionado
         }
         Update: {
           amount?: number
@@ -74,6 +76,7 @@ export type Database = {
           is_fixed?: boolean | null
           responsible_person_id?: string | null
           purchase_date?: string | null
+          original_fixed_account_id?: string | null // Adicionado
         }
         Relationships: [
           {
@@ -95,6 +98,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounts_payable_original_fixed_account_id_fkey"
+            columns: ["original_fixed_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts_payable"
             referencedColumns: ["id"]
           },
           {
@@ -131,6 +141,7 @@ export type Database = {
           updated_at: string
           is_fixed: boolean | null
           responsible_person_id: string | null
+          original_fixed_account_id: string | null // Adicionado
         }
         Insert: {
           amount: number
@@ -149,6 +160,7 @@ export type Database = {
           updated_at?: string
           is_fixed?: boolean | null
           responsible_person_id?: string | null
+          original_fixed_account_id?: string | null // Adicionado
         }
         Update: {
           amount?: number
@@ -167,6 +179,7 @@ export type Database = {
           updated_at?: string
           is_fixed?: boolean | null
           responsible_person_id?: string | null
+          original_fixed_account_id?: string | null // Adicionado
         }
         Relationships: [
           {
@@ -181,6 +194,13 @@ export type Database = {
             columns: ["income_type_id"]
             isOneToOne: false
             referencedRelation: "income_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounts_receivable_original_fixed_account_id_fkey"
+            columns: ["original_fixed_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts_receivable"
             referencedColumns: ["id"]
           },
           {
