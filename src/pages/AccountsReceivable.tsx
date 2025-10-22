@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2, CheckCircle, RotateCcw, CalendarIcon } from "lucide-react"; // Removido PiggyBankIcon
+import { Plus, Pencil, Trash2, CheckCircle, RotateCcw, CalendarIcon } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { format, getMonth, getYear, subMonths, parseISO, addMonths, endOfMonth, isSameMonth, isSameYear } from "date-fns";
+import { format, subMonths, parseISO, addMonths, endOfMonth, isSameMonth, isSameYear } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -74,12 +74,6 @@ export default function AccountsReceivable() {
   const [showConfirmDateDialog, setShowConfirmDateDialog] = useState(false);
   const [currentConfirmingAccount, setCurrentConfirmingAccount] = useState<AccountReceivableWithGeneratedFlag | null>(null);
   const [selectedReceivedDate, setSelectedReceivedDate] = useState<Date | undefined>(new Date());
-
-  // REMOVIDOS: Estados para o diálogo de transferência para cofrinho
-  // const [showTransferToPiggyBankDialog, setShowTransferToPiggyBankDialog] = useState(false);
-  // const [currentTransferAccount, setCurrentTransferAccount] = useState<AccountReceivableWithGeneratedFlag | null>(null);
-  // const [selectedBankId, setSelectedBankId] = useState<string | undefined>(undefined);
-
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -165,7 +159,7 @@ export default function AccountsReceivable() {
 
       let query = supabase
         .from("accounts_receivable")
-        .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(id, name)"); // Removido banks(id, name)
+        .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(id, name)");
       
       // Apply filter based on the number of user IDs
       if (finalUserIdsToFetch.length === 1) {
@@ -239,20 +233,6 @@ export default function AccountsReceivable() {
       return data;
     },
   });
-
-  // REMOVIDO: Buscar bancos
-  // const { data: banks, isLoading: isLoadingBanks } = useQuery({
-  //   queryKey: ["banks"],
-  //   queryFn: async () => {
-  //     const { data, error } = await supabase
-  //       .from("banks")
-  //       .select("*")
-  //       .order("name");
-      
-  //     if (error) throw error;
-  //     return data;
-  //   },
-  // });
 
   // Criar/Atualizar conta
   const saveMutation = useMutation({
@@ -364,14 +344,13 @@ export default function AccountsReceivable() {
             received: true,
             received_date: formattedReceivedDate,
             original_fixed_account_id: account.original_fixed_account_id || account.id, // Link para o modelo fixo original
-            // REMOVIDO: transferred_to_piggy_bank: false,
           });
         if (error) throw error;
       } else {
         // Se for uma conta existente (fixa original ou não fixa), atualiza
         const { error } = await supabase
           .from("accounts_receivable")
-          .update({ received: true, received_date: formattedReceivedDate }) // REMOVIDO: transferred_to_piggy_bank: false
+          .update({ received: true, received_date: formattedReceivedDate })
           .eq("id", account.id);
         
         if (error) throw error;
@@ -394,7 +373,7 @@ export default function AccountsReceivable() {
     mutationFn: async (id: string) => {
       const { error } = await supabase
         .from("accounts_receivable")
-        .update({ received: false, received_date: null }) // Removido transferred_to_piggy_bank: false
+        .update({ received: false, received_date: null })
         .eq("id", id);
       
       if (error) throw error;
@@ -408,53 +387,6 @@ export default function AccountsReceivable() {
       toast.error("Erro ao estornar recebimento: " + error.message);
     },
   });
-
-  // REMOVIDO: Mutação para transferir para o cofrinho
-  // const transferToPiggyBankMutation = useMutation({
-  //   mutationFn: async ({ accountId, bankId }: { accountId: string; bankId: string }) => {
-  //     if (!user?.id) {
-  //       toast.error("Usuário não autenticado. Não foi possível transferir para o cofrinho.");
-  //       throw new Error("User not authenticated.");
-  //     }
-
-  //     const account = accounts?.find(acc => acc.id === accountId);
-  //     if (!account) {
-  //       throw new Error("Conta a receber não encontrada.");
-  //     }
-
-  //     // 1. Inserir no cofrinho
-  //     const { error: piggyBankError } = await supabase
-  //       .from("piggy_bank_entries")
-  //       .insert({
-  //         user_id: user.id,
-  //         description: `Transferência de Recebimento: ${account.description}`,
-  //         amount: account.amount,
-  //         entry_date: format(new Date(), "yyyy-MM-dd"), // Data da transferência
-  //         type: "deposit",
-  //         bank_id: bankId,
-  //       });
-  //     if (piggyBankError) throw piggyBankError;
-
-  //     // 2. Atualizar conta a receber
-  //     const { error: updateAccountError } = await supabase
-  //       .from("accounts_receivable")
-  //       .update({ transferred_to_piggy_bank: true })
-  //       .eq("id", accountId);
-  //     if (updateAccountError) throw updateAccountError;
-  //   },
-  //   onSuccess: () => {
-  //     queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
-  //     queryClient.invalidateQueries({ queryKey: ["piggy_bank_entries"] });
-  //     queryClient.invalidateQueries({ queryKey: ["dashboard-accounts-receivable"] }); // Invalida dashboard para atualizar total
-  //     toast.success("Valor transferido para o cofrinho com sucesso!");
-  //     setShowTransferToPiggyBankDialog(false);
-  //     setCurrentTransferAccount(null);
-  //     setSelectedBankId(undefined);
-  //   },
-  //   onError: (error) => {
-  //     toast.error("Erro ao transferir para o cofrinho: " + error.message);
-  //   },
-  // });
 
   const onSubmit = (values: FormData) => {
     saveMutation.mutate(values);
@@ -495,13 +427,6 @@ export default function AccountsReceivable() {
     setSelectedReceivedDate(new Date()); // Define a data padrão como hoje
     setShowConfirmDateDialog(true);
   };
-
-  // REMOVIDO: Função para abrir o diálogo de transferência para cofrinho
-  // const handleTransferToPiggyBankClick = (account: AccountReceivableWithGeneratedFlag) => {
-  //   setCurrentTransferAccount(account);
-  //   setSelectedBankId(undefined); // Reseta a seleção do banco
-  //   setShowTransferToPiggyBankDialog(true);
-  // };
 
   // Lógica para o seletor de mês
   const generateMonthOptions = () => {
@@ -560,7 +485,6 @@ export default function AccountsReceivable() {
           received_date: null,
           is_generated_fixed_instance: true,
           original_fixed_account_id: account.id, // Referência ao modelo fixo original
-          // REMOVIDO: transferred_to_piggy_bank: false,
         });
       }
     }
@@ -568,7 +492,7 @@ export default function AccountsReceivable() {
   }).sort((a, b) => parseISO(a.receive_date).getTime() - parseISO(b.receive_date).getTime()) || [];
 
   // Filtrar contas recebidas para o resumo total (apenas do mês selecionado)
-  const receivedAccounts = processedAccounts.filter(account => account.received) || []; // Removido !account.transferred_to_piggy_bank
+  const receivedAccounts = processedAccounts.filter(account => account.received) || [];
   const totalAmount = receivedAccounts.reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
@@ -585,16 +509,6 @@ export default function AccountsReceivable() {
   const monthlyForecast = processedAccounts.filter(account => !account.received).reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
-
-  console.log("AccountsReceivable: user", user);
-  console.log("AccountsReceivable: userProfile", userProfile);
-  console.log("AccountsReceivable: userIdsToFetch", userIdsToFetch);
-  console.log("AccountsReceivable: finalUserIdsToFetch", finalUserIdsToFetch);
-  console.log("AccountsReceivable: loadingAccounts", loadingAccounts);
-  console.log("AccountsReceivable: fetched accounts (raw from Supabase)", accounts);
-  console.log("AccountsReceivable: selectedMonthYear", selectedMonthYear);
-  console.log("AccountsReceivable: selectedMonthDate", selectedMonthDate);
-  console.log("AccountsReceivable: processedAccounts (for display)", processedAccounts);
 
   return (
     <div className="min-h-screen bg-background">
@@ -979,13 +893,6 @@ export default function AccountsReceivable() {
                             <span className="font-medium">Recebido em: {format(new Date(account.received_date!), "dd/MM/yyyy")}</span>
                           </div>
                         )}
-                        {/* REMOVIDO: transferred_to_piggy_bank display */}
-                        {/* {account.transferred_to_piggy_bank && (
-                          <div className="col-span-2 flex items-center gap-1 text-primary">
-                            <PiggyBankIcon className="h-4 w-4" />
-                            <span className="font-medium">Transferido para Cofrinho</span>
-                          </div>
-                        )} */}
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 ml-4">
@@ -1095,55 +1002,6 @@ export default function AccountsReceivable() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* REMOVIDO: Diálogo para transferir para o cofrinho */}
-      {/* <Dialog open={showTransferToPiggyBankDialog} onOpenChange={setShowTransferToPiggyBankDialog}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Transferir para Cofrinho</DialogTitle>
-            <CardDescription>Selecione o banco de destino para a transferência.</CardDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <Label htmlFor="bank-select">Banco de Destino</Label>
-            <Select onValueChange={setSelectedBankId} value={selectedBankId}>
-              <SelectTrigger id="bank-select">
-                <SelectValue placeholder="Selecione um banco" />
-              </SelectTrigger>
-              <SelectContent>
-                {isLoadingBanks ? (
-                  <SelectItem value="loading" disabled>Carregando bancos...</SelectItem>
-                ) : (
-                  banks?.map((bank) => (
-                    <SelectItem key={bank.id} value={bank.id}>
-                      {bank.name}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button 
-              onClick={() => {
-                if (currentTransferAccount && selectedBankId) {
-                  transferToPiggyBankMutation.mutate({ 
-                    accountId: currentTransferAccount.id, 
-                    bankId: selectedBankId 
-                  });
-                } else {
-                  toast.error("Selecione um banco para a transferência.");
-                }
-              }}
-              disabled={transferToPiggyBankMutation.isPending || !selectedBankId}
-            >
-              {transferToPiggyBankMutation.isPending ? "Transferindo..." : "Confirmar Transferência"}
-            </Button>
-            <Button variant="outline" onClick={() => setShowTransferToPiggyBankDialog(false)}>
-              Cancelar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog> */}
     </div>
   );
 }

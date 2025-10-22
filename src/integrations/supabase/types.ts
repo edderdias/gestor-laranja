@@ -142,7 +142,6 @@ export type Database = {
           is_fixed: boolean | null
           responsible_person_id: string | null
           original_fixed_account_id: string | null
-          // REMOVIDO: transferred_to_piggy_bank: boolean | null
         }
         Insert: {
           amount: number
@@ -162,7 +161,6 @@ export type Database = {
           is_fixed?: boolean | null
           responsible_person_id?: string | null
           original_fixed_account_id?: string | null
-          // REMOVIDO: transferred_to_piggy_bank?: boolean | null
         }
         Update: {
           amount?: number
@@ -182,7 +180,6 @@ export type Database = {
           is_fixed?: boolean | null
           responsible_person_id?: string | null
           original_fixed_account_id?: string | null
-          // REMOVIDO: transferred_to_piggy_bank?: boolean | null
         }
         Relationships: [
           {
@@ -269,24 +266,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      banks: { // REMOVIDO: banks table definition
-        Row: {
-          created_at: string
-          id: string
-          name: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          name: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          name?: string
-        }
-        Relationships: []
       }
       credit_card_transactions: {
         Row: {
@@ -501,7 +480,6 @@ export type Database = {
           id: string
           type: Database["public"]["Enums"]["piggy_bank_entry_type"]
           user_id: string
-          // REMOVIDO: bank_id: string | null
         }
         Insert: {
           amount: number
@@ -511,7 +489,6 @@ export type Database = {
           id?: string
           type: Database["public"]["Enums"]["piggy_bank_entry_type"]
           user_id: string
-          // REMOVIDO: bank_id?: string | null
         }
         Update: {
           amount?: number
@@ -521,17 +498,8 @@ export type Database = {
           id?: string
           type?: Database["public"]["Enums"]["piggy_bank_entry_type"]
           user_id?: string
-          // REMOVIDO: bank_id?: string | null
         }
         Relationships: [
-          // REMOVIDO: piggy_bank_entries_bank_id_fkey
-          // {
-          //   foreignKeyName: "piggy_bank_entries_bank_id_fkey"
-          //   columns: ["bank_id"]
-          //   isOneToOne: false
-          //   referencedRelation: "banks"
-          //   referencedColumns: ["id"]
-          // },
           {
             foreignKeyName: "piggy_bank_entries_user_id_fkey"
             columns: ["user_id"]
@@ -548,8 +516,8 @@ export type Database = {
           full_name: string | null
           id: string
           updated_at: string | null
-          invited_by_user_id: string | null // Adicionado
-          is_family_member: boolean | null // Adicionado
+          invited_by_user_id: string | null
+          is_family_member: boolean | null
         }
         Insert: {
           avatar_url?: string | null
@@ -557,8 +525,8 @@ export type Database = {
           full_name?: string | null
           id: string
           updated_at?: string | null
-          invited_by_user_id?: string | null // Adicionado
-          is_family_member?: boolean | null // Adicionado
+          invited_by_user_id?: string | null
+          is_family_member?: boolean | null
         }
         Update: {
           avatar_url?: string | null
@@ -566,8 +534,8 @@ export type Database = {
           full_name?: string | null
           id?: string
           updated_at?: string | null
-          invited_by_user_id?: string | null // Adicionado
-          is_family_member?: boolean | null // Adicionado
+          invited_by_user_id?: string | null
+          is_family_member?: boolean | null
         }
         Relationships: [
           {
