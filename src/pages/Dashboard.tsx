@@ -143,7 +143,10 @@ export default function Dashboard() {
 
       if (isSameMonth(receiveDate, today) && isSameYear(receiveDate, today)) {
         if (account.received) {
-          totalConfirmedMonthlyIncome += amount;
+          // Apenas adiciona à receita confirmada se não foi transferido para o cofrinho
+          if (!account.transferred_to_piggy_bank) {
+            totalConfirmedMonthlyIncome += amount;
+          }
           numIncomeTransactions++;
         } else {
           monthlyIncomeForecast += amount;
@@ -201,7 +204,7 @@ export default function Dashboard() {
                 <TrendingDown className="h-4 w-4" />
                 <span>{numExpenseTransactions} pagamentos</span>
                 {monthlyExpensesForecast > 0 && (
-                  <span className="ml-auto text-muted-foreground">Previsão: R$ {monthlyExpensesForecast.toFixed(2)}</span>
+                  <span className="ml-auto text-muted-foreground">Previsão: R$ ${monthlyExpensesForecast.toFixed(2)}</span>
                 )}
               </div>
             </CardContent>
