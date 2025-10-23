@@ -129,3 +129,43 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Estilos para impressão */
+@media print {
+  /* Esconde todo o conteúdo que não é para impressão */
+  body > #root > div:not(.print-only-wrapper) {
+    display: none !important;
+  }
+
+  /* Garante que o wrapper do componente de impressão seja visível */
+  .print-only-wrapper {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 9999;
+    background-color: white;
+  }
+
+  /* Garante que o componente de impressão em si seja visível */
+  .print-only {
+    display: block !important;
+  }
+
+  /* Ajustes para tabelas na impressão */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+  th, td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: left;
+  }
+  th {
+    background-color: #f2f2f2;
+  }
+}

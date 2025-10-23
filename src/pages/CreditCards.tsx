@@ -1,9 +1,9 @@
 import { Button } from "@/components/ui/button";
-import { CreditCard, Plus, Edit, Trash2, ShoppingCart, CalendarIcon, ListChecks } from "lucide-react";
-import { useState, useEffect } from "react";
+import { CreditCard, Plus, Edit, Trash2, ShoppingCart, CalendarIcon, ListChecks, Printer } from "lucide-react";
+import { useState, useEffect, useRef } from "react"; // Importar useRef
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext"; // Corrigido aqui
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -20,8 +20,9 @@ import { cn } from "@/lib/utils";
 import { format, addMonths, getMonth, getYear, isSameMonth, isSameYear, parseISO, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Switch } from "@/components/ui/switch"; // Importar Switch
+import { Switch } from "@/components/ui/switch";
 import { Tables } from "@/integrations/supabase/types";
+import { PrintStatementComponent } from "@/components/PrintStatementComponent"; // Importar o novo componente
 
 // Helper function for formatting currency for display
 const formatCurrencyDisplay = (value: number | undefined): string => {
@@ -100,7 +101,7 @@ export default function CreditCards() {
   const [isStatementDialogOpen, setIsStatementDialogOpen] = useState(false);
   const [selectedCardForStatement, setSelectedCardForStatement] = useState<any>(null);
   const [selectedStatementMonthYear, setSelectedStatementMonthYear] = useState(format(new Date(), "yyyy-MM"));
-
+  const [printMode, setPrintMode] = useState<'none' | 'general' | 'byResponsiblePerson'>('none'); // Novo estado para modo de impressão
 
   const transactionForm = useForm<TransactionFormData>({
     resolver: zodResolver(transactionSchema),
@@ -155,6 +156,18 @@ export default function CreditCards() {
       setSelectedCardForTransaction(null);
     }
   }, [isTransactionFormOpen, selectedCardForTransaction, transactionForm]);
+
+  // Efeito para disparar a impressão quando o modo de impressão é ativado
+  useEffect(() => {
+    if (printMode !== 'none') {
+      // Usar um pequeno atraso para garantir que o DOM esteja atualizado antes de imprimir
+      const timer = setTimeout(() => {
+        window.print();
+        setPrintMode('none'); // Resetar o modo de impressão após a impressão
+      }, 500); 
+      return () => clearTimeout(timer);
+    }
+  }, [printMode]);
 
   // Buscar cartões
   const { data: cards, isLoading: isLoadingCards } = useQuery({
@@ -418,6 +431,14 @@ export default function CreditCards() {
     setSelectedCardForStatement(card);
     setIsStatementDialogOpen(true);
     setSelectedStatementMonthYear(format(new Date(), "yyyy-MM")); // Reset month when opening
+  };
+
+  const handlePrintGeneralStatement = () => {
+    setPrintMode('general');
+  };
+
+  const handlePrintByResponsiblePerson = () => {
+    setPrintMode('byResponsiblePerson');
   };
 
   const getAvailableLimit = (cardId: string, creditLimit: number) => {
@@ -969,13 +990,29 @@ export default function CreditCards() {
           ) : (
             <p className="text-muted-foreground text-center py-4">Nenhuma transação encontrada para este cartão no mês selecionado.</p>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
             <Button variant="outline" onClick={() => setIsStatementDialogOpen(false)}>
               Fechar
+            </Button>
+            <Button onClick={handlePrintGeneralStatement} className="flex items-center">
+              <Printer className="h-4 w-4 mr-2" /> Imprimir Extrato Geral
+            </Button>
+            <Button onClick={handlePrintByResponsiblePerson} className="flex items-center">
+              <Printer className="h-4 w-4 mr-2" /> Imprimir por Responsável
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Componente de impressão renderizado condicionalmente fora do fluxo normal */}
+      {printMode !== 'none' && selectedCardForStatement && (
+        <PrintStatementComponent
+          transactions={processedTransactions}
+          cardName={selectedCardForStatement.name}
+          monthYear={selectedStatementMonthYear}
+          printType={printMode}
+        />
+      )}
     </div>
   );
 }
