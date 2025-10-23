@@ -182,19 +182,19 @@ export default function CreditCards() {
     },
   });
 
-  // Buscar total gasto por cartão
+  // Buscar total gasto por cartão (AGORA DA TABELA credit_card_transactions)
   const { data: cardExpenses } = useQuery({
     queryKey: ["card_expenses"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("accounts_payable")
-        .select("card_id, amount, installments")
-        .not("card_id", "is", null);
+        .from("credit_card_transactions")
+        .select("card_id, amount, installments"); // Seleciona as colunas relevantes
       if (error) throw error;
       
-      const totals = data.reduce((acc: any, expense: any) => {
-        const cardId = expense.card_id;
-        const total = expense.amount * (expense.installments || 1);
+      const totals = data.reduce((acc: any, transaction: any) => {
+        const cardId = transaction.card_id;
+        // Considera o valor total da transação (amount * installments)
+        const total = transaction.amount * (transaction.installments || 1); 
         acc[cardId] = (acc[cardId] || 0) + total;
         return acc;
       }, {});
@@ -373,7 +373,7 @@ export default function CreditCards() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["card_expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["card_expenses"] }); // Invalida o cache de gastos do cartão
       toast.success("Compra registrada com sucesso!");
       setIsTransactionFormOpen(false);
       setSelectedCardForTransaction(null);
