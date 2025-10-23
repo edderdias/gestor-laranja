@@ -61,7 +61,7 @@ const transactionSchema = z.object({
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Valor inválido").transform(Number).refine(val => val > 0, "O valor deve ser positivo"),
   category_id: z.string().min(1, "Categoria é obrigatória"),
   purchase_date: z.date({ required_error: "Data da compra é obrigatória" }),
-  installments: z.string().transform(Number).refine(val => val >= 1, "Parcelas devem ser no mínimo 1"),
+  installments: z.string().transform(Number).refine(val => val >= 1, "Parcelas devem ser no mínimo 1").refine(val => Number.isInteger(val), "Quantidade de parcelas deve ser um número inteiro"), // Adicionado .refine para inteiro
   responsible_person_id: z.string().optional(),
   is_fixed: z.boolean().default(false), // Adicionado campo para transação fixa
 }).superRefine((data, ctx) => {
