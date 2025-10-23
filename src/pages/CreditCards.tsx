@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { CreditCard, Plus, Edit, Trash2, ShoppingCart, CalendarIcon } from "lucide-react";
+import { CreditCard, Plus, Edit, Trash2, ShoppingCart, CalendarIcon, ListChecks } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,6 +19,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tables } from "@/integrations/supabase/types";
 
 // Helper function for formatting currency for display
 const formatCurrencyDisplay = (value: number | undefined): string => {
@@ -79,6 +81,10 @@ export default function CreditCards() {
   // State for transaction form
   const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
   const [selectedCardForTransaction, setSelectedCardForTransaction] = useState<any>(null);
+
+  // State for statement dialog
+  const [isStatementDialogOpen, setIsStatementDialogOpen] = useState(false);
+  const [selectedCardForStatement, setSelectedCardForStatement] = useState<any>(null);
 
   const transactionForm = useForm<TransactionFormData>({
     resolver: zodResolver(transactionSchema),
@@ -185,6 +191,22 @@ export default function CreditCards() {
       if (error) throw error;
       return data;
     },
+  });
+
+  // Fetch transactions for the selected card statement
+  const { data: transactions, isLoading: isLoadingTransactions } = useQuery({
+    queryKey: ["credit_card_transactions", selectedCardForStatement?.id],
+    queryFn: async () => {
+      if (!selectedCardForStatement?.id) return [];
+      const { data, error } = await supabase
+        .from("credit_card_transactions")
+        .select("*, expense_categories(name), responsible_persons(name)")
+        .eq("card_id", selectedCardForStatement.id)
+        .order("purchase_date", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedCardForStatement?.id && isStatementDialogOpen,
   });
 
   // Mutation para salvar cartão
@@ -332,6 +354,11 @@ export default function CreditCards() {
   const handleLaunchPurchase = (card: any) => {
     setSelectedCardForTransaction(card);
     setIsTransactionFormOpen(true);
+  };
+
+  const handleViewStatement = (card: any) => {
+    setSelectedCardForStatement(card);
+    setIsStatementDialogOpen(true);
   };
 
   const getAvailableLimit = (cardId: string, creditLimit: number) => {
@@ -549,7 +576,14 @@ export default function CreditCards() {
                         {usedPercentage.toFixed(1)}% utilizado
                       </p>
                     </div>
-                    <div className="flex justify-end mt-4">
+                    <div className="flex justify-end gap-2 mt-4">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleViewStatement(card)}
+                      >
+                        <ListChecks className="h-4 w-4 mr-2" /> Ver Extrato
+                      </Button>
                       <Button 
                         variant="outline" 
                         size="sm" 
@@ -731,6 +765,55 @@ export default function CreditCards() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog for Credit Card Statement */}
+      <Dialog open={isStatementDialogOpen} onOpenChange={setIsStatementDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Extrato do Cartão: {selectedCardForStatement?.name}</DialogTitle>
+            <CardDescription>
+              Todas as transações registradas para este cartão.
+            </CardDescription>
+          </DialogHeader>
+          {isLoadingTransactions ? (
+            <p className="text-muted-foreground">Carregando extrato...</p>
+          ) : transactions && transactions.length > 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead>Responsável</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
+                    <TableHead className="text-right">Parcela</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transactions.map((transaction) => (
+                    <TableRow key={transaction.id}>
+                      <TableCell>{format(new Date(transaction.purchase_date), "dd/MM/yyyy")}</TableCell>
+                      <TableCell>{transaction.description}</TableCell>
+                      <TableCell>{(transaction.expense_categories as Tables<'expense_categories'>)?.name || "N/A"}</TableCell>
+                      <TableCell>{(transaction.responsible_persons as Tables<'responsible_persons'>)?.name || "N/A"}</TableCell>
+                      <TableCell className="text-right">R$ {transaction.amount.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{transaction.current_installment}/{transaction.installments}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-center py-4">Nenhuma transação encontrada para este cartão.</p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsStatementDialogOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
