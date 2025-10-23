@@ -298,6 +298,8 @@ export type Database = {
           installments: number | null
           purchase_date: string
           updated_at: string
+          is_fixed: boolean | null // Adicionado
+          original_fixed_transaction_id: string | null // Adicionado
         }
         Insert: {
           amount: number
@@ -311,6 +313,8 @@ export type Database = {
           installments?: number | null
           purchase_date: string
           updated_at?: string
+          is_fixed?: boolean | null // Adicionado
+          original_fixed_transaction_id?: string | null // Adicionado
         }
         Update: {
           amount?: number
@@ -324,6 +328,8 @@ export type Database = {
           installments?: number | null
           purchase_date?: string
           updated_at?: string
+          is_fixed?: boolean | null // Adicionado
+          original_fixed_transaction_id?: string | null // Adicionado
         }
         Relationships: [
           {
@@ -345,6 +351,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_card_transactions_original_fixed_transaction_id_fkey" // Adicionado
+            columns: ["original_fixed_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "credit_card_transactions"
             referencedColumns: ["id"]
           },
         ]
@@ -498,7 +511,7 @@ export type Database = {
           id: string
           type: Database["public"]["Enums"]["piggy_bank_entry_type"]
           user_id: string
-          bank_id: string | null // Adicionado
+          bank_id: string | null
         }
         Insert: {
           amount: number
@@ -508,7 +521,7 @@ export type Database = {
           id?: string
           type: Database["public"]["Enums"]["piggy_bank_entry_type"]
           user_id: string
-          bank_id?: string | null // Adicionado
+          bank_id?: string | null
         }
         Update: {
           amount?: number
@@ -518,7 +531,7 @@ export type Database = {
           id?: string
           type?: Database["public"]["Enums"]["piggy_bank_entry_type"]
           user_id?: string
-          bank_id?: string | null // Adicionado
+          bank_id?: string | null
         }
         Relationships: [
           {
@@ -529,7 +542,7 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "piggy_bank_entries_bank_id_fkey" // Adicionado
+            foreignKeyName: "piggy_bank_entries_bank_id_fkey"
             columns: ["bank_id"]
             isOneToOne: false
             referencedRelation: "banks"
@@ -544,8 +557,8 @@ export type Database = {
           full_name: string | null
           id: string
           updated_at: string | null
-          invited_by_user_id: string | null // Adicionado
-          is_family_member: boolean | null // Adicionado
+          invited_by_user_id: string | null
+          is_family_member: boolean | null
         }
         Insert: {
           avatar_url?: string | null
@@ -553,8 +566,8 @@ export type Database = {
           full_name?: string | null
           id: string
           updated_at?: string | null
-          invited_by_user_id?: string | null // Adicionado
-          is_family_member?: boolean | null // Adicionado
+          invited_by_user_id?: string | null
+          is_family_member?: boolean | null
         }
         Update: {
           avatar_url?: string | null
@@ -562,8 +575,8 @@ export type Database = {
           full_name?: string | null
           id?: string
           updated_at?: string | null
-          invited_by_user_id?: string | null // Adicionado
-          is_family_member?: boolean | null // Adicionado
+          invited_by_user_id?: string | null
+          is_family_member?: boolean | null
         }
         Relationships: [
           {
@@ -748,7 +761,7 @@ export type Enums<
     : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
-}
+  }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]

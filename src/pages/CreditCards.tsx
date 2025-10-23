@@ -13,13 +13,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
-import { format, addMonths } from "date-fns";
+import { format, addMonths, getMonth, getYear, isSameMonth, isSameYear, parseISO, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch"; // Importar Switch
 import { Tables } from "@/integrations/supabase/types";
 
 // Helper function for formatting currency for display
@@ -59,10 +60,26 @@ const transactionSchema = z.object({
   category_id: z.string().min(1, "Categoria é obrigatória"),
   purchase_date: z.date({ required_error: "Data da compra é obrigatória" }),
   installments: z.string().transform(Number).refine(val => val >= 1, "Parcelas devem ser no mínimo 1"),
-  responsible_person_id: z.string().optional(), // Adicionado campo para responsável
+  responsible_person_id: z.string().optional(),
+  is_fixed: z.boolean().default(false), // Adicionado campo para transação fixa
+}).superRefine((data, ctx) => {
+  if (data.is_fixed && data.installments !== 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Transações fixas devem ter 1 parcela.",
+      path: ["installments"],
+    });
+  }
 });
 
 type TransactionFormData = z.infer<typeof transactionSchema>;
+
+// Tipo estendido para transações no extrato, incluindo as geradas virtualmente
+type CreditCardTransactionWithGeneratedFlag = Tables<'credit_card_transactions'> & {
+  is_generated_fixed_instance?: boolean;
+  expense_categories?: Tables<'expense_categories'>;
+  responsible_persons?: Tables<'responsible_persons'>;
+};
 
 export default function CreditCards() {
   const { user } = useAuth();
@@ -75,16 +92,15 @@ export default function CreditCards() {
     credit_limit: 0,
   });
 
-  // Local state to manage the displayed string value of credit_limit
   const [creditLimitInput, setCreditLimitInput] = useState<string>("");
 
-  // State for transaction form
   const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
   const [selectedCardForTransaction, setSelectedCardForTransaction] = useState<any>(null);
 
-  // State for statement dialog
   const [isStatementDialogOpen, setIsStatementDialogOpen] = useState(false);
   const [selectedCardForStatement, setSelectedCardForStatement] = useState<any>(null);
+  const [selectedStatementMonthYear, setSelectedStatementMonthYear] = useState(format(new Date(), "yyyy-MM"));
+
 
   const transactionForm = useForm<TransactionFormData>({
     resolver: zodResolver(transactionSchema),
@@ -94,9 +110,18 @@ export default function CreditCards() {
       category_id: "",
       purchase_date: new Date(),
       installments: 1,
-      responsible_person_id: undefined, // Valor padrão
+      responsible_person_id: undefined,
+      is_fixed: false, // Valor padrão
     },
   });
+
+  const isFixedTransaction = transactionForm.watch("is_fixed");
+
+  useEffect(() => {
+    if (isFixedTransaction) {
+      transactionForm.setValue("installments", 1);
+    }
+  }, [isFixedTransaction, transactionForm]);
 
   useEffect(() => {
     if (isCardFormOpen && editingCard) {
@@ -108,7 +133,6 @@ export default function CreditCards() {
         credit_limit: editingCard.credit_limit,
         last_digits: editingCard.last_digits || "",
       });
-      // Initialize creditLimitInput with formatted value
       setCreditLimitInput(formatCurrencyDisplay(editingCard.credit_limit));
     } else if (!isCardFormOpen) {
       resetCardForm();
@@ -124,6 +148,7 @@ export default function CreditCards() {
         purchase_date: new Date(),
         installments: 1,
         responsible_person_id: undefined,
+        is_fixed: false,
       });
     } else if (!isTransactionFormOpen) {
       transactionForm.reset();
@@ -154,7 +179,6 @@ export default function CreditCards() {
         .not("card_id", "is", null);
       if (error) throw error;
       
-      // Agrupar por cartão e calcular total
       const totals = data.reduce((acc: any, expense: any) => {
         const cardId = expense.card_id;
         const total = expense.amount * (expense.installments || 1);
@@ -272,25 +296,20 @@ export default function CreditCards() {
         throw new Error("User or card not selected.");
       }
 
-      const numInstallments = values.installments;
-
-      for (let i = 0; i < numInstallments; i++) {
-        const currentPurchaseDate = addMonths(values.purchase_date, i);
-
-        const transactionDescription = numInstallments > 1
-          ? `${values.description} (${i + 1}/${numInstallments})`
-          : values.description;
-
+      if (values.is_fixed) {
+        // Inserir uma única transação fixa (template)
         const transactionData = {
-          description: transactionDescription,
+          description: values.description,
           amount: values.amount,
           card_id: selectedCardForTransaction.id,
           category_id: values.category_id,
-          purchase_date: format(currentPurchaseDate, "yyyy-MM-dd"),
-          installments: numInstallments,
-          current_installment: i + 1,
+          purchase_date: format(values.purchase_date, "yyyy-MM-dd"),
+          installments: 1, // Transações fixas têm 1 parcela no DB
+          current_installment: 1,
           created_by: user.id,
-          responsible_person_id: values.responsible_person_id || null, // Incluindo o responsável
+          responsible_person_id: values.responsible_person_id || null,
+          is_fixed: true,
+          original_fixed_transaction_id: null, // É o template original
         };
 
         const { error } = await supabase
@@ -298,11 +317,50 @@ export default function CreditCards() {
           .insert(transactionData);
 
         if (error) throw error;
+
+      } else {
+        // Lidar com transações não fixas com múltiplas parcelas
+        const numInstallments = values.installments;
+        let firstInstallmentId: string | null = null;
+
+        for (let i = 0; i < numInstallments; i++) {
+          const currentPurchaseDate = addMonths(values.purchase_date, i);
+
+          const transactionDescription = numInstallments > 1
+            ? `${values.description} (${i + 1}/${numInstallments})`
+            : values.description;
+
+          const transactionData = {
+            description: transactionDescription,
+            amount: values.amount,
+            card_id: selectedCardForTransaction.id,
+            category_id: values.category_id,
+            purchase_date: format(currentPurchaseDate, "yyyy-MM-dd"),
+            installments: numInstallments,
+            current_installment: i + 1,
+            created_by: user.id,
+            responsible_person_id: values.responsible_person_id || null,
+            is_fixed: false,
+            original_fixed_transaction_id: firstInstallmentId, // Link para a primeira parcela
+          };
+
+          const { data: insertedData, error } = await supabase
+            .from("credit_card_transactions")
+            .insert(transactionData)
+            .select("id") // Select the ID to link subsequent installments
+            .single();
+
+          if (error) throw error;
+
+          if (i === 0) {
+            firstInstallmentId = insertedData.id; // Capturar o ID da primeira parcela
+          }
+        }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["card_expenses"] }); // Invalida para atualizar o limite disponível
+      queryClient.invalidateQueries({ queryKey: ["card_expenses"] });
       toast.success("Compra registrada com sucesso!");
       setIsTransactionFormOpen(false);
       setSelectedCardForTransaction(null);
@@ -343,7 +401,7 @@ export default function CreditCards() {
     });
     setEditingCard(null);
     setIsCardFormOpen(false);
-    setCreditLimitInput(""); // Reset local input state for currency
+    setCreditLimitInput("");
   };
 
   const handleEdit = (card: any) => {
@@ -359,6 +417,7 @@ export default function CreditCards() {
   const handleViewStatement = (card: any) => {
     setSelectedCardForStatement(card);
     setIsStatementDialogOpen(true);
+    setSelectedStatementMonthYear(format(new Date(), "yyyy-MM")); // Reset month when opening
   };
 
   const getAvailableLimit = (cardId: string, creditLimit: number) => {
@@ -369,6 +428,68 @@ export default function CreditCards() {
   const getBrandLabel = (brand: string) => {
     return brand === "visa" ? "Visa" : "Mastercard";
   };
+
+  // Lógica para o seletor de mês do extrato
+  const generateMonthOptions = () => {
+    const options = [];
+    let date = addMonths(new Date(), -6); // Começa 6 meses atrás
+    for (let i = 0; i < 12; i++) { // 6 meses passados + mês atual + 5 meses futuros = 12 meses
+      options.push({
+        value: format(date, "yyyy-MM"),
+        label: format(date, "MMMM yyyy", { locale: ptBR }),
+      });
+      date = addMonths(date, 1);
+    }
+    return options;
+  };
+
+  const monthOptions = generateMonthOptions();
+  const [selectedYear, selectedMonth] = selectedStatementMonthYear.split('-').map(Number);
+  const selectedMonthDate = parseISO(`${selectedStatementMonthYear}-01`);
+
+  // Processar transações para exibição, incluindo a replicação de transações fixas
+  const processedTransactions = transactions?.flatMap(transaction => {
+    const transactionPurchaseDate = parseISO(transaction.purchase_date);
+    const currentMonthTransactions: CreditCardTransactionWithGeneratedFlag[] = [];
+
+    // 1. Incluir transações não fixas que pertencem ao mês selecionado
+    if (!transaction.is_fixed && isSameMonth(transactionPurchaseDate, selectedMonthDate) && isSameYear(transactionPurchaseDate, selectedMonthDate)) {
+      currentMonthTransactions.push(transaction);
+    } 
+    // 2. Incluir transações fixas originais que pertencem ao mês selecionado
+    else if (transaction.is_fixed && isSameMonth(transactionPurchaseDate, selectedMonthDate) && isSameYear(transactionPurchaseDate, selectedMonthDate)) {
+      currentMonthTransactions.push(transaction);
+    }
+    // 3. Gerar ocorrências para transações fixas em meses futuros
+    else if (transaction.is_fixed && transactionPurchaseDate <= endOfMonth(selectedMonthDate)) {
+      // Verificar se já existe uma ocorrência real para este mês e esta transação fixa
+      const existingOccurrence = transactions.find(
+        (t) => t.original_fixed_transaction_id === transaction.id &&
+               isSameMonth(parseISO(t.purchase_date), selectedMonthDate) &&
+               isSameYear(parseISO(t.purchase_date), selectedMonthDate)
+      );
+
+      if (!existingOccurrence) {
+        // Se não existe uma ocorrência real, cria uma instância gerada para exibição
+        const displayDate = new Date(selectedYear, selectedMonth - 1, transactionPurchaseDate.getDate());
+        // Ajusta o dia se o mês selecionado não tiver aquele dia (ex: 31 de fevereiro)
+        if (displayDate.getMonth() !== selectedMonth - 1) {
+          displayDate.setDate(0); // Vai para o último dia do mês anterior
+          displayDate.setDate(displayDate.getDate() + 1); // Adiciona 1 dia para o último dia do mês atual
+        }
+
+        currentMonthTransactions.push({
+          ...transaction,
+          id: `temp-${transaction.id}-${selectedStatementMonthYear}`, // ID temporário para instâncias geradas
+          purchase_date: format(displayDate, "yyyy-MM-dd"),
+          is_generated_fixed_instance: true,
+          original_fixed_transaction_id: transaction.id, // Referência ao modelo fixo original
+        });
+      }
+    }
+    return currentMonthTransactions;
+  }).sort((a, b) => parseISO(a.purchase_date).getTime() - parseISO(b.purchase_date).getTime()) || [];
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -461,12 +582,11 @@ export default function CreditCards() {
                       value={creditLimitInput}
                       onChange={(e) => {
                         const rawValue = e.target.value;
-                        setCreditLimitInput(rawValue); // Update local string state
+                        setCreditLimitInput(rawValue);
                         const numericValue = parseCurrencyInput(rawValue);
-                        setCardFormData((prev) => ({ ...prev, credit_limit: numericValue })); // Update cardFormData with numeric value
+                        setCardFormData((prev) => ({ ...prev, credit_limit: numericValue }));
                       }}
                       onBlur={() => {
-                        // Format on blur
                         setCreditLimitInput(formatCurrencyDisplay(cardFormData.credit_limit));
                       }}
                       placeholder="R$ 0,00"
@@ -631,19 +751,41 @@ export default function CreditCards() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={transactionForm.control}
-                name="amount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Valor da Parcela</FormLabel>
-                    <FormControl>
-                      <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid grid-cols-2 gap-4"> {/* Layout ajustado */}
+                <FormField
+                  control={transactionForm.control}
+                  name="amount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Valor da Parcela</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={transactionForm.control}
+                  name="is_fixed"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm mt-2">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-base">Valor Fixo</FormLabel>
+                        <FormDescription>
+                          Marque se esta compra se repete todos os meses.
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
               <FormField
                 control={transactionForm.control}
                 name="category_id"
@@ -714,19 +856,21 @@ export default function CreditCards() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={transactionForm.control}
-                name="installments"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Quantidade de Parcelas</FormLabel>
-                    <FormControl>
-                      <Input type="number" min="1" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {!isFixedTransaction && ( // Condicionalmente renderiza o campo de parcelas
+                <FormField
+                  control={transactionForm.control}
+                  name="installments"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Quantidade de Parcelas</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="1" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               <FormField
                 control={transactionForm.control}
                 name="responsible_person_id"
@@ -777,9 +921,23 @@ export default function CreditCards() {
               Todas as transações registradas para este cartão.
             </CardDescription>
           </DialogHeader>
+          <div className="flex justify-end mb-4">
+            <Select value={selectedStatementMonthYear} onValueChange={setSelectedStatementMonthYear}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Selecione o mês" />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           {isLoadingTransactions ? (
             <p className="text-muted-foreground">Carregando extrato...</p>
-          ) : transactions && transactions.length > 0 ? (
+          ) : processedTransactions && processedTransactions.length > 0 ? (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -793,21 +951,23 @@ export default function CreditCards() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transactions.map((transaction) => (
+                  {processedTransactions.map((transaction) => (
                     <TableRow key={transaction.id}>
                       <TableCell>{format(new Date(transaction.purchase_date), "dd/MM/yyyy")}</TableCell>
                       <TableCell>{transaction.description}</TableCell>
                       <TableCell>{(transaction.expense_categories as Tables<'expense_categories'>)?.name || "N/A"}</TableCell>
                       <TableCell>{(transaction.responsible_persons as Tables<'responsible_persons'>)?.name || "N/A"}</TableCell>
                       <TableCell className="text-right">R$ {transaction.amount.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{transaction.current_installment}/{transaction.installments}</TableCell>
+                      <TableCell className="text-right">
+                        {transaction.is_fixed ? "Fixo" : `${transaction.current_installment}/${transaction.installments}`}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
           ) : (
-            <p className="text-muted-foreground text-center py-4">Nenhuma transação encontrada para este cartão.</p>
+            <p className="text-muted-foreground text-center py-4">Nenhuma transação encontrada para este cartão no mês selecionado.</p>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsStatementDialogOpen(false)}>
