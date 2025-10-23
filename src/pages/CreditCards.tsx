@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { CreditCard, Plus, Edit, Trash2, ShoppingCart, CalendarIcon, ListChecks, Printer } from "lucide-react";
+import { CreditCard, Plus, Edit, Trash2, ShoppingCart, CalendarIcon, ListChecks, Printer, Pencil } from "lucide-react";
 import { useState, useEffect, useRef } from "react"; // Importar useRef
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,6 +23,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Switch } from "@/components/ui/switch";
 import { Tables } from "@/integrations/supabase/types";
 import { PrintStatementComponent } from "@/components/PrintStatementComponent"; // Importar o novo componente
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // Importar Tooltip
 
 // Helper function for formatting currency for display
 const formatCurrencyDisplay = (value: number | undefined): string => {
@@ -97,6 +98,7 @@ export default function CreditCards() {
 
   const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
   const [selectedCardForTransaction, setSelectedCardForTransaction] = useState<any>(null);
+  const [editingTransaction, setEditingTransaction] = useState<CreditCardTransactionWithGeneratedFlag | null>(null); // Novo estado para edição de transação
 
   const [isStatementDialogOpen, setIsStatementDialogOpen] = useState(false);
   const [selectedCardForStatement, setSelectedCardForStatement] = useState<any>(null);
@@ -140,22 +142,39 @@ export default function CreditCards() {
     }
   }, [isCardFormOpen, editingCard]);
 
+  // Efeito para preencher/resetar o formulário de transação (para nova compra ou edição)
   useEffect(() => {
-    if (isTransactionFormOpen && selectedCardForTransaction) {
-      transactionForm.reset({
-        description: "",
-        amount: 0,
-        category_id: "",
-        purchase_date: new Date(),
-        installments: 1,
-        responsible_person_id: undefined,
-        is_fixed: false,
-      });
-    } else if (!isTransactionFormOpen) {
+    if (isTransactionFormOpen) {
+      if (editingTransaction) {
+        // Populate form for editing
+        transactionForm.reset({
+          description: editingTransaction.description,
+          amount: editingTransaction.amount,
+          category_id: editingTransaction.category_id || "",
+          purchase_date: parseISO(editingTransaction.purchase_date),
+          installments: editingTransaction.installments || 1,
+          responsible_person_id: editingTransaction.responsible_person_id || undefined,
+          is_fixed: editingTransaction.is_fixed || false,
+        });
+      } else {
+        // Reset for new transaction
+        transactionForm.reset({
+          description: "",
+          amount: 0,
+          category_id: "",
+          purchase_date: new Date(),
+          installments: 1,
+          responsible_person_id: undefined,
+          is_fixed: false,
+        });
+      }
+    } else {
+      // When dialog closes, clear editing state
       transactionForm.reset();
+      setEditingTransaction(null);
       setSelectedCardForTransaction(null);
     }
-  }, [isTransactionFormOpen, selectedCardForTransaction, transactionForm]);
+  }, [isTransactionFormOpen, editingTransaction, transactionForm]);
 
   // Efeito para disparar a impressão quando o modo de impressão é ativado
   useEffect(() => {
@@ -310,86 +329,118 @@ export default function CreditCards() {
     },
   });
 
-  // Mutation para inserir transação de cartão de crédito
-  const insertCreditCardTransactionMutation = useMutation({
+  // Mutation para salvar/atualizar transação de cartão de crédito
+  const saveCreditCardTransactionMutation = useMutation({
     mutationFn: async (values: TransactionFormData) => {
       if (!user?.id || !selectedCardForTransaction?.id) {
-        toast.error("Usuário ou cartão não selecionado. Não foi possível registrar a compra.");
+        toast.error("Usuário ou cartão não selecionado. Não foi possível salvar a compra.");
         throw new Error("User or card not selected.");
       }
 
-      if (values.is_fixed) {
-        // Inserir uma única transação fixa (template)
-        const transactionData = {
-          description: values.description,
-          amount: values.amount,
-          card_id: selectedCardForTransaction.id,
-          category_id: values.category_id,
-          purchase_date: format(values.purchase_date, "yyyy-MM-dd"),
-          installments: 1, // Transações fixas têm 1 parcela no DB
-          current_installment: 1,
-          created_by: user.id,
-          responsible_person_id: values.responsible_person_id || null,
-          is_fixed: true,
-          original_fixed_transaction_id: null, // É o template original
-        };
+      if (editingTransaction && editingTransaction.is_generated_fixed_instance) {
+        toast.info("Não é possível editar uma ocorrência gerada. Edite a transação fixa original.");
+        throw new Error("Cannot edit generated fixed instance.");
+      }
 
+      const baseTransactionData = {
+        description: values.description,
+        amount: values.amount,
+        card_id: selectedCardForTransaction.id,
+        category_id: values.category_id,
+        purchase_date: format(values.purchase_date, "yyyy-MM-dd"),
+        responsible_person_id: values.responsible_person_id || null,
+        created_by: user.id,
+      };
+
+      if (editingTransaction) {
+        // Update existing transaction
         const { error } = await supabase
           .from("credit_card_transactions")
-          .insert(transactionData);
-
+          .update({
+            ...baseTransactionData,
+            installments: values.is_fixed ? 1 : values.installments,
+            current_installment: values.is_fixed ? 1 : editingTransaction.current_installment, // Keep current installment for non-fixed
+            is_fixed: values.is_fixed,
+            original_fixed_transaction_id: editingTransaction.original_fixed_transaction_id,
+          })
+          .eq("id", editingTransaction.id);
         if (error) throw error;
-
       } else {
-        // Lidar com transações não fixas com múltiplas parcelas
-        const numInstallments = values.installments;
-        let firstInstallmentId: string | null = null;
-
-        for (let i = 0; i < numInstallments; i++) {
-          const currentPurchaseDate = addMonths(values.purchase_date, i);
-
-          const transactionDescription = numInstallments > 1
-            ? `${values.description} (${i + 1}/${numInstallments})`
-            : values.description;
-
+        // Insert new transaction
+        if (values.is_fixed) {
           const transactionData = {
-            description: transactionDescription,
-            amount: values.amount,
-            card_id: selectedCardForTransaction.id,
-            category_id: values.category_id,
-            purchase_date: format(currentPurchaseDate, "yyyy-MM-dd"),
-            installments: numInstallments,
-            current_installment: i + 1,
-            created_by: user.id,
-            responsible_person_id: values.responsible_person_id || null,
-            is_fixed: false,
-            original_fixed_transaction_id: firstInstallmentId, // Link para a primeira parcela
+            ...baseTransactionData,
+            installments: 1,
+            current_installment: 1,
+            is_fixed: true,
+            original_fixed_transaction_id: null,
           };
-
-          const { data: insertedData, error } = await supabase
-            .from("credit_card_transactions")
-            .insert(transactionData)
-            .select("id") // Select the ID to link subsequent installments
-            .single();
-
+          const { error } = await supabase.from("credit_card_transactions").insert(transactionData);
           if (error) throw error;
+        } else {
+          const numInstallments = values.installments;
+          let firstInstallmentId: string | null = null;
 
-          if (i === 0) {
-            firstInstallmentId = insertedData.id; // Capturar o ID da primeira parcela
+          for (let i = 0; i < numInstallments; i++) {
+            const currentPurchaseDate = addMonths(values.purchase_date, i);
+            const transactionDescription = numInstallments > 1
+              ? `${values.description} (${i + 1}/${numInstallments})`
+              : values.description;
+
+            const installmentData = {
+              ...baseTransactionData,
+              description: transactionDescription,
+              purchase_date: format(currentPurchaseDate, "yyyy-MM-dd"),
+              installments: numInstallments,
+              current_installment: i + 1,
+              is_fixed: false,
+              original_fixed_transaction_id: firstInstallmentId,
+            };
+
+            const { data: insertedData, error } = await supabase
+              .from("credit_card_transactions")
+              .insert(installmentData)
+              .select("id")
+              .single();
+
+            if (error) throw error;
+            if (i === 0) {
+              firstInstallmentId = insertedData.id;
+            }
           }
         }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["card_expenses"] }); // Invalida o cache de gastos do cartão
-      toast.success("Compra registrada com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["card_expenses"] });
+      toast.success(editingTransaction ? "Lançamento atualizado com sucesso!" : "Compra registrada com sucesso!");
       setIsTransactionFormOpen(false);
-      setSelectedCardForTransaction(null);
+      setEditingTransaction(null);
       transactionForm.reset();
     },
     onError: (error) => {
-      toast.error("Erro ao registrar compra: " + error.message);
+      toast.error("Erro ao salvar lançamento: " + error.message);
+      console.error(error);
+    },
+  });
+
+  // Mutation para deletar transação de cartão de crédito
+  const deleteCreditCardTransactionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("credit_card_transactions")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["card_expenses"] });
+      toast.success("Lançamento excluído com sucesso!");
+    },
+    onError: (error) => {
+      toast.error("Erro ao excluir lançamento: " + error.message);
       console.error(error);
     },
   });
@@ -409,7 +460,7 @@ export default function CreditCards() {
   };
 
   const handleTransactionSubmit = (values: TransactionFormData) => {
-    insertCreditCardTransactionMutation.mutate(values);
+    saveCreditCardTransactionMutation.mutate(values);
   };
 
   const resetCardForm = () => {
@@ -426,13 +477,14 @@ export default function CreditCards() {
     setCreditLimitInput("");
   };
 
-  const handleEdit = (card: any) => {
+  const handleEditCard = (card: any) => {
     setEditingCard(card);
     setIsCardFormOpen(true);
   };
 
   const handleLaunchPurchase = (card: any) => {
     setSelectedCardForTransaction(card);
+    setEditingTransaction(null); // Ensure we're creating a new one
     setIsTransactionFormOpen(true);
   };
 
@@ -440,6 +492,26 @@ export default function CreditCards() {
     setSelectedCardForStatement(card);
     setIsStatementDialogOpen(true);
     setSelectedStatementMonthYear(format(new Date(), "yyyy-MM")); // Reset month when opening
+  };
+
+  const handleEditTransaction = (transaction: CreditCardTransactionWithGeneratedFlag) => {
+    if (transaction.is_generated_fixed_instance) {
+      toast.info("Não é possível editar uma ocorrência gerada. Edite a transação fixa original.");
+      return;
+    }
+    setSelectedCardForTransaction(cards?.find(card => card.id === transaction.card_id)); // Set card context for the form
+    setEditingTransaction(transaction);
+    setIsTransactionFormOpen(true);
+  };
+
+  const handleDeleteTransaction = (transaction: CreditCardTransactionWithGeneratedFlag) => {
+    if (transaction.is_generated_fixed_instance) {
+      toast.info("Não é possível excluir uma ocorrência gerada. Exclua a transação fixa original.");
+      return;
+    }
+    if (confirm("Tem certeza que deseja excluir este lançamento? Esta ação é irreversível.")) {
+      deleteCreditCardTransactionMutation.mutate(transaction.id);
+    }
   };
 
   const handlePrintGeneralStatement = () => {
@@ -666,7 +738,7 @@ export default function CreditCards() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleEdit(card)}
+                          onClick={() => handleEditCard(card)}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -756,13 +828,13 @@ export default function CreditCards() {
         )}
       </main>
 
-      {/* Dialog for launching a new credit card purchase */}
+      {/* Dialog for launching a new credit card purchase / editing an existing transaction */}
       <Dialog open={isTransactionFormOpen} onOpenChange={setIsTransactionFormOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Lançar Compra no Cartão</DialogTitle>
+            <DialogTitle>{editingTransaction ? "Editar Lançamento" : "Lançar Compra no Cartão"}</DialogTitle>
             <CardDescription>
-              Registrar uma nova compra para o cartão:{" "}
+              {editingTransaction ? "Atualizar lançamento para o cartão:" : "Registrar uma nova compra para o cartão:"}{" "}
               <span className="font-semibold">{selectedCardForTransaction?.name}</span>
             </CardDescription>
           </DialogHeader>
@@ -810,6 +882,7 @@ export default function CreditCards() {
                         <Switch
                           checked={field.value}
                           onCheckedChange={field.onChange}
+                          disabled={!!editingTransaction?.original_fixed_transaction_id} // Disable if it's an instance of a fixed transaction
                         />
                       </FormControl>
                     </FormItem>
@@ -933,8 +1006,8 @@ export default function CreditCards() {
                 <Button type="button" variant="outline" onClick={() => setIsTransactionFormOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={insertCreditCardTransactionMutation.isPending}>
-                  {insertCreditCardTransactionMutation.isPending ? "Registrando..." : "Registrar Compra"}
+                <Button type="submit" disabled={saveCreditCardTransactionMutation.isPending}>
+                  {saveCreditCardTransactionMutation.isPending ? "Salvando..." : (editingTransaction ? "Atualizar Lançamento" : "Registrar Compra")}
                 </Button>
               </DialogFooter>
             </form>
@@ -978,21 +1051,62 @@ export default function CreditCards() {
                     <TableHead>Responsável</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
                     <TableHead className="text-right">Parcela</TableHead>
+                    <TableHead className="text-right">Ações</TableHead> {/* Nova coluna de ações */}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {processedTransactions.map((transaction) => (
-                    <TableRow key={transaction.id}>
-                      <TableCell>{format(new Date(transaction.purchase_date), "dd/MM/yyyy")}</TableCell>
-                      <TableCell>{transaction.description}</TableCell>
-                      <TableCell>{(transaction.expense_categories as Tables<'expense_categories'>)?.name || "N/A"}</TableCell>
-                      <TableCell>{(transaction.responsible_persons as Tables<'responsible_persons'>)?.name || "N/A"}</TableCell>
-                      <TableCell className="text-right">R$ {transaction.amount.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">
-                        {transaction.is_fixed ? "Fixo" : `${transaction.current_installment}/${transaction.installments}`}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  <TooltipProvider> {/* Adicionado TooltipProvider */}
+                    {processedTransactions.map((transaction) => (
+                      <TableRow key={transaction.id}>
+                        <TableCell>{format(new Date(transaction.purchase_date), "dd/MM/yyyy")}</TableCell>
+                        <TableCell>{transaction.description}</TableCell>
+                        <TableCell>{(transaction.expense_categories as Tables<'expense_categories'>)?.name || "N/A"}</TableCell>
+                        <TableCell>{(transaction.responsible_persons as Tables<'responsible_persons'>)?.name || "N/A"}</TableCell>
+                        <TableCell className="text-right">R$ {transaction.amount.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">
+                          {transaction.is_fixed ? "Fixo" : `${transaction.current_installment}/${transaction.installments}`}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  onClick={() => handleEditTransaction(transaction)}
+                                  disabled={transaction.is_generated_fixed_instance}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              {transaction.is_generated_fixed_instance && (
+                                <TooltipContent>
+                                  <p>Edite a transação fixa original para alterar esta ocorrência.</p>
+                                </TooltipContent>
+                              )}
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  onClick={() => handleDeleteTransaction(transaction)}
+                                  disabled={deleteCreditCardTransactionMutation.isPending || transaction.is_generated_fixed_instance}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </TooltipTrigger>
+                              {transaction.is_generated_fixed_instance && (
+                                <TooltipContent>
+                                  <p>Exclua a transação fixa original para remover esta ocorrência.</p>
+                                </TooltipContent>
+                              )}
+                            </Tooltip>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TooltipProvider>
                 </TableBody>
               </Table>
             </div>
