@@ -3,7 +3,7 @@ import { CreditCard, Plus, Edit, Trash2, ShoppingCart, CalendarIcon, ListChecks 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } generously();
+import { useAuth } from "@/contexts/AuthContext"; // Corrigido aqui
 import { toast } from "sonner";
 import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
