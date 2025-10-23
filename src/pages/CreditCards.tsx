@@ -57,6 +57,7 @@ const transactionSchema = z.object({
   category_id: z.string().min(1, "Categoria é obrigatória"),
   purchase_date: z.date({ required_error: "Data da compra é obrigatória" }),
   installments: z.string().transform(Number).refine(val => val >= 1, "Parcelas devem ser no mínimo 1"),
+  responsible_person_id: z.string().optional(), // Adicionado campo para responsável
 });
 
 type TransactionFormData = z.infer<typeof transactionSchema>;
@@ -87,6 +88,7 @@ export default function CreditCards() {
       category_id: "",
       purchase_date: new Date(),
       installments: 1,
+      responsible_person_id: undefined, // Valor padrão
     },
   });
 
@@ -115,6 +117,7 @@ export default function CreditCards() {
         category_id: "",
         purchase_date: new Date(),
         installments: 1,
+        responsible_person_id: undefined,
       });
     } else if (!isTransactionFormOpen) {
       transactionForm.reset();
@@ -165,6 +168,20 @@ export default function CreditCards() {
         .from("expense_categories")
         .select("*")
         .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Buscar responsáveis
+  const { data: responsiblePersons, isLoading: isLoadingResponsiblePersons } = useQuery({
+    queryKey: ["responsible-persons"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("responsible_persons")
+        .select("*")
+        .order("name");
+      
       if (error) throw error;
       return data;
     },
@@ -251,6 +268,7 @@ export default function CreditCards() {
           installments: numInstallments,
           current_installment: i + 1,
           created_by: user.id,
+          responsible_person_id: values.responsible_person_id || null, // Incluindo o responsável
         };
 
         const { error } = await supabase
@@ -671,6 +689,34 @@ export default function CreditCards() {
                     <FormControl>
                       <Input type="number" min="1" {...field} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={transactionForm.control}
+                name="responsible_person_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Responsável pela Compra</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o responsável" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {isLoadingResponsiblePersons ? (
+                          <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                        ) : (
+                          responsiblePersons?.map((person) => (
+                            <SelectItem key={person.id} value={person.id}>
+                              {person.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
