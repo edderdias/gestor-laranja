@@ -184,23 +184,32 @@ export default function CreditCards() {
 
   // Buscar total gasto por cartão (AGORA DA TABELA credit_card_transactions)
   const { data: cardExpenses } = useQuery({
-    queryKey: ["card_expenses"],
+    queryKey: ["card_expenses", user?.id],
     queryFn: async () => {
+      if (!user?.id) return {};
+      const today = new Date();
+      const startOfMonth = format(new Date(today.getFullYear(), today.getMonth(), 1), "yyyy-MM-dd");
+      const endOfMonth = format(new Date(today.getFullYear(), today.getMonth() + 1, 0), "yyyy-MM-dd");
+
       const { data, error } = await supabase
         .from("credit_card_transactions")
-        .select("card_id, amount, installments"); // Seleciona as colunas relevantes
+        .select("card_id, amount, purchase_date") // Select purchase_date
+        .eq("created_by", user.id) // Filter by current user
+        .gte("purchase_date", startOfMonth) // Filter for current month
+        .lte("purchase_date", endOfMonth); // Filter for current month
+
       if (error) throw error;
       
-      const totals = data.reduce((acc: any, transaction: any) => {
+      const totals = data.reduce((acc: { [key: string]: number }, transaction: Tables<'credit_card_transactions'>) => {
         const cardId = transaction.card_id;
-        // Considera o valor total da transação (amount * installments)
-        const total = transaction.amount * (transaction.installments || 1); 
-        acc[cardId] = (acc[cardId] || 0) + total;
+        // Sum only the amount (which is the installment value) for transactions in the current month
+        acc[cardId] = (acc[cardId] || 0) + transaction.amount;
         return acc;
       }, {});
       
       return totals;
     },
+    enabled: !!user?.id, // Only run if user is available
   });
 
   // Buscar categorias de despesa
@@ -695,7 +704,7 @@ export default function CreditCards() {
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Utilizado:</span>
+                        <span className="text-muted-foreground">Utilizado (Mês):</span> {/* Updated label */}
                         <span className="font-semibold text-expense">
                           R$ {((card.credit_limit || 0) - availableLimit).toFixed(2)}
                         </span>
