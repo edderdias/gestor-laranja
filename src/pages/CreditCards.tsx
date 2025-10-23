@@ -967,7 +967,17 @@ export default function CreditCards() {
                     <FormItem>
                       <FormLabel>Quantidade de Parcelas</FormLabel>
                       <FormControl>
-                        <Input type="number" min="1" {...field} />
+                        <Input
+                          type="number"
+                          min="1"
+                          {...field}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Permite apenas dígitos
+                            const filteredValue = value.replace(/[^0-9]/g, '');
+                            field.onChange(filteredValue);
+                          }}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
