@@ -16,13 +16,18 @@ interface PrintStatementProps {
   printType: 'general' | 'byResponsiblePerson';
 }
 
-export const PrintStatementComponent: React.FC<PrintStatementProps> = ({
+export const PrintStatementComponent = React.forwardRef<HTMLDivElement, PrintStatementProps>(({
   transactions,
   cardName,
   monthYear,
   printType,
-}) => {
+}, ref) => {
   const formattedMonthYear = format(parseISO(`${monthYear}-01`), "MMMM yyyy", { locale: ptBR });
+
+  // Calculate total amount for the general statement
+  const totalGeneralAmount = transactions.reduce((sum, transaction) => {
+    return sum + transaction.amount;
+  }, 0);
 
   // Group transactions by responsible person for 'byResponsiblePerson' print type
   const groupedTransactions = React.useMemo(() => {
@@ -38,8 +43,11 @@ export const PrintStatementComponent: React.FC<PrintStatementProps> = ({
   }, [transactions, printType]);
 
   return (
-    <div className="p-6 print-only"> {/* 'print-only' class will control visibility via CSS */}
-      <h1 className="text-2xl font-bold mb-4">Extrato do Cartão: {cardName}</h1>
+    <div ref={ref} className="p-6 print-only"> {/* 'print-only' class will control visibility via CSS */}
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Extrato do Cartão: {cardName}</h1>
+        <h2 className="text-xl font-semibold">Total Geral: R$ {totalGeneralAmount.toFixed(2)}</h2>
+      </div>
       <h2 className="text-xl font-semibold mb-6">Mês de Referência: {formattedMonthYear}</h2>
 
       {printType === 'general' ? (
@@ -105,4 +113,4 @@ export const PrintStatementComponent: React.FC<PrintStatementProps> = ({
       )}
     </div>
   );
-};
+});

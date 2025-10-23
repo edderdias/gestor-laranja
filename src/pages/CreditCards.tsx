@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tables } from "@/integrations/supabase/types";
 import { PrintStatementComponent } from "@/components/PrintStatementComponent"; // Importar o novo componente
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // Importar Tooltip
+import html2pdf from 'html2pdf.js'; // Importar html2pdf
 
 // Helper function for formatting currency for display
 const formatCurrencyDisplay = (value: number | undefined): string => {
@@ -105,6 +106,8 @@ export default function CreditCards() {
   const [selectedStatementMonthYear, setSelectedStatementMonthYear] = useState(format(new Date(), "yyyy-MM"));
   const [printMode, setPrintMode] = useState<'none' | 'general' | 'byResponsiblePerson'>('none'); // Novo estado para modo de impressão
 
+  const printRef = useRef<HTMLDivElement>(null); // Ref para o componente de impressão
+
   const transactionForm = useForm<TransactionFormData>({
     resolver: zodResolver(transactionSchema),
     defaultValues: {
@@ -178,7 +181,7 @@ export default function CreditCards() {
 
   // Efeito para disparar a impressão quando o modo de impressão é ativado
   useEffect(() => {
-    if (printMode !== 'none') {
+    if (printMode === 'byResponsiblePerson') { // Only for native print
       // Usar um pequeno atraso para garantir que o DOM esteja atualizado antes de imprimir
       const timer = setTimeout(() => {
         window.print();
@@ -515,11 +518,18 @@ export default function CreditCards() {
   };
 
   const handlePrintGeneralStatement = () => {
-    setPrintMode('general');
+    if (printRef.current) {
+      toast.info("Gerando PDF do extrato geral...");
+      html2pdf().from(printRef.current).save(`extrato-geral-${selectedCardForStatement?.name}-${selectedStatementMonthYear}.pdf`);
+      setIsStatementDialogOpen(false); // Close dialog after initiating PDF generation
+    } else {
+      toast.error("Não foi possível gerar o PDF. Conteúdo não encontrado.");
+    }
+    setPrintMode('none'); // Reset print mode
   };
 
   const handlePrintByResponsiblePerson = () => {
-    setPrintMode('byResponsiblePerson');
+    setPrintMode('byResponsiblePerson'); // This will trigger window.print() via useEffect
   };
 
   const getAvailableLimit = (cardId: string, creditLimit: number) => {
@@ -1128,7 +1138,7 @@ export default function CreditCards() {
               Fechar
             </Button>
             <Button onClick={handlePrintGeneralStatement} className="flex items-center">
-              <Printer className="h-4 w-4 mr-2" /> Imprimir Extrato Geral
+              <Printer className="h-4 w-4 mr-2" /> Imprimir Extrato Geral (PDF)
             </Button>
             <Button onClick={handlePrintByResponsiblePerson} className="flex items-center">
               <Printer className="h-4 w-4 mr-2" /> Imprimir por Responsável
@@ -1138,13 +1148,16 @@ export default function CreditCards() {
       </Dialog>
 
       {/* Componente de impressão renderizado condicionalmente fora do fluxo normal */}
-      {printMode !== 'none' && selectedCardForStatement && (
-        <PrintStatementComponent
-          transactions={processedTransactions}
-          cardName={selectedCardForStatement.name}
-          monthYear={selectedStatementMonthYear}
-          printType={printMode}
-        />
+      {selectedCardForStatement && (printMode === 'general' || printMode === 'byResponsiblePerson') && (
+        <div className="print-only-wrapper">
+          <PrintStatementComponent
+            ref={printRef}
+            transactions={processedTransactions}
+            cardName={selectedCardForStatement.name}
+            monthYear={selectedStatementMonthYear}
+            printType={printMode}
+          />
+        </div>
       )}
     </div>
   );
