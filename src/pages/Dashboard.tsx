@@ -135,7 +135,7 @@ export default function Dashboard() {
       if (!user?.id) return [];
       const { data, error } = await supabase
         .from("credit_card_transactions")
-        .select("amount, installments")
+        .select("amount, purchase_date") // <-- Seleciona purchase_date
         .in("created_by", userIdsToFetch);
       if (error) throw error;
       return data;
@@ -168,11 +168,15 @@ export default function Dashboard() {
   let monthlyExpensesForecast = 0;
   let numExpenseTransactions = 0;
 
-  // Calculate total used credit card limit
+  // Calculate total used credit card limit for the CURRENT MONTH
   let totalCreditCardUsedLimit = 0;
   if (allCreditCardTransactions) {
     totalCreditCardUsedLimit = allCreditCardTransactions.reduce((sum, transaction) => {
-      return sum + (transaction.amount * (transaction.installments || 1));
+      const transactionDate = parseISO(transaction.purchase_date); // Parse purchase_date
+      if (isSameMonth(transactionDate, today) && isSameYear(transactionDate, today)) {
+        return sum + transaction.amount; // Soma o valor da parcela individual para o mês atual
+      }
+      return sum;
     }, 0);
   }
 
@@ -309,7 +313,7 @@ export default function Dashboard() {
                 <TrendingDown className="h-4 w-4" />
                 <span>{numExpenseTransactions} pagamentos</span>
                 {monthlyExpensesForecast > 0 && (
-                  <span className="ml-auto text-muted-foreground">Previsão: R$ {monthlyExpensesForecast.toFixed(2)}</span>
+                  <span className="ml-auto text-muted-foreground">Previsão: R$ ${monthlyExpensesForecast.toFixed(2)}</span>
                 )}
               </div>
             </CardContent>
@@ -332,7 +336,7 @@ export default function Dashboard() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardDescription>Cartões de Crédito</CardDescription>
+              <CardDescription>Gastos de Cartão (Mês)</CardDescription> {/* Changed description */}
               <CardTitle className="text-3xl">
                 {isLoading ? "Carregando..." : `R$ ${totalCreditCardUsedLimit.toFixed(2)}`}
               </CardTitle>
