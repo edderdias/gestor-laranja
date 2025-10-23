@@ -403,7 +403,7 @@ export default function Dashboard() {
           </Link>
 
           {/* Novo Card para Transferir para Cofrinho */}
-          <Dialog open={isTransferForm} onOpenChange={setIsTransferForm}>
+          <Dialog open={isTransferFormOpen} onOpenChange={setIsTransferForm}>
             <DialogTrigger asChild>
               <Card className="hover:border-neutral transition-colors cursor-pointer h-full">
                 <CardHeader>
