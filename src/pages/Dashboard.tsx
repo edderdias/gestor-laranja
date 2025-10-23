@@ -51,7 +51,7 @@ export default function Dashboard() {
   const currentMonth = getMonth(today);
   const currentYear = getYear(today);
 
-  const [isTransferFormOpen, setIsTransferFormOpen] = useState(false);
+  const [isTransferFormOpen, setIsTransferForm] = useState(false);
 
   const transferForm = useForm<TransferToPiggyBankFormData>({
     resolver: zodResolver(transferToPiggyBankSchema),
@@ -128,6 +128,21 @@ export default function Dashboard() {
     enabled: !!user?.id && !isLoadingProfile,
   });
 
+  // NEW: Fetch all credit card transactions to calculate total used limit
+  const { data: allCreditCardTransactions, isLoading: isLoadingAllCreditCardTransactions } = useQuery({
+    queryKey: ["all-credit-card-transactions", userIdsToFetch],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from("credit_card_transactions")
+        .select("amount, installments")
+        .in("created_by", userIdsToFetch);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id && !isLoadingProfile,
+  });
+
   // Buscar bancos
   const { data: banks, isLoading: isLoadingBanks } = useQuery({
     queryKey: ["banks"],
@@ -142,7 +157,7 @@ export default function Dashboard() {
     },
   });
 
-  const isLoading = isLoadingPayable || isLoadingReceivable || isLoadingCreditCards || isLoadingProfile || isLoadingBanks;
+  const isLoading = isLoadingPayable || isLoadingReceivable || isLoadingCreditCards || isLoadingProfile || isLoadingBanks || isLoadingAllCreditCardTransactions;
 
   // Process data for summary cards and charts
   let totalConfirmedMonthlyIncome = 0;
@@ -153,7 +168,14 @@ export default function Dashboard() {
   let monthlyExpensesForecast = 0;
   let numExpenseTransactions = 0;
 
-  let totalMonthlyCreditCardDebits = 0;
+  // Calculate total used credit card limit
+  let totalCreditCardUsedLimit = 0;
+  if (allCreditCardTransactions) {
+    totalCreditCardUsedLimit = allCreditCardTransactions.reduce((sum, transaction) => {
+      return sum + (transaction.amount * (transaction.installments || 1));
+    }, 0);
+  }
+
   let numCreditCards = 0;
 
   const monthlyPaidExpensesChartDataMap = new Map<string, number>();
@@ -179,11 +201,6 @@ export default function Dashboard() {
           }
         } else {
           monthlyExpensesForecast += amount;
-        }
-
-        // Credit card debits for the month (only if paid)
-        if (account.card_id && account.paid) {
-          totalMonthlyCreditCardDebits += amount;
         }
       }
     });
@@ -245,7 +262,7 @@ export default function Dashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["piggy_bank_entries"] }); // Invalida o cache do cofrinho
       toast.success("Valor transferido para o cofrinho com sucesso!");
-      setIsTransferFormOpen(false);
+      setIsTransferForm(false);
       transferForm.reset();
     },
     onError: (error) => {
@@ -317,7 +334,7 @@ export default function Dashboard() {
             <CardHeader className="pb-3">
               <CardDescription>Cartões de Crédito</CardDescription>
               <CardTitle className="text-3xl">
-                {isLoading ? "Carregando..." : `R$ ${totalMonthlyCreditCardDebits.toFixed(2)}`}
+                {isLoading ? "Carregando..." : `R$ ${totalCreditCardUsedLimit.toFixed(2)}`}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -386,7 +403,7 @@ export default function Dashboard() {
           </Link>
 
           {/* Novo Card para Transferir para Cofrinho */}
-          <Dialog open={isTransferFormOpen} onOpenChange={setIsTransferFormOpen}>
+          <Dialog open={isTransferForm} onOpenChange={setIsTransferForm}>
             <DialogTrigger asChild>
               <Card className="hover:border-neutral transition-colors cursor-pointer h-full">
                 <CardHeader>
@@ -505,7 +522,7 @@ export default function Dashboard() {
                     )}
                   />
                   <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => setIsTransferFormOpen(false)}>
+                    <Button type="button" variant="outline" onClick={() => setIsTransferForm(false)}>
                       Cancelar
                     </Button>
                     <Button type="submit" disabled={transferToPiggyBankMutation.isPending}>
