@@ -38,8 +38,8 @@ const formatCurrencyDisplay = (value: number | undefined): string => {
 
 // Helper function for parsing currency input string to number
 const parseCurrencyInput = (input: string): number => {
-  // Remove all non-digit characters except comma
-  const cleanedInput = input.replace(/[^0-9,]/g, '');
+  // Remove all non-digit characters except comma and leading minus sign
+  const cleanedInput = input.replace(/[^0-9,-]/g, '');
   // Replace comma with dot for parseFloat
   const numericValue = parseFloat(cleanedInput.replace(',', '.')) || 0;
   return numericValue;
@@ -58,10 +58,10 @@ type CardFormData = z.infer<typeof cardSchema>;
 
 const transactionSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
-  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Valor inválido").transform(Number).refine(val => val > 0, "O valor deve ser positivo"),
+  amount: z.string().regex(/^-?\d+(\.\d{1,2})?$/, "Valor inválido").transform(Number).refine(val => val !== 0, "O valor não pode ser zero"), // Alterado para aceitar negativos e não zero
   category_id: z.string().min(1, "Categoria é obrigatória"),
   purchase_date: z.date({ required_error: "Data da compra é obrigatória" }),
-  installments: z.string().transform(Number).refine(val => val >= 1, "Parcelas devem ser no mínimo 1").refine(val => Number.isInteger(val), "Quantidade de parcelas deve ser um número inteiro"), // Adicionado .refine para inteiro
+  installments: z.string().transform(Number).refine(val => val >= 1, "Parcelas devem ser no mínimo 1").refine(val => Number.isInteger(val), "Quantidade de parcelas deve ser um número inteiro"),
   responsible_person_id: z.string().optional(),
   is_fixed: z.boolean().default(false), // Adicionado campo para transação fixa
 }).superRefine((data, ctx) => {
@@ -112,7 +112,7 @@ export default function CreditCards() {
       amount: 0,
       category_id: "",
       purchase_date: new Date(),
-      installments: 1,
+      installments: "1", // Alterado para string "1"
       responsible_person_id: undefined,
       is_fixed: false, // Valor padrão
     },
@@ -122,7 +122,7 @@ export default function CreditCards() {
 
   useEffect(() => {
     if (isFixedTransaction) {
-      transactionForm.setValue("installments", 1);
+      transactionForm.setValue("installments", "1"); // Definir como string "1"
     }
   }, [isFixedTransaction, transactionForm]);
 
@@ -152,7 +152,7 @@ export default function CreditCards() {
           amount: editingTransaction.amount,
           category_id: editingTransaction.category_id || "",
           purchase_date: parseISO(editingTransaction.purchase_date),
-          installments: editingTransaction.installments || 1,
+          installments: editingTransaction.installments?.toString() || "1", // Garantir que seja string
           responsible_person_id: editingTransaction.responsible_person_id || undefined,
           is_fixed: editingTransaction.is_fixed || false,
         });
@@ -163,7 +163,7 @@ export default function CreditCards() {
           amount: 0,
           category_id: "",
           purchase_date: new Date(),
-          installments: 1,
+          installments: "1", // Definir como string "1"
           responsible_person_id: undefined,
           is_fixed: false,
         });
@@ -968,7 +968,7 @@ export default function CreditCards() {
                       <FormLabel>Quantidade de Parcelas</FormLabel>
                       <FormControl>
                         <Input
-                          type="number"
+                          type="text" // Alterado para type="text"
                           min="1"
                           {...field}
                           onChange={(e) => {
