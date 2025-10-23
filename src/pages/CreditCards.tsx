@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { CreditCard, Plus, Edit, Trash2, ShoppingCart, CalendarIcon, ListChecks, Printer, Pencil } from "lucide-react";
-import { useState, useEffect, useRef } from "react"; // Importar useRef
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,14 +17,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
-import { format, addMonths, getMonth, getYear, isSameMonth, isSameYear, parseISO, endOfMonth } from "date-fns";
+import { format, addMonths, getMonth, getYear, isSameMonth, isSameYear, parseISO, endOfMonth, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { Tables } from "@/integrations/supabase/types";
-import { PrintStatementComponent } from "@/components/PrintStatementComponent"; // Importar o novo componente
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // Importar Tooltip
-import html2pdf from 'html2pdf.js'; // Importar html2pdf
+import { PrintStatementComponent } from "@/components/PrintStatementComponent";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import html2pdf from 'html2pdf.js';
 
 // Helper function for formatting currency for display
 const formatCurrencyDisplay = (value: number | undefined): string => {
@@ -59,12 +59,12 @@ type CardFormData = z.infer<typeof cardSchema>;
 
 const transactionSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
-  amount: z.string().regex(/^-?\d+(\.\d{1,2})?$/, "Valor inválido").transform(Number).refine(val => val !== 0, "O valor não pode ser zero"), // Alterado para aceitar negativos e não zero
+  amount: z.string().regex(/^-?\d+(\.\d{1,2})?$/, "Valor inválido").transform(Number).refine(val => val !== 0, "O valor não pode ser zero"),
   category_id: z.string().min(1, "Categoria é obrigatória"),
   purchase_date: z.date({ required_error: "Data da compra é obrigatória" }),
   installments: z.string().transform(Number).refine(val => val >= 1, "Parcelas devem ser no mínimo 1").refine(val => Number.isInteger(val), "Quantidade de parcelas deve ser um número inteiro"),
   responsible_person_id: z.string().optional(),
-  is_fixed: z.boolean().default(false), // Adicionado campo para transação fixa
+  is_fixed: z.boolean().default(false),
 }).superRefine((data, ctx) => {
   if (data.is_fixed && data.installments !== 1) {
     ctx.addIssue({
@@ -77,7 +77,6 @@ const transactionSchema = z.object({
 
 type TransactionFormData = z.infer<typeof transactionSchema>;
 
-// Tipo estendido para transações no extrato, incluindo as geradas virtualmente
 type CreditCardTransactionWithGeneratedFlag = Tables<'credit_card_transactions'> & {
   is_generated_fixed_instance?: boolean;
   expense_categories?: Tables<'expense_categories'>;
@@ -99,14 +98,19 @@ export default function CreditCards() {
 
   const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
   const [selectedCardForTransaction, setSelectedCardForTransaction] = useState<any>(null);
-  const [editingTransaction, setEditingTransaction] = useState<CreditCardTransactionWithGeneratedFlag | null>(null); // Novo estado para edição de transação
+  const [editingTransaction, setEditingTransaction] = useState<CreditCardTransactionWithGeneratedFlag | null>(null);
 
   const [isStatementDialogOpen, setIsStatementDialogOpen] = useState(false);
   const [selectedCardForStatement, setSelectedCardForStatement] = useState<any>(null);
   const [selectedStatementMonthYear, setSelectedStatementMonthYear] = useState(format(new Date(), "yyyy-MM"));
-  const [printMode, setPrintMode] = useState<'none' | 'general' | 'byResponsiblePerson'>('none'); // Novo estado para modo de impressão
+  const [printMode, setPrintMode] = useState<'none' | 'general' | 'byResponsiblePerson'>('none');
 
-  const printRef = useRef<HTMLDivElement>(null); // Ref para o componente de impressão
+  const printRef = useRef<HTMLDivElement>(null);
+
+  // State for the main month selector on the CreditCards page
+  const [selectedMonthYear, setSelectedMonthYear] = useState(format(new Date(), "yyyy-MM"));
+  const currentMonthStart = startOfMonth(parseISO(`${selectedMonthYear}-01`));
+  const currentMonthEnd = endOfMonth(parseISO(`${selectedMonthYear}-01`));
 
   const transactionForm = useForm<TransactionFormData>({
     resolver: zodResolver(transactionSchema),
@@ -115,9 +119,9 @@ export default function CreditCards() {
       amount: 0,
       category_id: "",
       purchase_date: new Date(),
-      installments: "1", // Alterado para string "1"
+      installments: "1",
       responsible_person_id: undefined,
-      is_fixed: false, // Valor padrão
+      is_fixed: false,
     },
   });
 
@@ -125,7 +129,7 @@ export default function CreditCards() {
 
   useEffect(() => {
     if (isFixedTransaction) {
-      transactionForm.setValue("installments", "1"); // Definir como string "1"
+      transactionForm.setValue("installments", "1");
     }
   }, [isFixedTransaction, transactionForm]);
 
@@ -145,53 +149,47 @@ export default function CreditCards() {
     }
   }, [isCardFormOpen, editingCard]);
 
-  // Efeito para preencher/resetar o formulário de transação (para nova compra ou edição)
   useEffect(() => {
     if (isTransactionFormOpen) {
       if (editingTransaction) {
-        // Populate form for editing
         transactionForm.reset({
           description: editingTransaction.description,
           amount: editingTransaction.amount,
           category_id: editingTransaction.category_id || "",
           purchase_date: parseISO(editingTransaction.purchase_date),
-          installments: editingTransaction.installments?.toString() || "1", // Garantir que seja string
+          installments: editingTransaction.installments?.toString() || "1",
           responsible_person_id: editingTransaction.responsible_person_id || undefined,
           is_fixed: editingTransaction.is_fixed || false,
         });
       } else {
-        // Reset for new transaction
         transactionForm.reset({
           description: "",
           amount: 0,
           category_id: "",
           purchase_date: new Date(),
-          installments: "1", // Definir como string "1"
+          installments: "1",
           responsible_person_id: undefined,
           is_fixed: false,
         });
       }
     } else {
-      // When dialog closes, clear editing state
       transactionForm.reset();
       setEditingTransaction(null);
       setSelectedCardForTransaction(null);
     }
   }, [isTransactionFormOpen, editingTransaction, transactionForm]);
 
-  // Efeito para disparar a impressão quando o modo de impressão é ativado
   useEffect(() => {
-    if (printMode === 'byResponsiblePerson') { // Only for native print
-      // Usar um pequeno atraso para garantir que o DOM esteja atualizado antes de imprimir
+    if (printMode === 'byResponsiblePerson') {
       const timer = setTimeout(() => {
         window.print();
-        setPrintMode('none'); // Resetar o modo de impressão após a impressão
+        setPrintMode('none');
       }, 500); 
       return () => clearTimeout(timer);
     }
   }, [printMode]);
 
-  // Buscar cartões
+  // Fetch cartões
   const { data: cards, isLoading: isLoadingCards } = useQuery({
     queryKey: ["credit_cards"],
     queryFn: async () => {
@@ -204,37 +202,59 @@ export default function CreditCards() {
     },
   });
 
-  // Buscar total gasto por cartão (AGORA DA TABELA credit_card_transactions)
+  // Fetch total gasto por cartão para o MÊS SELECIONADO
   const { data: cardExpenses } = useQuery({
-    queryKey: ["card_expenses", user?.id],
+    queryKey: ["card_expenses", user?.id, selectedMonthYear], // Adicionado selectedMonthYear
     queryFn: async () => {
       if (!user?.id) return {};
-      const today = new Date();
-      const startOfMonth = format(new Date(today.getFullYear(), today.getMonth(), 1), "yyyy-MM-dd");
-      const endOfMonth = format(new Date(today.getFullYear(), today.getMonth() + 1, 0), "yyyy-MM-dd");
-
+      
       const { data, error } = await supabase
         .from("credit_card_transactions")
-        .select("card_id, amount, purchase_date") // Select purchase_date
-        .eq("created_by", user.id) // Filter by current user
-        .gte("purchase_date", startOfMonth) // Filter for current month
-        .lte("purchase_date", endOfMonth); // Filter for current month
+        .select("card_id, amount, purchase_date")
+        .eq("created_by", user.id)
+        .gte("purchase_date", format(currentMonthStart, "yyyy-MM-dd")) // Filtra pelo início do mês selecionado
+        .lte("purchase_date", format(currentMonthEnd, "yyyy-MM-dd"));   // Filtra pelo fim do mês selecionado
 
       if (error) throw error;
       
       const totals = data.reduce((acc: { [key: string]: number }, transaction: Tables<'credit_card_transactions'>) => {
         const cardId = transaction.card_id;
-        // Sum only the amount (which is the installment value) for transactions in the current month
         acc[cardId] = (acc[cardId] || 0) + transaction.amount;
         return acc;
       }, {});
       
       return totals;
     },
-    enabled: !!user?.id, // Only run if user is available
+    enabled: !!user?.id,
   });
 
-  // Buscar categorias de despesa
+  // NEW: Fetch total gasto por responsável para o MÊS SELECIONADO
+  const { data: responsiblePersonSpending, isLoading: isLoadingResponsibleSpending } = useQuery({
+    queryKey: ["responsible_person_spending", user?.id, selectedMonthYear],
+    queryFn: async () => {
+      if (!user?.id) return {};
+
+      const { data, error } = await supabase
+        .from("credit_card_transactions")
+        .select("amount, responsible_person_id, responsible_persons(name)")
+        .eq("created_by", user.id)
+        .gte("purchase_date", format(currentMonthStart, "yyyy-MM-dd"))
+        .lte("purchase_date", format(currentMonthEnd, "yyyy-MM-dd"));
+
+      if (error) throw error;
+
+      const totals = data.reduce((acc: { [key: string]: number }, transaction) => {
+        const personName = transaction.responsible_persons?.name || "Não Atribuído";
+        acc[personName] = (acc[personName] || 0) + transaction.amount;
+        return acc;
+      }, {});
+
+      return totals;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Fetch categorias de despesa
   const { data: expenseCategories, isLoading: isLoadingCategories } = useQuery({
     queryKey: ["expense-categories"],
     queryFn: async () => {
@@ -247,7 +267,7 @@ export default function CreditCards() {
     },
   });
 
-  // Buscar responsáveis
+  // Fetch responsáveis
   const { data: responsiblePersons, isLoading: isLoadingResponsiblePersons } = useQuery({
     queryKey: ["responsible-persons"],
     queryFn: async () => {
@@ -261,15 +281,20 @@ export default function CreditCards() {
     },
   });
 
-  // Fetch transactions for the selected card statement
+  // Fetch transactions for the selected card statement (uses selectedStatementMonthYear)
   const { data: transactions, isLoading: isLoadingTransactions } = useQuery({
-    queryKey: ["credit_card_transactions", selectedCardForStatement?.id],
+    queryKey: ["credit_card_transactions", selectedCardForStatement?.id, selectedStatementMonthYear],
     queryFn: async () => {
       if (!selectedCardForStatement?.id) return [];
+      const statementMonthStart = startOfMonth(parseISO(`${selectedStatementMonthYear}-01`));
+      const statementMonthEnd = endOfMonth(parseISO(`${selectedStatementMonthYear}-01`));
+
       const { data, error } = await supabase
         .from("credit_card_transactions")
         .select("*, expense_categories(name), responsible_persons(name)")
         .eq("card_id", selectedCardForStatement.id)
+        .gte("purchase_date", format(statementMonthStart, "yyyy-MM-dd"))
+        .lte("purchase_date", format(statementMonthEnd, "yyyy-MM-dd"))
         .order("purchase_date", { ascending: false });
       if (error) throw error;
       return data;
@@ -362,7 +387,7 @@ export default function CreditCards() {
           .update({
             ...baseTransactionData,
             installments: values.is_fixed ? 1 : values.installments,
-            current_installment: values.is_fixed ? 1 : editingTransaction.current_installment, // Keep current installment for non-fixed
+            current_installment: values.is_fixed ? 1 : editingTransaction.current_installment,
             is_fixed: values.is_fixed,
             original_fixed_transaction_id: editingTransaction.original_fixed_transaction_id,
           })
@@ -417,6 +442,7 @@ export default function CreditCards() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] });
       queryClient.invalidateQueries({ queryKey: ["card_expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] }); // Invalida o novo query
       toast.success(editingTransaction ? "Lançamento atualizado com sucesso!" : "Compra registrada com sucesso!");
       setIsTransactionFormOpen(false);
       setEditingTransaction(null);
@@ -440,6 +466,7 @@ export default function CreditCards() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] });
       queryClient.invalidateQueries({ queryKey: ["card_expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] }); // Invalida o novo query
       toast.success("Lançamento excluído com sucesso!");
     },
     onError: (error) => {
@@ -487,14 +514,14 @@ export default function CreditCards() {
 
   const handleLaunchPurchase = (card: any) => {
     setSelectedCardForTransaction(card);
-    setEditingTransaction(null); // Ensure we're creating a new one
+    setEditingTransaction(null);
     setIsTransactionFormOpen(true);
   };
 
   const handleViewStatement = (card: any) => {
     setSelectedCardForStatement(card);
     setIsStatementDialogOpen(true);
-    setSelectedStatementMonthYear(format(new Date(), "yyyy-MM")); // Reset month when opening
+    setSelectedStatementMonthYear(selectedMonthYear); // Usa o mês selecionado no filtro principal
   };
 
   const handleEditTransaction = (transaction: CreditCardTransactionWithGeneratedFlag) => {
@@ -502,7 +529,7 @@ export default function CreditCards() {
       toast.info("Não é possível editar uma ocorrência gerada. Edite a transação fixa original.");
       return;
     }
-    setSelectedCardForTransaction(cards?.find(card => card.id === transaction.card_id)); // Set card context for the form
+    setSelectedCardForTransaction(cards?.find(card => card.id === transaction.card_id));
     setEditingTransaction(transaction);
     setIsTransactionFormOpen(true);
   };
@@ -521,15 +548,15 @@ export default function CreditCards() {
     if (printRef.current) {
       toast.info("Gerando PDF do extrato geral...");
       html2pdf().from(printRef.current).save(`extrato-geral-${selectedCardForStatement?.name}-${selectedStatementMonthYear}.pdf`);
-      setIsStatementDialogOpen(false); // Close dialog after initiating PDF generation
+      setIsStatementDialogOpen(false);
     } else {
       toast.error("Não foi possível gerar o PDF. Conteúdo não encontrado.");
     }
-    setPrintMode('none'); // Reset print mode
+    setPrintMode('none');
   };
 
   const handlePrintByResponsiblePerson = () => {
-    setPrintMode('byResponsiblePerson'); // This will trigger window.print() via useEffect
+    setPrintMode('byResponsiblePerson');
   };
 
   const getAvailableLimit = (cardId: string, creditLimit: number) => {
@@ -541,11 +568,11 @@ export default function CreditCards() {
     return brand === "visa" ? "Visa" : "Mastercard";
   };
 
-  // Lógica para o seletor de mês do extrato
+  // Lógica para o seletor de mês (reutilizada para o filtro principal e extrato)
   const generateMonthOptions = () => {
     const options = [];
-    let date = addMonths(new Date(), -6); // Começa 6 meses atrás
-    for (let i = 0; i < 12; i++) { // 6 meses passados + mês atual + 5 meses futuros = 12 meses
+    let date = addMonths(new Date(), -6);
+    for (let i = 0; i < 12; i++) {
       options.push({
         value: format(date, "yyyy-MM"),
         label: format(date, "MMMM yyyy", { locale: ptBR }),
@@ -559,22 +586,18 @@ export default function CreditCards() {
   const [selectedYear, selectedMonth] = selectedStatementMonthYear.split('-').map(Number);
   const selectedMonthDate = parseISO(`${selectedStatementMonthYear}-01`);
 
-  // Processar transações para exibição, incluindo a replicação de transações fixas
+  // Processar transações para exibição no extrato, incluindo a replicação de transações fixas
   const processedTransactions = transactions?.flatMap(transaction => {
     const transactionPurchaseDate = parseISO(transaction.purchase_date);
     const currentMonthTransactions: CreditCardTransactionWithGeneratedFlag[] = [];
 
-    // 1. Incluir transações não fixas que pertencem ao mês selecionado
     if (!transaction.is_fixed && isSameMonth(transactionPurchaseDate, selectedMonthDate) && isSameYear(transactionPurchaseDate, selectedMonthDate)) {
       currentMonthTransactions.push(transaction);
     } 
-    // 2. Incluir transações fixas originais que pertencem ao mês selecionado
     else if (transaction.is_fixed && isSameMonth(transactionPurchaseDate, selectedMonthDate) && isSameYear(transactionPurchaseDate, selectedMonthDate)) {
       currentMonthTransactions.push(transaction);
     }
-    // 3. Gerar ocorrências para transações fixas em meses futuros
     else if (transaction.is_fixed && transactionPurchaseDate <= endOfMonth(selectedMonthDate)) {
-      // Verificar se já existe uma ocorrência real para este mês e esta transação fixa
       const existingOccurrence = transactions.find(
         (t) => t.original_fixed_transaction_id === transaction.id &&
                isSameMonth(parseISO(t.purchase_date), selectedMonthDate) &&
@@ -582,20 +605,18 @@ export default function CreditCards() {
       );
 
       if (!existingOccurrence) {
-        // Se não existe uma ocorrência real, cria uma instância gerada para exibição
         const displayDate = new Date(selectedYear, selectedMonth - 1, transactionPurchaseDate.getDate());
-        // Ajusta o dia se o mês selecionado não tiver aquele dia (ex: 31 de fevereiro)
         if (displayDate.getMonth() !== selectedMonth - 1) {
-          displayDate.setDate(0); // Vai para o último dia do mês anterior
-          displayDate.setDate(displayDate.getDate() + 1); // Adiciona 1 dia para o último dia do mês atual
+          displayDate.setDate(0);
+          displayDate.setDate(displayDate.getDate() + 1);
         }
 
         currentMonthTransactions.push({
           ...transaction,
-          id: `temp-${transaction.id}-${selectedStatementMonthYear}`, // ID temporário para instâncias geradas
+          id: `temp-${transaction.id}-${selectedStatementMonthYear}`,
           purchase_date: format(displayDate, "yyyy-MM-dd"),
           is_generated_fixed_instance: true,
-          original_fixed_transaction_id: transaction.id, // Referência ao modelo fixo original
+          original_fixed_transaction_id: transaction.id,
         });
       }
     }
@@ -606,117 +627,131 @@ export default function CreditCards() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
           <h1 className="text-2xl font-bold">Cartões de Crédito</h1>
-          <Dialog open={isCardFormOpen} onOpenChange={setIsCardFormOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => setEditingCard(null)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Novo Cartão
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>{editingCard ? "Editar Cartão" : "Novo Cartão"}</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleCardSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="name">Descrição do Cartão *</Label>
-                    <Input
-                      id="name"
-                      value={cardFormData.name || ""}
-                      onChange={(e) => setCardFormData({ ...cardFormData, name: e.target.value })}
-                      placeholder="Ex: Cartão principal"
-                    />
+          <div className="flex items-center gap-4">
+            <Select value={selectedMonthYear} onValueChange={setSelectedMonthYear}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Selecione o mês" />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Dialog open={isCardFormOpen} onOpenChange={setIsCardFormOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={() => setEditingCard(null)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Novo Cartão
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>{editingCard ? "Editar Cartão" : "Novo Cartão"}</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleCardSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="name">Descrição do Cartão *</Label>
+                      <Input
+                        id="name"
+                        value={cardFormData.name || ""}
+                        onChange={(e) => setCardFormData({ ...cardFormData, name: e.target.value })}
+                        placeholder="Ex: Cartão principal"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="brand">Bandeira *</Label>
+                      <Select
+                        value={cardFormData.brand}
+                        onValueChange={(value: "visa" | "master") => 
+                          setCardFormData({ ...cardFormData, brand: value })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a bandeira" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="visa">Visa</SelectItem>
+                          <SelectItem value="master">Mastercard</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="last_digits">Últimos 4 dígitos</Label>
+                      <Input
+                        id="last_digits"
+                        value={cardFormData.last_digits || ""}
+                        onChange={(e) => setCardFormData({ ...cardFormData, last_digits: e.target.value })}
+                        placeholder="1234"
+                        maxLength={4}
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="due_date">Data de Vencimento (dia) *</Label>
+                      <Input
+                        id="due_date"
+                        type="number"
+                        min="1"
+                        max="31"
+                        value={cardFormData.due_date || ""}
+                        onChange={(e) => setCardFormData({ ...cardFormData, due_date: parseInt(e.target.value) || 0 })}
+                        placeholder="10"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="best_purchase_date">Melhor Data de Compra (dia) *</Label>
+                      <Input
+                        id="best_purchase_date"
+                        type="number"
+                        min="1"
+                        max="31"
+                        value={cardFormData.best_purchase_date || ""}
+                        onChange={(e) => setCardFormData({ ...cardFormData, best_purchase_date: parseInt(e.target.value) || 0 })}
+                        placeholder="5"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="credit_limit">Limite Total de Crédito *</Label>
+                      <Input
+                        id="credit_limit"
+                        type="text"
+                        value={creditLimitInput}
+                        onChange={(e) => {
+                          const rawValue = e.target.value;
+                          setCreditLimitInput(rawValue);
+                          const numericValue = parseCurrencyInput(rawValue);
+                          setCardFormData((prev) => ({ ...prev, credit_limit: numericValue }));
+                        }}
+                        onBlur={() => {
+                          setCreditLimitInput(formatCurrencyDisplay(cardFormData.credit_limit));
+                        }}
+                        placeholder="R$ 0,00"
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <Label htmlFor="brand">Bandeira *</Label>
-                    <Select
-                      value={cardFormData.brand}
-                      onValueChange={(value: "visa" | "master") => 
-                        setCardFormData({ ...cardFormData, brand: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a bandeira" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="visa">Visa</SelectItem>
-                        <SelectItem value="master">Mastercard</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="flex justify-end gap-2">
+                    <Button type="submit" disabled={saveCardMutation.isPending}>
+                      {saveCardMutation.isPending ? "Salvando..." : "Salvar"}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={resetCardForm}>
+                      Cancelar
+                    </Button>
                   </div>
-
-                  <div>
-                    <Label htmlFor="last_digits">Últimos 4 dígitos</Label>
-                    <Input
-                      id="last_digits"
-                      value={cardFormData.last_digits || ""}
-                      onChange={(e) => setCardFormData({ ...cardFormData, last_digits: e.target.value })}
-                      placeholder="1234"
-                      maxLength={4}
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="due_date">Data de Vencimento (dia) *</Label>
-                    <Input
-                      id="due_date"
-                      type="number"
-                      min="1"
-                      max="31"
-                      value={cardFormData.due_date || ""}
-                      onChange={(e) => setCardFormData({ ...cardFormData, due_date: parseInt(e.target.value) || 0 })}
-                      placeholder="10"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="best_purchase_date">Melhor Data de Compra (dia) *</Label>
-                    <Input
-                      id="best_purchase_date"
-                      type="number"
-                      min="1"
-                      max="31"
-                      value={cardFormData.best_purchase_date || ""}
-                      onChange={(e) => setCardFormData({ ...cardFormData, best_purchase_date: parseInt(e.target.value) || 0 })}
-                      placeholder="5"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="credit_limit">Limite Total de Crédito *</Label>
-                    <Input
-                      id="credit_limit"
-                      type="text"
-                      value={creditLimitInput}
-                      onChange={(e) => {
-                        const rawValue = e.target.value;
-                        setCreditLimitInput(rawValue);
-                        const numericValue = parseCurrencyInput(rawValue);
-                        setCardFormData((prev) => ({ ...prev, credit_limit: numericValue }));
-                      }}
-                      onBlur={() => {
-                        setCreditLimitInput(formatCurrencyDisplay(cardFormData.credit_limit));
-                      }}
-                      placeholder="R$ 0,00"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2">
-                  <Button type="submit" disabled={saveCardMutation.isPending}>
-                    {saveCardMutation.isPending ? "Salvando..." : "Salvar"}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={resetCardForm}>
-                    Cancelar
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </div>
 
@@ -724,7 +759,7 @@ export default function CreditCards() {
         {isLoadingCards ? (
           <p className="text-muted-foreground">Carregando cartões...</p>
         ) : cards && cards.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
             {cards.map((card) => {
               const availableLimit = getAvailableLimit(card.id, card.credit_limit || 0);
               const usedPercentage = card.credit_limit 
@@ -786,7 +821,7 @@ export default function CreditCards() {
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Utilizado (Mês):</span> {/* Updated label */}
+                        <span className="text-muted-foreground">Utilizado (Mês):</span>
                         <span className="font-semibold text-expense">
                           R$ {((card.credit_limit || 0) - availableLimit).toFixed(2)}
                         </span>
@@ -830,12 +865,36 @@ export default function CreditCards() {
             })}
           </div>
         ) : (
-          <Card>
+          <Card className="mb-8">
             <CardContent className="py-8 text-center text-muted-foreground">
               Nenhum cartão cadastrado. Clique em "Novo Cartão" para começar.
             </CardContent>
           </Card>
         )}
+
+        {/* Painel de Gastos por Responsável */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Gastos por Responsável (Mês)</CardTitle>
+            <CardDescription>Total de compras no cartão de crédito por responsável no mês de {format(currentMonthStart, "MMMM yyyy", { locale: ptBR })}.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingResponsibleSpending ? (
+              <p className="text-muted-foreground">Carregando gastos por responsável...</p>
+            ) : responsiblePersonSpending && Object.keys(responsiblePersonSpending).length > 0 ? (
+              <ul className="space-y-2">
+                {Object.entries(responsiblePersonSpending).map(([name, amount]) => (
+                  <li key={name} className="flex justify-between text-sm">
+                    <span>{name}:</span>
+                    <span className="font-semibold text-expense">R$ {(amount as number).toFixed(2)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-muted-foreground text-center py-4">Nenhum gasto registrado por responsável neste mês.</p>
+            )}
+          </CardContent>
+        </Card>
       </main>
 
       {/* Dialog for launching a new credit card purchase / editing an existing transaction */}
@@ -863,7 +922,7 @@ export default function CreditCards() {
                   </FormItem>
                 )}
               />
-              <div className="grid grid-cols-2 gap-4"> {/* Layout ajustado */}
+              <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={transactionForm.control}
                   name="amount"
@@ -892,7 +951,7 @@ export default function CreditCards() {
                         <Switch
                           checked={field.value}
                           onCheckedChange={field.onChange}
-                          disabled={!!editingTransaction?.original_fixed_transaction_id} // Disable if it's an instance of a fixed transaction
+                          disabled={!!editingTransaction?.original_fixed_transaction_id}
                         />
                       </FormControl>
                     </FormItem>
@@ -969,7 +1028,7 @@ export default function CreditCards() {
                   </FormItem>
                 )}
               />
-              {!isFixedTransaction && ( // Condicionalmente renderiza o campo de parcelas
+              {!isFixedTransaction && (
                 <FormField
                   control={transactionForm.control}
                   name="installments"
@@ -978,12 +1037,11 @@ export default function CreditCards() {
                       <FormLabel>Quantidade de Parcelas</FormLabel>
                       <FormControl>
                         <Input
-                          type="text" // Alterado para type="text"
+                          type="text"
                           min="1"
                           {...field}
                           onChange={(e) => {
                             const value = e.target.value;
-                            // Permite apenas dígitos
                             const filteredValue = value.replace(/[^0-9]/g, '');
                             field.onChange(filteredValue);
                           }}
@@ -1071,11 +1129,11 @@ export default function CreditCards() {
                     <TableHead>Responsável</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
                     <TableHead className="text-right">Parcela</TableHead>
-                    <TableHead className="text-right">Ações</TableHead> {/* Nova coluna de ações */}
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <TooltipProvider> {/* Adicionado TooltipProvider */}
+                  <TooltipProvider>
                     {processedTransactions.map((transaction) => (
                       <TableRow key={transaction.id}>
                         <TableCell>{format(new Date(transaction.purchase_date), "dd/MM/yyyy")}</TableCell>
