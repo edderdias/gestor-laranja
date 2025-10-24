@@ -377,57 +377,8 @@ export default function Dashboard() {
           <CategoryExpensesChart data={categoryExpensesChartData} />
         </div>
 
-        {/* Menu de Navegação */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <Link to="/accounts-payable">
-            <Card className="hover:border-expense transition-colors cursor-pointer h-full">
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="bg-expense/10 p-3 rounded-lg">
-                    <ArrowDownCircle className="h-6 w-6 text-expense" />
-                  </div>
-                  <div>
-                    <CardTitle>Contas a Pagar</CardTitle>
-                    <CardDescription>Gerenciar despesas</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-            </Card>
-          </Link>
-
-          <Link to="/accounts-receivable">
-            <Card className="hover:border-income transition-colors cursor-pointer h-full">
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="bg-income/10 p-3 rounded-lg">
-                    <ArrowUpCircle className="h-6 w-6 text-income" />
-                  </div>
-                  <div>
-                    <CardTitle>Contas a Receber</CardTitle>
-                    <CardDescription>Gerenciar receitas</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-            </Card>
-          </Link>
-
-          <Link to="/credit-cards">
-            <Card className="hover:border-primary transition-colors cursor-pointer h-full">
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="bg-primary/10 p-3 rounded-lg">
-                    <CreditCard className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle>Cartões de Crédito</CardTitle>
-                    <CardDescription>Transações de cartão</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-            </Card>
-          </Link>
-
-          {/* Novo Card para Transferir para Cofrinho */}
+        {/* Card para Transferir para Cofrinho */}
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"> {/* Mantido o grid para layout futuro, se necessário */}
           <Dialog open={isTransferFormOpen} onOpenChange={setIsTransferForm}>
             <DialogTrigger asChild>
               <Card className="hover:border-neutral transition-colors cursor-pointer h-full">
