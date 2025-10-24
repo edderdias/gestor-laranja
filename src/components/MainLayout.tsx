@@ -95,7 +95,7 @@ export function MainLayout() {
                   <div className="flex flex-col gap-4 pt-8">
                     <Link to="/dashboard" className="flex items-center gap-3 mb-4" onClick={() => setIsSheetOpen(false)}>
                       <div className="p-1">
-                        <img src="/logo.png" alt="Método Certo Logo" className="h-10 w-10" />
+                        <img src="/logo.png" alt="Método Certo Logo" className="h-16 w-16" />
                       </div>
                       <div>
                         <h1 className="text-xl font-bold">Método Certo</h1>
@@ -113,7 +113,7 @@ export function MainLayout() {
             )}
             <Link to="/dashboard" className="flex items-center gap-3">
               <div className="p-1">
-                <img src="/logo.png" alt="Método Certo Logo" className="h-10 w-10" />
+                <img src="/logo.png" alt="Método Certo Logo" className="h-16 w-16" />
               </div>
               {!isMobile && ( // Esconder o texto do título no mobile quando o menu lateral está presente
                 <div>
