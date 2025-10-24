@@ -53,7 +53,7 @@ export default function Dashboard() {
 
   const [isTransferFormOpen, setIsTransferForm] = useState(false);
 
-  const transferForm = useForm<TransferToPiggyBankFormData>({
+  const transferForm = useForm<TransferToToPiggyBankFormData>({
     resolver: zodResolver(transferToPiggyBankSchema),
     defaultValues: {
       description: "",
@@ -99,23 +99,6 @@ export default function Dashboard() {
 
   const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name === "cartao")?.id;
 
-  // NEW: Fetch Eder and Monalisa's IDs from responsible_persons
-  const { data: specificResponsiblePersons, isLoading: isLoadingSpecificResponsiblePersons } = useQuery({
-    queryKey: ["specific-responsible-persons"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("responsible_persons")
-        .select("id, name")
-        .in("name", ["Eder", "Monalisa"]); // Filter by names
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const ederId = specificResponsiblePersons?.find(p => p.name === "Eder")?.id;
-  const monalisaId = specificResponsiblePersons?.find(p => p.name === "Monalisa")?.id;
-  const filteredResponsiblePersonIds = [ederId, monalisaId].filter(Boolean) as string[];
-
   // Fetch all necessary data for the dashboard
   const { data: accountsPayable, isLoading: isLoadingPayable } = useQuery({
     queryKey: ["dashboard-accounts-payable", userIdsToFetch],
@@ -159,20 +142,19 @@ export default function Dashboard() {
     enabled: !!user?.id && !isLoadingProfile,
   });
 
-  // NEW: Fetch all credit card transactions to calculate total used limit, filtered by responsible persons
+  // Fetch all credit card transactions to calculate total used limit (no filter by responsible person)
   const { data: allCreditCardTransactions, isLoading: isLoadingAllCreditCardTransactions } = useQuery({
-    queryKey: ["all-credit-card-transactions", userIdsToFetch, filteredResponsiblePersonIds], // Add filteredResponsiblePersonIds to queryKey
+    queryKey: ["all-credit-card-transactions", userIdsToFetch],
     queryFn: async () => {
-      if (!user?.id || filteredResponsiblePersonIds.length === 0) return []; // Return empty if no specific persons or user not authenticated
+      if (!user?.id) return [];
       const { data, error } = await supabase
         .from("credit_card_transactions")
         .select("amount, purchase_date")
-        .in("created_by", userIdsToFetch)
-        .in("responsible_person_id", filteredResponsiblePersonIds); // Add this filter
+        .in("created_by", userIdsToFetch);
       if (error) throw error;
       return data;
     },
-    enabled: !!user?.id && !isLoadingProfile && !isLoadingSpecificResponsiblePersons && filteredResponsiblePersonIds.length > 0, // Enable only if IDs are available
+    enabled: !!user?.id && !isLoadingProfile,
   });
 
   // Buscar bancos
@@ -189,7 +171,7 @@ export default function Dashboard() {
     },
   });
 
-  const isLoading = isLoadingPayable || isLoadingReceivable || isLoadingCreditCards || isLoadingProfile || isLoadingBanks || isLoadingAllCreditCardTransactions || isLoadingPaymentTypes || isLoadingSpecificResponsiblePersons;
+  const isLoading = isLoadingPayable || isLoadingReceivable || isLoadingCreditCards || isLoadingProfile || isLoadingBanks || isLoadingAllCreditCardTransactions || isLoadingPaymentTypes;
 
   // Process data for summary cards and charts
   let totalConfirmedMonthlyIncome = 0;
