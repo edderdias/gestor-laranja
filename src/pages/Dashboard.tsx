@@ -14,10 +14,12 @@ import {
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, parseISO, getMonth, getYear, isSameMonth, isSameYear } from "date-fns";
+import { format, parseISO, getMonth, getYear, isSameMonth, isSameYear, subMonths, addMonths, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { MonthlyExpensesChart } from "@/components/charts/MonthlyExpensesChart";
 import { CategoryExpensesChart } from "@/components/charts/CategoryExpensesChart";
+import { ResponsiblePersonExpensesChart } from "@/components/charts/ResponsiblePersonExpensesChart"; // Novo import
+import { MonthlyIncomeChart } from "@/components/charts/MonthlyIncomeChart"; // Novo import
 import { Tables } from "@/integrations/supabase/types"; // Importar tipos do Supabase
 
 // Imports para o formulário de transferência
@@ -106,7 +108,7 @@ export default function Dashboard() {
       if (!user?.id) return [];
       const { data, error } = await supabase
         .from("accounts_payable")
-        .select("*, expense_categories(name), payment_types(name)")
+        .select("*, expense_categories(name), payment_types(name), responsible_persons(name)") // Adicionado responsible_persons
         .in("created_by", userIdsToFetch); // Fetch for all relevant user IDs
       if (error) throw error;
       return data;
@@ -149,7 +151,7 @@ export default function Dashboard() {
       if (!user?.id) return [];
       const { data, error } = await supabase
         .from("credit_card_transactions")
-        .select("amount, purchase_date, responsible_persons(is_principal)") // Incluir dados do responsável
+        .select("amount, purchase_date, responsible_persons(is_principal, name)") // Incluir dados do responsável e nome
         .in("created_by", userIdsToFetch);
       if (error) throw error;
       return data;
@@ -203,6 +205,11 @@ export default function Dashboard() {
 
   const monthlyPaidExpensesChartDataMap = new Map<string, number>();
   const categoryPaidExpensesChartDataMap = new Map<string, number>();
+  const responsiblePersonExpensesChartDataMap = new Map<string, number>(); // Novo mapa para gastos por responsável
+  const monthlyIncomeChartDataMap = new Map<string, number>(); // Novo mapa para ganhos mensais
+
+  // Data para os últimos 6 meses (incluindo o atual) para o gráfico de ganhos mensais
+  const sixMonthsAgo = subMonths(today, 5); // 5 meses atrás + mês atual = 6 meses
 
   if (accountsPayable && creditCardPaymentTypeId !== undefined) { // Ensure creditCardPaymentTypeId is available
     accountsPayable.forEach(account => {
@@ -230,6 +237,23 @@ export default function Dashboard() {
           monthlyExpensesForecast += amount;
         }
       }
+
+      // Adicionar gastos por responsável (contas a pagar) para o mês atual
+      if (isSameMonth(dueDate, today) && isSameYear(dueDate, today) && account.paid) {
+        const responsiblePersonName = (account.responsible_persons as Tables<'responsible_persons'>)?.name || "Não Atribuído";
+        responsiblePersonExpensesChartDataMap.set(responsiblePersonName, (responsiblePersonExpensesChartDataMap.get(responsiblePersonName) || 0) + amount);
+      }
+    });
+  }
+
+  // Adicionar gastos por responsável (transações de cartão) para o mês atual
+  if (allCreditCardTransactions) {
+    allCreditCardTransactions.forEach(transaction => {
+      const transactionDate = parseISO(transaction.purchase_date);
+      if (isSameMonth(transactionDate, today) && isSameYear(transactionDate, today)) {
+        const responsiblePersonName = (transaction.responsible_persons as Tables<'responsible_persons'>)?.name || "Não Atribuído";
+        responsiblePersonExpensesChartDataMap.set(responsiblePersonName, (responsiblePersonExpensesChartDataMap.get(responsiblePersonName) || 0) + transaction.amount);
+      }
     });
   }
 
@@ -245,6 +269,12 @@ export default function Dashboard() {
         } else {
           monthlyIncomeForecast += amount;
         }
+      }
+
+      // Adicionar ganhos mensais para o gráfico de ganhos mensais (últimos 6 meses)
+      if (receiveDate >= sixMonthsAgo && receiveDate <= endOfMonth(today) && account.received) {
+        const monthKey = format(receiveDate, "MMM/yyyy", { locale: ptBR });
+        monthlyIncomeChartDataMap.set(monthKey, (monthlyIncomeChartDataMap.get(monthKey) || 0) + amount);
       }
     });
   }
@@ -265,6 +295,23 @@ export default function Dashboard() {
   const categoryExpensesChartData = Array.from(categoryPaidExpensesChartDataMap.entries())
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value);
+
+  const responsiblePersonExpensesChartData = Array.from(responsiblePersonExpensesChartDataMap.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+
+  // Preencher meses vazios para o gráfico de ganhos mensais
+  const monthlyIncomeChartData: { month: string; total: number }[] = [];
+  let dateIterator = startOfMonth(sixMonthsAgo);
+  while (dateIterator <= endOfMonth(today)) {
+    const monthKey = format(dateIterator, "MMM/yyyy", { locale: ptBR });
+    monthlyIncomeChartData.push({
+      month: monthKey,
+      total: monthlyIncomeChartDataMap.get(monthKey) || 0,
+    });
+    dateIterator = addMonths(dateIterator, 1);
+  }
+
 
   // Mutation para transferir para o cofrinho
   const transferToPiggyBankMutation = useMutation({
@@ -380,6 +427,8 @@ export default function Dashboard() {
         <div className="grid gap-6 lg:grid-cols-2 mb-8">
           <MonthlyExpensesChart data={monthlyExpensesChartData} />
           <CategoryExpensesChart data={categoryExpensesChartData} />
+          <ResponsiblePersonExpensesChart data={responsiblePersonExpensesChartData} /> {/* Novo gráfico */}
+          <MonthlyIncomeChart data={monthlyIncomeChartData} /> {/* Novo gráfico */}
         </div>
       </main>
     </div>
