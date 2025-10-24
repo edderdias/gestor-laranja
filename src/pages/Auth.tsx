@@ -50,7 +50,7 @@ export default function Auth() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-secondary/20 to-primary/10 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <div className="flex items-center justify-center mb-8">
+          <div className="flex items-center justify-center mb-4">
             <div className="p-1"> {/* Ajustado padding para o logo */}
               <img src="/logo.png" alt="Método Certo Logo" className="h-12 w-12" /> {/* Novo logo */}
             </div>
