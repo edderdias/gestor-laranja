@@ -236,12 +236,13 @@ export default function Settings() {
             queryKey={["payment-types"]}
             description="Gerencie os tipos de pagamento disponíveis."
           />
+          {/* Ativar o checkbox para esta seção */}
           <CrudSection
             title="Recebedores/Responsáveis"
             tableName="responsible_persons"
             queryKey={["responsible-persons"]}
             description="Gerencie as pessoas responsáveis por contas."
-            hasIsPrincipal={true} {/* Ativar o checkbox para esta seção */}
+            hasIsPrincipal={true} 
           />
           <CrudSection
             title="Tipos de Recebimento"
