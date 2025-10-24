@@ -9,12 +9,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form"; // Adicionado FormDescription
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch"; // Importar Switch
 
 // Esquema genérico para itens com um campo 'name'
 const itemSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
+  is_principal: z.boolean().default(false), // Adicionado o campo is_principal
 });
 
 type ItemFormData = z.infer<typeof itemSchema>;
@@ -24,9 +26,10 @@ interface CrudSectionProps {
   tableName: string;
   queryKey: string[];
   description?: string;
+  hasIsPrincipal?: boolean; // Nova prop para indicar se a tabela tem is_principal
 }
 
-function CrudSection({ title, tableName, queryKey, description }: CrudSectionProps) {
+function CrudSection({ title, tableName, queryKey, description, hasIsPrincipal = false }: CrudSectionProps) {
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
@@ -35,6 +38,7 @@ function CrudSection({ title, tableName, queryKey, description }: CrudSectionPro
     resolver: zodResolver(itemSchema),
     defaultValues: {
       name: "",
+      is_principal: false, // Valor padrão para o novo campo
     },
   });
 
@@ -49,11 +53,16 @@ function CrudSection({ title, tableName, queryKey, description }: CrudSectionPro
 
   const saveMutation = useMutation({
     mutationFn: async (values: ItemFormData) => {
+      const dataToSave: Partial<ItemFormData> = { name: values.name };
+      if (hasIsPrincipal) {
+        dataToSave.is_principal = values.is_principal;
+      }
+
       if (editingItem) {
-        const { error } = await supabase.from(tableName).update({ name: values.name }).eq("id", editingItem.id);
+        const { error } = await supabase.from(tableName).update(dataToSave).eq("id", editingItem.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from(tableName).insert({ name: values.name });
+        const { error } = await supabase.from(tableName).insert(dataToSave);
         if (error) throw error;
       }
     },
@@ -89,7 +98,7 @@ function CrudSection({ title, tableName, queryKey, description }: CrudSectionPro
 
   const handleEdit = (item: any) => {
     setEditingItem(item);
-    form.reset({ name: item.name });
+    form.reset({ name: item.name, is_principal: item.is_principal || false }); // Resetar com o valor de is_principal
     setIsFormOpen(true);
   };
 
@@ -128,6 +137,28 @@ function CrudSection({ title, tableName, queryKey, description }: CrudSectionPro
                     </FormItem>
                   )}
                 />
+                {hasIsPrincipal && (
+                  <FormField
+                    control={form.control}
+                    name="is_principal"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                        <div className="space-y-0.5">
+                          <FormLabel>É Principal</FormLabel>
+                          <FormDescription>
+                            Marque se este responsável é considerado principal.
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                )}
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
                     Cancelar
@@ -149,7 +180,12 @@ function CrudSection({ title, tableName, queryKey, description }: CrudSectionPro
           <ul className="space-y-2">
             {items.map((item: any) => (
               <li key={item.id} className="flex items-center justify-between p-2 border rounded-md">
-                <span>{item.name}</span>
+                <span className="flex items-center gap-2">
+                  {item.name}
+                  {hasIsPrincipal && item.is_principal && (
+                    <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">Principal</span>
+                  )}
+                </span>
                 <div className="flex gap-1">
                   <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
                     <Pencil className="h-4 w-4" />
@@ -205,6 +241,7 @@ export default function Settings() {
             tableName="responsible_persons"
             queryKey={["responsible-persons"]}
             description="Gerencie as pessoas responsáveis por contas."
+            hasIsPrincipal={true} {/* Ativar o checkbox para esta seção */}
           />
           <CrudSection
             title="Tipos de Recebimento"

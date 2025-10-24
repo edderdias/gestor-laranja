@@ -600,16 +600,19 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          is_principal: boolean | null // Adicionado
         }
         Insert: {
           created_at?: string
           id?: string
           name: string
+          is_principal?: boolean | null // Adicionado
         }
         Update: {
           created_at?: string
           id?: string
           name?: string
+          is_principal?: boolean | null // Adicionado
         }
         Relationships: []
       }
