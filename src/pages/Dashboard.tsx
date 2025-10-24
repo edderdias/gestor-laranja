@@ -53,7 +53,7 @@ export default function Dashboard() {
 
   const [isTransferFormOpen, setIsTransferForm] = useState(false);
 
-  const transferForm = useForm<TransferToToPiggyBankFormData>({
+  const transferForm = useForm<TransferToPiggyBankFormData>({
     resolver: zodResolver(transferToPiggyBankSchema),
     defaultValues: {
       description: "",
@@ -149,7 +149,7 @@ export default function Dashboard() {
       if (!user?.id) return [];
       const { data, error } = await supabase
         .from("credit_card_transactions")
-        .select("amount, purchase_date")
+        .select("amount, purchase_date, responsible_persons(is_principal)") // Incluir dados do responsável
         .in("created_by", userIdsToFetch);
       if (error) throw error;
       return data;
@@ -187,7 +187,12 @@ export default function Dashboard() {
   if (allCreditCardTransactions) {
     totalCreditCardUsedLimit = allCreditCardTransactions.reduce((sum, transaction) => {
       const transactionDate = parseISO(transaction.purchase_date); // Parse purchase_date
-      if (isSameMonth(transactionDate, today) && isSameYear(transactionDate, today)) {
+      // Soma apenas se a transação for do mês atual E o responsável for principal
+      if (
+        isSameMonth(transactionDate, today) && 
+        isSameYear(transactionDate, today) &&
+        (transaction.responsible_persons as Tables<'responsible_persons'>)?.is_principal === true
+      ) {
         return sum + transaction.amount; // Soma o valor da parcela individual para o mês atual
       }
       return sum;

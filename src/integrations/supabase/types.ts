@@ -298,8 +298,9 @@ export type Database = {
           installments: number | null
           purchase_date: string
           updated_at: string
-          is_fixed: boolean | null // Adicionado
-          original_fixed_transaction_id: string | null // Adicionado
+          is_fixed: boolean | null
+          original_fixed_transaction_id: string | null
+          responsible_person_id: string | null // Adicionado
         }
         Insert: {
           amount: number
@@ -313,8 +314,9 @@ export type Database = {
           installments?: number | null
           purchase_date: string
           updated_at?: string
-          is_fixed?: boolean | null // Adicionado
-          original_fixed_transaction_id?: string | null // Adicionado
+          is_fixed?: boolean | null
+          original_fixed_transaction_id?: string | null
+          responsible_person_id?: string | null // Adicionado
         }
         Update: {
           amount?: number
@@ -328,8 +330,9 @@ export type Database = {
           installments?: number | null
           purchase_date?: string
           updated_at?: string
-          is_fixed?: boolean | null // Adicionado
-          original_fixed_transaction_id?: string | null // Adicionado
+          is_fixed?: boolean | null
+          original_fixed_transaction_id?: string | null
+          responsible_person_id?: string | null // Adicionado
         }
         Relationships: [
           {
@@ -354,10 +357,17 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "credit_card_transactions_original_fixed_transaction_id_fkey" // Adicionado
+            foreignKeyName: "credit_card_transactions_original_fixed_transaction_id_fkey"
             columns: ["original_fixed_transaction_id"]
             isOneToOne: false
             referencedRelation: "credit_card_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_card_transactions_responsible_person_id_fkey" // Adicionado
+            columns: ["responsible_person_id"]
+            isOneToOne: false
+            referencedRelation: "responsible_persons"
             referencedColumns: ["id"]
           },
         ]
@@ -600,19 +610,19 @@ export type Database = {
           created_at: string
           id: string
           name: string
-          is_principal: boolean | null // Adicionado
+          is_principal: boolean | null
         }
         Insert: {
           created_at?: string
           id?: string
           name: string
-          is_principal?: boolean | null // Adicionado
+          is_principal?: boolean | null
         }
         Update: {
           created_at?: string
           id?: string
           name?: string
-          is_principal?: boolean | null // Adicionado
+          is_principal?: boolean | null
         }
         Relationships: []
       }
