@@ -52,7 +52,7 @@ export default function Auth() {
         <CardHeader className="space-y-1">
           <div className="flex items-center justify-center mb-4">
             <div className="p-1"> {/* Ajustado padding para o logo */}
-              <img src="/logo.png" alt="Método Certo Logo" className="h-30 w-12" /> {/* Novo logo */}
+              <img src="/logo.png" alt="Método Certo Logo" className="h-90 w-12" /> {/* Novo logo */}
             </div>
           </div>
           <CardTitle className="text-2xl font-bold text-center">Método Certo</CardTitle> {/* Novo nome */}
