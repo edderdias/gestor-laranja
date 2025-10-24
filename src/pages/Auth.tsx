@@ -51,11 +51,11 @@ export default function Auth() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <div className="flex items-center justify-center mb-4">
-            <div className="p-1"> {/* Ajustado padding para o logo */}
-              <img src="/logo.png" alt="Método Certo Logo" className="h-20 w-20" /> {/* Novo logo */}
+            <div className="p-1">
+              <img src="/logo.png" alt="Método Certo Logo" className="h-40 w-40" /> {/* Dobrado de h-20 w-20 para h-40 w-40 */}
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold text-center">Método Certo</CardTitle> {/* Novo nome */}
+          <CardTitle className="text-2xl font-bold text-center">Método Certo</CardTitle>
           <CardDescription className="text-center">
             Gerencie suas finanças de forma simples e eficiente
           </CardDescription>
