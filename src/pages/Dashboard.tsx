@@ -85,6 +85,20 @@ export default function Dashboard() {
     userIdsToFetch.push(userProfile.invited_by_user_id);
   }
 
+  // Fetch payment types to identify credit card payment type
+  const { data: paymentTypes, isLoading: isLoadingPaymentTypes } = useQuery({
+    queryKey: ["payment-types"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("payment_types")
+        .select("id, name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name === "cartao")?.id;
+
   // Fetch all necessary data for the dashboard
   const { data: accountsPayable, isLoading: isLoadingPayable } = useQuery({
     queryKey: ["dashboard-accounts-payable", userIdsToFetch],
@@ -157,14 +171,14 @@ export default function Dashboard() {
     },
   });
 
-  const isLoading = isLoadingPayable || isLoadingReceivable || isLoadingCreditCards || isLoadingProfile || isLoadingBanks || isLoadingAllCreditCardTransactions;
+  const isLoading = isLoadingPayable || isLoadingReceivable || isLoadingCreditCards || isLoadingProfile || isLoadingBanks || isLoadingAllCreditCardTransactions || isLoadingPaymentTypes;
 
   // Process data for summary cards and charts
   let totalConfirmedMonthlyIncome = 0;
   let monthlyIncomeForecast = 0;
   let numIncomeTransactions = 0;
 
-  let totalConfirmedMonthlyExpenses = 0;
+  let totalConfirmedMonthlyExpensesNonCreditCard = 0; // Renomeado para evitar dupla contagem
   let monthlyExpensesForecast = 0;
   let numExpenseTransactions = 0;
 
@@ -185,25 +199,29 @@ export default function Dashboard() {
   const monthlyPaidExpensesChartDataMap = new Map<string, number>();
   const categoryPaidExpensesChartDataMap = new Map<string, number>();
 
-  if (accountsPayable) {
+  if (accountsPayable && creditCardPaymentTypeId !== undefined) { // Ensure creditCardPaymentTypeId is available
     accountsPayable.forEach(account => {
       const amount = account.amount * (account.installments || 1);
       const dueDate = parseISO(account.due_date);
 
       if (isSameMonth(dueDate, today) && isSameYear(dueDate, today)) {
         if (account.paid) {
-          totalConfirmedMonthlyExpenses += amount;
-          numExpenseTransactions++;
+          // Only add to totalConfirmedMonthlyExpensesNonCreditCard if NOT paid by credit card
+          if (account.payment_type_id !== creditCardPaymentTypeId) {
+            totalConfirmedMonthlyExpensesNonCreditCard += amount;
+            numExpenseTransactions++;
 
-          // For charts, only use paid expenses
-          const monthKey = format(dueDate, "MMM/yyyy", { locale: ptBR });
-          monthlyPaidExpensesChartDataMap.set(monthKey, (monthlyPaidExpensesChartDataMap.get(monthKey) || 0) + amount);
+            // For charts, only use paid expenses NOT by credit card
+            const monthKey = format(dueDate, "MMM/yyyy", { locale: ptBR });
+            monthlyPaidExpensesChartDataMap.set(monthKey, (monthlyPaidExpensesChartDataMap.get(monthKey) || 0) + amount);
 
-          if (account.expense_categories) {
-            const categoryName = account.expense_categories.name;
-            categoryPaidExpensesChartDataMap.set(categoryName, (categoryPaidExpensesChartDataMap.get(categoryName) || 0) + amount);
+            if (account.expense_categories) {
+              const categoryName = account.expense_categories.name;
+              categoryPaidExpensesChartDataMap.set(categoryName, (categoryPaidExpensesChartDataMap.get(categoryName) || 0) + amount);
+            }
           }
         } else {
+          // Forecast should still include all unpaid accounts payable
           monthlyExpensesForecast += amount;
         }
       }
@@ -230,7 +248,10 @@ export default function Dashboard() {
     numCreditCards = creditCards.length;
   }
 
-  const balance = totalConfirmedMonthlyIncome - totalConfirmedMonthlyExpenses;
+  // Calculate total monthly expenses including credit card
+  const totalMonthlyExpenses = totalConfirmedMonthlyExpensesNonCreditCard + totalCreditCardUsedLimit;
+
+  const balance = totalConfirmedMonthlyIncome - totalMonthlyExpenses;
 
   const monthlyExpensesChartData = Array.from(monthlyPaidExpensesChartDataMap.entries())
     .map(([month, total]) => ({ month, total }))
@@ -305,7 +326,7 @@ export default function Dashboard() {
             <CardHeader className="pb-3">
               <CardDescription className="text-expense">Despesas do Mês</CardDescription>
               <CardTitle className="text-3xl text-expense">
-                {isLoading ? "Carregando..." : `R$ ${totalConfirmedMonthlyExpenses.toFixed(2)}`}
+                {isLoading ? "Carregando..." : `R$ ${totalMonthlyExpenses.toFixed(2)}`} {/* Usando totalMonthlyExpenses */}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -336,7 +357,7 @@ export default function Dashboard() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardDescription>Gastos de Cartão (Mês)</CardDescription> {/* Changed description */}
+              <CardDescription>Gastos de Cartão (Mês)</CardDescription>
               <CardTitle className="text-3xl">
                 {isLoading ? "Carregando..." : `R$ ${totalCreditCardUsedLimit.toFixed(2)}`}
               </CardTitle>
