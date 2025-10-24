@@ -14,7 +14,7 @@ import {
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, parseISO, getMonth, getYear, isSameMonth, isSameYear, subMonths, addMonths, endOfMonth } from "date-fns";
+import { format, parseISO, getMonth, getYear, isSameMonth, isSameYear, subMonths, addMonths, endOfMonth, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { MonthlyExpensesChart } from "@/components/charts/MonthlyExpensesChart";
 import { CategoryExpensesChart } from "@/components/charts/CategoryExpensesChart";
