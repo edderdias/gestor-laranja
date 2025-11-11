@@ -284,8 +284,8 @@ export default function Dashboard() {
     numCreditCards = creditCards.length;
   }
 
-  // Calculate total monthly expenses including credit card
-  const totalMonthlyExpenses = totalConfirmedMonthlyExpensesNonCreditCard + totalCreditCardUsedLimit;
+  // Calculate total monthly expenses (only non-credit card accounts payable)
+  const totalMonthlyExpenses = totalConfirmedMonthlyExpensesNonCreditCard;
 
   const balance = totalConfirmedMonthlyIncome - totalMonthlyExpenses;
 
