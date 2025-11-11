@@ -109,6 +109,23 @@ export default function AccountsPayable() {
   });
   const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name === "cartao")?.id;
 
+  // Buscar cartões
+  const { data: cards, isLoading: isLoadingCards } = useQuery({
+    queryKey: ["credit-cards"],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from("credit_cards")
+        .select("*")
+        .eq("created_by", user.id)
+        .order("name");
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
   // Fetch credit card transactions for the selected card and due date month
   const { data: monthlyCardTransactions, isLoading: isLoadingMonthlyCardTransactions } = useQuery({
     queryKey: ["credit_card_transactions_for_bill", selectedCardId, selectedDueDate],
@@ -137,7 +154,7 @@ export default function AccountsPayable() {
         description: editingAccount.description,
         payment_type_id: editingAccount.payment_type_id || "",
         card_id: editingAccount.card_id || "",
-        purchase_date: editingAccount.purchase_date || format(new Date(), "yyyy-MM-dd"),
+        purchase_date: editingAccount.purchase_date || format(new Date(), "yyyy-MM- muối-dd"),
         due_date: editingAccount.due_date,
         installments: editingAccount.installments?.toString() || "1", // Set to "1" if null/undefined
         amount: editingAccount.amount.toString(),
@@ -162,6 +179,11 @@ export default function AccountsPayable() {
 
   // Effect to auto-fill amount and description for credit card bills
   useEffect(() => {
+    // Ensure all necessary data is loaded before proceeding
+    if (!cards || !creditCardPaymentTypeId || isLoadingMonthlyCardTransactions) {
+      return;
+    }
+
     if (selectedPaymentTypeId === creditCardPaymentTypeId && selectedCardId && selectedDueDate && !editingAccount) {
       if (monthlyCardTransactions) {
         const totalBillAmount = monthlyCardTransactions.reduce((sum, transaction) => sum + transaction.amount, 0);
@@ -170,7 +192,7 @@ export default function AccountsPayable() {
         form.setValue("is_fixed", false); // Bill payment is not fixed
         
         // Suggest description
-        const cardName = cards?.find(c => c.id === selectedCardId)?.name || "Cartão";
+        const cardName = cards.find(c => c.id === selectedCardId)?.name || "Cartão"; 
         const formattedMonth = format(parseISO(selectedDueDate), "MMMM/yyyy", { locale: ptBR });
         form.setValue("description", `Fatura ${cardName} - ${formattedMonth}`);
       }
@@ -181,7 +203,7 @@ export default function AccountsPayable() {
       form.setValue("installments", "1");
       form.setValue("is_fixed", false);
     }
-  }, [selectedPaymentTypeId, selectedCardId, selectedDueDate, monthlyCardTransactions, editingAccount, form, cards, creditCardPaymentTypeId]);
+  }, [selectedPaymentTypeId, selectedCardId, selectedDueDate, monthlyCardTransactions, editingAccount, form, cards, creditCardPaymentTypeId, isLoadingMonthlyCardTransactions]);
 
 
   // Buscar contas a pagar
@@ -194,23 +216,6 @@ export default function AccountsPayable() {
         .select("*, expense_categories(name), credit_cards(name), payment_types(name), responsible_persons(name)")
         .eq("created_by", user.id)
         .order("due_date", { ascending: true });
-      
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user?.id,
-  });
-
-  // Buscar cartões
-  const { data: cards, isLoading: isLoadingCards } = useQuery({
-    queryKey: ["credit-cards"],
-    queryFn: async () => {
-      if (!user?.id) return [];
-      const { data, error } = await supabase
-        .from("credit_cards")
-        .select("*")
-        .eq("created_by", user.id)
-        .order("name");
       
       if (error) throw error;
       return data;
