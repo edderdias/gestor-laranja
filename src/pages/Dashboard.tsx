@@ -18,8 +18,8 @@ import { format, parseISO, getMonth, getYear, isSameMonth, isSameYear, subMonths
 import { ptBR } from "date-fns/locale";
 import { MonthlyExpensesChart } from "@/components/charts/MonthlyExpensesChart";
 import { CategoryExpensesChart } from "@/components/charts/CategoryExpensesChart";
-import { ResponsiblePersonExpensesChart } from "@/components/charts/ResponsiblePersonExpensesChart"; // Novo import
-import { MonthlyIncomeChart } from "@/components/charts/MonthlyIncomeChart"; // Novo import
+import { ResponsiblePersonExpensesChart } from "@/components/charts/ResponsiblePersonExpensesChart"; // Novo gráfico
+import { MonthlyIncomeChart } from "@/components/charts/MonthlyIncomeChart"; // Novo gráfico
 import { Tables } from "@/integrations/supabase/types"; // Importar tipos do Supabase
 
 // Imports para o formulário de transferência
@@ -213,35 +213,36 @@ export default function Dashboard() {
 
   if (accountsPayable && creditCardPaymentTypeId !== undefined) { // Ensure creditCardPaymentTypeId is available
     accountsPayable.forEach(account => {
-      const amount = account.amount * (account.installments || 1);
+      // Usar account.amount que já é o valor da parcela
+      const installmentAmount = account.amount; 
       const dueDate = parseISO(account.due_date);
 
       if (isSameMonth(dueDate, today) && isSameYear(dueDate, today)) {
         if (account.paid) {
           // Only add to totalConfirmedMonthlyExpensesNonCreditCard if NOT paid by credit card
           if (account.payment_type_id !== creditCardPaymentTypeId) {
-            totalConfirmedMonthlyExpensesNonCreditCard += amount;
+            totalConfirmedMonthlyExpensesNonCreditCard += installmentAmount;
             numExpenseTransactions++;
 
             // For charts, only use paid expenses NOT by credit card
             const monthKey = format(dueDate, "MMM/yyyy", { locale: ptBR });
-            monthlyPaidExpensesChartDataMap.set(monthKey, (monthlyPaidExpensesChartDataMap.get(monthKey) || 0) + amount);
+            monthlyPaidExpensesChartDataMap.set(monthKey, (monthlyPaidExpensesChartDataMap.get(monthKey) || 0) + installmentAmount);
 
             if (account.expense_categories) {
               const categoryName = account.expense_categories.name;
-              categoryPaidExpensesChartDataMap.set(categoryName, (categoryPaidExpensesChartDataMap.get(categoryName) || 0) + amount);
+              categoryPaidExpensesChartDataMap.set(categoryName, (categoryPaidExpensesChartDataMap.get(categoryName) || 0) + installmentAmount);
             }
           }
         } else {
           // Forecast should still include all unpaid accounts payable
-          monthlyExpensesForecast += amount;
+          monthlyExpensesForecast += installmentAmount;
         }
       }
 
       // Adicionar gastos por responsável (contas a pagar) para o mês atual
       if (isSameMonth(dueDate, today) && isSameYear(dueDate, today) && account.paid) {
         const responsiblePersonName = (account.responsible_persons as Tables<'responsible_persons'>)?.name || "Não Atribuído";
-        responsiblePersonExpensesChartDataMap.set(responsiblePersonName, (responsiblePersonExpensesChartDataMap.get(responsiblePersonName) || 0) + amount);
+        responsiblePersonExpensesChartDataMap.set(responsiblePersonName, (responsiblePersonExpensesChartDataMap.get(responsiblePersonName) || 0) + installmentAmount);
       }
     });
   }
