@@ -930,6 +930,27 @@ export default function CreditCards() {
                         </p>
                       </div>
                       <div className="flex gap-1">
+                        {/* Novo ícone de confirmar pagamento */}
+                        {(billStatus === "Pendente" || billStatus === "Parcialmente Pago") && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  onClick={() => markAllCardAccountsAsPaidMutation.mutate(card.id)}
+                                  disabled={markAllCardAccountsAsPaidMutation.isPending}
+                                  className="text-income hover:bg-income/10"
+                                >
+                                  <CheckCircle className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Marcar fatura como paga</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1018,7 +1039,7 @@ export default function CreditCards() {
                         >
                           <CheckCircle className="h-4 w-4 mr-2" /> Marcar como Pago
                         </Button>
-                      ) : null} {/* Removido o botão de estornar fatura */}
+                      ) : null}
                       <Button 
                         variant="outline" 
                         size="sm" 
