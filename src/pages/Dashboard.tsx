@@ -55,7 +55,7 @@ export default function Dashboard() {
 
   const [isTransferFormOpen, setIsTransferForm] = useState(false);
 
-  const transferForm = useForm<TransferToPiggyBankFormData>({
+  const transferForm = useForm<TransferToToPiggyBankFormData>({
     resolver: zodResolver(transferToPiggyBankSchema),
     defaultValues: {
       description: "",
@@ -220,8 +220,11 @@ export default function Dashboard() {
       if (isSameMonth(dueDate, today) && isSameYear(dueDate, today)) {
         if (account.paid) {
           // Adiciona ao novo total para exibição no card "Despesas do Mês"
-          totalPaidAccountsPayableForDisplay += installmentAmount;
-          numExpenseTransactions++; // Incrementa para todas as despesas pagas
+          // APENAS SE NÃO FOR UM PAGAMENTO DE CARTÃO DE CRÉDITO
+          if (account.payment_type_id !== creditCardPaymentTypeId) {
+            totalPaidAccountsPayableForDisplay += installmentAmount;
+            numExpenseTransactions++; // Incrementa para despesas pagas que não são de cartão
+          }
 
           // Para os gráficos, continua a usar apenas despesas pagas NÃO por cartão de crédito
           if (account.payment_type_id !== creditCardPaymentTypeId) {
@@ -240,6 +243,7 @@ export default function Dashboard() {
       }
 
       // Adicionar gastos por responsável (contas a pagar) para o mês atual
+      // AQUI, INCLUÍMOS TODOS OS PAGAMENTOS, INCLUSIVE CARTÃO, PARA TER UMA VISÃO COMPLETA POR RESPONSÁVEL
       if (isSameMonth(dueDate, today) && isSameYear(dueDate, today) && account.paid) {
         const responsiblePersonName = (account.responsible_persons as Tables<'responsible_persons'>)?.name || "Não Atribuído";
         responsiblePersonExpensesChartDataMap.set(responsiblePersonName, (responsiblePersonExpensesChartDataMap.get(responsiblePersonName) || 0) + installmentAmount);
