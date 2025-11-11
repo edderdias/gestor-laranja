@@ -55,7 +55,7 @@ export default function Dashboard() {
 
   const [isTransferFormOpen, setIsTransferForm] = useState(false);
 
-  const transferForm = useForm<TransferToToPiggyBankFormData>({
+  const transferForm = useForm<TransferToPiggyBankFormData>({
     resolver: zodResolver(transferToPiggyBankSchema),
     defaultValues: {
       description: "",
@@ -180,7 +180,7 @@ export default function Dashboard() {
   let monthlyIncomeForecast = 0;
   let numIncomeTransactions = 0;
 
-  let totalConfirmedMonthlyExpensesNonCreditCard = 0; // Renomeado para evitar dupla contagem
+  let totalPaidAccountsPayableForDisplay = 0; // Nova variável para o total de despesas pagas (todas)
   let monthlyExpensesForecast = 0;
   let numExpenseTransactions = 0;
 
@@ -219,12 +219,12 @@ export default function Dashboard() {
 
       if (isSameMonth(dueDate, today) && isSameYear(dueDate, today)) {
         if (account.paid) {
-          // Only add to totalConfirmedMonthlyExpensesNonCreditCard if NOT paid by credit card
-          if (account.payment_type_id !== creditCardPaymentTypeId) {
-            totalConfirmedMonthlyExpensesNonCreditCard += installmentAmount;
-            numExpenseTransactions++;
+          // Adiciona ao novo total para exibição no card "Despesas do Mês"
+          totalPaidAccountsPayableForDisplay += installmentAmount;
+          numExpenseTransactions++; // Incrementa para todas as despesas pagas
 
-            // For charts, only use paid expenses NOT by credit card
+          // Para os gráficos, continua a usar apenas despesas pagas NÃO por cartão de crédito
+          if (account.payment_type_id !== creditCardPaymentTypeId) {
             const monthKey = format(dueDate, "MMM/yyyy", { locale: ptBR });
             monthlyPaidExpensesChartDataMap.set(monthKey, (monthlyPaidExpensesChartDataMap.get(monthKey) || 0) + installmentAmount);
 
@@ -234,7 +234,7 @@ export default function Dashboard() {
             }
           }
         } else {
-          // Forecast should still include all unpaid accounts payable
+          // Forecast deve continuar a incluir todas as contas a pagar não pagas
           monthlyExpensesForecast += installmentAmount;
         }
       }
@@ -284,8 +284,8 @@ export default function Dashboard() {
     numCreditCards = creditCards.length;
   }
 
-  // Calculate total monthly expenses (only non-credit card accounts payable)
-  const totalMonthlyExpenses = totalConfirmedMonthlyExpensesNonCreditCard;
+  // O total de despesas do mês para o card agora inclui todas as contas a pagar pagas
+  const totalMonthlyExpenses = totalPaidAccountsPayableForDisplay;
 
   const balance = totalConfirmedMonthlyIncome - totalMonthlyExpenses;
 
@@ -379,7 +379,7 @@ export default function Dashboard() {
             <CardHeader className="pb-3">
               <CardDescription className="text-expense">Despesas do Mês</CardDescription>
               <CardTitle className="text-3xl text-expense">
-                {isLoading ? "Carregando..." : `R$ ${totalMonthlyExpenses.toFixed(2)}`} {/* Usando totalMonthlyExpenses */}
+                {isLoading ? "Carregando..." : `R$ ${totalMonthlyExpenses.toFixed(2)}`}
               </CardTitle>
             </CardHeader>
             <CardContent>
