@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { format, getMonth, getYear, subMonths, parseISO, addMonths, endOfMonth, isSameMonth, isSameYear } from "date-fns";
+import { format, getMonth, getYear, subMonths, parseISO, addMonths, endOfMonth, isSameMonth, isSameYear, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,7 +39,7 @@ const formSchema = z.object({
   responsible_person_id: z.string().optional(),
 }).superRefine((data, ctx) => {
   // Validação condicional para purchase_date
-  if (!data.is_fixed && !data.purchase_date) {
+  if (!data.is_fixed && !data.purchase_date && data.payment_type_id !== "cartao") { // Only require purchase_date if not fixed AND not credit card
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Data da compra é obrigatória para contas não fixas",
@@ -47,7 +47,7 @@ const formSchema = z.object({
     });
   }
   // Validação condicional para installments
-  if (!data.is_fixed) { // Only validate installments if not fixed
+  if (!data.is_fixed && data.payment_type_id !== "cartao") { // Only validate installments if not fixed AND not credit card
     const numInstallments = parseInt(data.installments || "0");
     if (numInstallments < 1) {
       ctx.addIssue({
@@ -91,6 +91,45 @@ export default function AccountsPayable() {
 
   const selectedPaymentTypeId = form.watch("payment_type_id");
   const isFixed = form.watch("is_fixed");
+  const selectedCardId = form.watch("card_id");
+  const selectedDueDate = form.watch("due_date");
+
+  // Encontrar o ID do tipo de pagamento "cartao"
+  const { data: paymentTypes, isLoading: isLoadingPaymentTypes } = useQuery({
+    queryKey: ["payment-types"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("payment_types")
+        .select("*")
+        .order("name");
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+  const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name === "cartao")?.id;
+
+  // Fetch credit card transactions for the selected card and due date month
+  const { data: monthlyCardTransactions, isLoading: isLoadingMonthlyCardTransactions } = useQuery({
+    queryKey: ["credit_card_transactions_for_bill", selectedCardId, selectedDueDate],
+    queryFn: async () => {
+      if (!selectedCardId || !selectedDueDate) return [];
+
+      const billMonthStart = startOfMonth(parseISO(selectedDueDate));
+      const billMonthEnd = endOfMonth(parseISO(selectedDueDate));
+
+      const { data, error } = await supabase
+        .from("credit_card_transactions")
+        .select("amount")
+        .eq("card_id", selectedCardId)
+        .gte("purchase_date", format(billMonthStart, "yyyy-MM-dd"))
+        .lte("purchase_date", format(billMonthEnd, "yyyy-MM-dd"));
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedCardId && !!selectedDueDate && selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount, // Only enable for new entries
+  });
 
   useEffect(() => {
     if (isFormOpen && editingAccount) {
@@ -120,6 +159,30 @@ export default function AccountsPayable() {
       });
     }
   }, [isFormOpen, editingAccount, form]);
+
+  // Effect to auto-fill amount and description for credit card bills
+  useEffect(() => {
+    if (selectedPaymentTypeId === creditCardPaymentTypeId && selectedCardId && selectedDueDate && !editingAccount) {
+      if (monthlyCardTransactions) {
+        const totalBillAmount = monthlyCardTransactions.reduce((sum, transaction) => sum + transaction.amount, 0);
+        form.setValue("amount", totalBillAmount.toFixed(2));
+        form.setValue("installments", "1"); // Force 1 installment for bill payment
+        form.setValue("is_fixed", false); // Bill payment is not fixed
+        
+        // Suggest description
+        const cardName = cards?.find(c => c.id === selectedCardId)?.name || "Cartão";
+        const formattedMonth = format(parseISO(selectedDueDate), "MMMM/yyyy", { locale: ptBR });
+        form.setValue("description", `Fatura ${cardName} - ${formattedMonth}`);
+      }
+    } else if (!editingAccount) {
+      // Reset amount and description if card/payment type changes or is not credit card
+      form.setValue("amount", "");
+      form.setValue("description", "");
+      form.setValue("installments", "1");
+      form.setValue("is_fixed", false);
+    }
+  }, [selectedPaymentTypeId, selectedCardId, selectedDueDate, monthlyCardTransactions, editingAccount, form, cards, creditCardPaymentTypeId]);
+
 
   // Buscar contas a pagar
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
@@ -169,20 +232,6 @@ export default function AccountsPayable() {
     },
   });
 
-  // Buscar tipos de pagamento
-  const { data: paymentTypes, isLoading: isLoadingPaymentTypes } = useQuery({
-    queryKey: ["payment-types"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("payment_types")
-        .select("*")
-        .order("name");
-      
-      if (error) throw error;
-      return data;
-    },
-  });
-
   // Buscar responsáveis
   const { data: responsiblePersons, isLoading: isLoadingResponsiblePersons } = useQuery({
     queryKey: ["responsible-persons"],
@@ -196,9 +245,6 @@ export default function AccountsPayable() {
       return data;
     },
   });
-
-  // Encontrar o ID do tipo de pagamento "cartao"
-  const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name === "cartao")?.id;
 
   // Criar/Atualizar conta
   const saveMutation = useMutation({
@@ -235,9 +281,9 @@ export default function AccountsPayable() {
           .update({
             ...baseAccountData,
             description: editingAccount.is_fixed ? values.description : editingAccount.description, // Only update description for original fixed
-            purchase_date: values.is_fixed ? null : values.purchase_date,
+            purchase_date: values.is_fixed || values.payment_type_id === creditCardPaymentTypeId ? null : values.purchase_date, // Null if fixed or credit card
             due_date: values.due_date,
-            installments: values.is_fixed ? 1 : parseInt(values.installments || "1"),
+            installments: values.is_fixed || values.payment_type_id === creditCardPaymentTypeId ? 1 : parseInt(values.installments || "1"), // 1 if fixed or credit card
             is_fixed: values.is_fixed,
           })
           .eq("id", editingAccount.id);
@@ -695,6 +741,7 @@ export default function AccountsPayable() {
                               <Switch
                                 checked={field.value}
                                 onCheckedChange={field.onChange}
+                                disabled={selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount} // Disable if credit card and new entry
                               />
                             </FormControl>
                           </FormItem>
@@ -743,7 +790,7 @@ export default function AccountsPayable() {
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {!isFixed && (
+                      {!(selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount) && !isFixed && ( // Hide purchase_date if credit card and new entry, or if fixed
                         <FormField
                           control={form.control}
                           name="purchase_date"
@@ -762,7 +809,7 @@ export default function AccountsPayable() {
                         control={form.control}
                         name="due_date"
                         render={({ field }) => (
-                          <FormItem className={cn(isFixed && "col-span-2")}>
+                          <FormItem className={cn((isFixed || (selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount)) && "col-span-2")}>
                             <FormLabel>Data de Vencimento</FormLabel>
                             <FormControl>
                               <Input type="date" {...field} />
@@ -773,7 +820,7 @@ export default function AccountsPayable() {
                       />
                     </div>
 
-                    {!isFixed && (
+                    {!(selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount) && !isFixed && ( // Hide if credit card and new entry, or if fixed
                       <div className="grid grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
@@ -805,7 +852,7 @@ export default function AccountsPayable() {
                       </div>
                     )}
 
-                    {isFixed && (
+                    {(isFixed || (selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount)) && ( // Show if fixed OR credit card and new entry
                       <div className="grid grid-cols-1 gap-4">
                         <FormField
                           control={form.control}
@@ -814,7 +861,13 @@ export default function AccountsPayable() {
                             <FormItem>
                               <FormLabel>Valor da Parcela</FormLabel>
                               <FormControl>
-                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                                <Input 
+                                  type="number" 
+                                  step="0.01" 
+                                  placeholder="0.00" 
+                                  {...field} 
+                                  disabled={selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount} // Disable if credit card and new entry
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -883,7 +936,7 @@ export default function AccountsPayable() {
 
                     <div className="bg-muted p-4 rounded-lg">
                       <p className="text-sm font-medium">
-                        Valor Total: R$ {(parseFloat(form.watch("amount") || "0") * (isFixed ? 1 : parseInt(form.watch("installments") || "1"))).toFixed(2)}
+                        Valor Total: R$ {(parseFloat(form.watch("amount") || "0") * (isFixed || (selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount) ? 1 : parseInt(form.watch("installments") || "1"))).toFixed(2)}
                       </p>
                     </div>
 
