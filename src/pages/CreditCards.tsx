@@ -307,8 +307,10 @@ export default function CreditCards() {
       if (error) throw error;
 
       const totals = data.reduce((acc: { [key: string]: number }, transaction) => {
-        const personName = transaction.responsible_persons?.name || "Não Atribuído";
-        acc[personName] = (acc[personName] || 0) + transaction.amount;
+        const personName = transaction.responsible_persons?.name;
+        if (personName && personName !== "Não Atribuído") { // Excluir "Não Atribuído"
+          acc[personName] = (acc[personName] || 0) + transaction.amount;
+        }
         return acc;
       }, {});
 

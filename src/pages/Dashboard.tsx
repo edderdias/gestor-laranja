@@ -221,7 +221,6 @@ export default function Dashboard() {
       if (isSameMonth(dueDate, today) && isSameYear(dueDate, today)) {
         if (account.paid) {
           // Adiciona ao novo total para exibição no card "Despesas do Mês"
-          // AGORA INCLUI TODOS OS PAGAMENTOS, INCLUSIVE CARTÃO DE CRÉDITO
           totalPaidAccountsPayableForDisplay += installmentAmount;
           numExpenseTransactions++; // Incrementa para todas as despesas pagas
 
@@ -244,8 +243,10 @@ export default function Dashboard() {
       // Adicionar gastos por responsável (contas a pagar) para o mês atual
       // AQUI, INCLUÍMOS TODOS OS PAGAMENTOS, INCLUSIVE CARTÃO, PARA TER UMA VISÃO COMPLETA POR RESPONSÁVEL
       if (isSameMonth(dueDate, today) && isSameYear(dueDate, today) && account.paid) {
-        const responsiblePersonName = (account.responsible_persons as Tables<'responsible_persons'>)?.name || "Não Atribuído";
-        responsiblePersonExpensesChartDataMap.set(responsiblePersonName, (responsiblePersonExpensesChartDataMap.get(responsiblePersonName) || 0) + installmentAmount);
+        const responsiblePersonName = (account.responsible_persons as Tables<'responsible_persons'>)?.name;
+        if (responsiblePersonName && responsiblePersonName !== "Não Atribuído") { // Excluir "Não Atribuído"
+          responsiblePersonExpensesChartDataMap.set(responsiblePersonName, (responsiblePersonExpensesChartDataMap.get(responsiblePersonName) || 0) + installmentAmount);
+        }
       }
     });
   }
@@ -255,8 +256,10 @@ export default function Dashboard() {
     allCreditCardTransactions.forEach(transaction => {
       const transactionDate = parseISO(transaction.purchase_date);
       if (isSameMonth(transactionDate, today) && isSameYear(transactionDate, today)) {
-        const responsiblePersonName = (transaction.responsible_persons as Tables<'responsible_persons'>)?.name || "Não Atribuído";
-        responsiblePersonExpensesChartDataMap.set(responsiblePersonName, (responsiblePersonExpensesChartDataMap.get(responsiblePersonName) || 0) + transaction.amount);
+        const responsiblePersonName = (transaction.responsible_persons as Tables<'responsible_persons'>)?.name;
+        if (responsiblePersonName && responsiblePersonName !== "Não Atribuído") { // Excluir "Não Atribuído"
+          responsiblePersonExpensesChartDataMap.set(responsiblePersonName, (responsiblePersonExpensesChartDataMap.get(responsiblePersonName) || 0) + transaction.amount);
+        }
       }
     });
   }
