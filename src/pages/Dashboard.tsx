@@ -55,7 +55,7 @@ export default function Dashboard() {
 
   const [isTransferFormOpen, setIsTransferForm] = useState(false);
 
-  const transferForm = useForm<TransferToToPiggyBankFormData>({
+  const transferForm = useForm<TransferToPiggyBankFormData>({
     resolver: zodResolver(transferToPiggyBankSchema),
     defaultValues: {
       description: "",
@@ -151,7 +151,7 @@ export default function Dashboard() {
       if (!user?.id) return [];
       const { data, error } = await supabase
         .from("credit_card_transactions")
-        .select("amount, purchase_date, responsible_persons(is_principal, name)") // Incluir dados do responsável e nome
+        .select("amount, purchase_date, responsible_persons(is_principal, name), accounts_payable_id") // Incluir accounts_payable_id
         .in("created_by", userIdsToFetch);
       if (error) throw error;
       return data;
@@ -189,11 +189,12 @@ export default function Dashboard() {
   if (allCreditCardTransactions) {
     totalCreditCardUsedLimit = allCreditCardTransactions.reduce((sum, transaction) => {
       const transactionDate = parseISO(transaction.purchase_date); // Parse purchase_date
-      // Soma apenas se a transação for do mês atual E o responsável for principal
+      // Soma apenas se a transação for do mês atual, o responsável for principal E NÃO ESTIVER VINCULADA A UMA CONTA A PAGAR
       if (
         isSameMonth(transactionDate, today) && 
         isSameYear(transactionDate, today) &&
-        (transaction.responsible_persons as Tables<'responsible_persons'>)?.is_principal === true
+        (transaction.responsible_persons as Tables<'responsible_persons'>)?.is_principal === true &&
+        transaction.accounts_payable_id === null // Adicionada a condição para excluir transações de contas a pagar
       ) {
         return sum + transaction.amount; // Soma o valor da parcela individual para o mês atual
       }
