@@ -300,7 +300,8 @@ export type Database = {
           updated_at: string
           is_fixed: boolean | null
           original_fixed_transaction_id: string | null
-          responsible_person_id: string | null // Adicionado
+          responsible_person_id: string | null
+          accounts_payable_id: string | null // Adicionado
         }
         Insert: {
           amount: number
@@ -316,7 +317,8 @@ export type Database = {
           updated_at?: string
           is_fixed?: boolean | null
           original_fixed_transaction_id?: string | null
-          responsible_person_id?: string | null // Adicionado
+          responsible_person_id?: string | null
+          accounts_payable_id?: string | null // Adicionado
         }
         Update: {
           amount?: number
@@ -332,9 +334,17 @@ export type Database = {
           updated_at?: string
           is_fixed?: boolean | null
           original_fixed_transaction_id?: string | null
-          responsible_person_id?: string | null // Adicionado
+          responsible_person_id?: string | null
+          accounts_payable_id?: string | null // Adicionado
         }
         Relationships: [
+          {
+            foreignKeyName: "credit_card_transactions_accounts_payable_id_fkey"
+            columns: ["accounts_payable_id"]
+            isOneToOne: false
+            referencedRelation: "accounts_payable"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "credit_card_transactions_card_id_fkey"
             columns: ["card_id"]
@@ -364,7 +374,7 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "credit_card_transactions_responsible_person_id_fkey" // Adicionado
+            foreignKeyName: "credit_card_transactions_responsible_person_id_fkey"
             columns: ["responsible_person_id"]
             isOneToOne: false
             referencedRelation: "responsible_persons"

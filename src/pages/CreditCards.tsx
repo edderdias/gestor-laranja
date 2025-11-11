@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { CreditCard, Plus, Edit, Trash2, ShoppingCart, CalendarIcon, ListChecks, Printer, Pencil } from "lucide-react";
+import { CreditCard, Plus, Edit, Trash2, ShoppingCart, CalendarIcon, ListChecks, Printer, Pencil, CheckCircle, RotateCcw } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,6 +25,7 @@ import { Tables } from "@/integrations/supabase/types";
 import { PrintStatementComponent } from "@/components/PrintStatementComponent";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import html2pdf from 'html2pdf.js';
+import { Badge } from "@/components/ui/badge"; // Importar Badge
 
 // Helper function for formatting currency for display
 const formatCurrencyDisplay = (value: number | undefined): string => {
@@ -82,6 +83,9 @@ type CreditCardTransactionWithGeneratedFlag = Tables<'credit_card_transactions'>
   expense_categories?: Tables<'expense_categories'>;
   responsible_persons?: Tables<'responsible_persons'>;
 };
+
+// Tipo para o status de pagamento da fatura
+type BillPaidStatus = "Pago" | "Pendente" | "Parcialmente Pago" | "Sem Lançamentos";
 
 export default function CreditCards() {
   const { user } = useAuth();
@@ -201,6 +205,64 @@ export default function CreditCards() {
       return data;
     },
   });
+
+  // Fetch payment types to identify credit card payment type
+  const { data: paymentTypes, isLoading: isLoadingPaymentTypes } = useQuery({
+    queryKey: ["payment-types"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("payment_types")
+        .select("id, name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name === "cartao")?.id;
+
+  // Fetch accounts payable entries for each card for the selected month
+  const { data: monthlyCardAccountsPayable, isLoading: isLoadingMonthlyCardAccountsPayable } = useQuery({
+    queryKey: ["monthly_card_accounts_payable", user?.id, selectedMonthYear, creditCardPaymentTypeId],
+    queryFn: async () => {
+      if (!user?.id || !creditCardPaymentTypeId) return [];
+      const monthStart = startOfMonth(parseISO(`${selectedMonthYear}-01`));
+      const monthEnd = endOfMonth(parseISO(`${selectedMonthYear}-01`));
+
+      const { data, error } = await supabase
+        .from("accounts_payable")
+        .select("id, card_id, paid, due_date")
+        .eq("created_by", user.id)
+        .eq("payment_type_id", creditCardPaymentTypeId)
+        .gte("due_date", format(monthStart, "yyyy-MM-dd"))
+        .lte("due_date", format(monthEnd, "yyyy-MM-dd"));
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id && !!creditCardPaymentTypeId,
+  });
+
+  // Process monthly card accounts payable to determine paid status for each card
+  const cardPaidStatusMap = new Map<string, BillPaidStatus>();
+  if (cards && monthlyCardAccountsPayable) {
+    cards.forEach(card => {
+      const cardPayments = monthlyCardAccountsPayable.filter(ap => ap.card_id === card.id);
+      if (cardPayments.length === 0) {
+        cardPaidStatusMap.set(card.id, "Sem Lançamentos");
+      } else {
+        const allPaid = cardPayments.every(ap => ap.paid);
+        const anyPaid = cardPayments.some(ap => ap.paid);
+
+        if (allPaid) {
+          cardPaidStatusMap.set(card.id, "Pago");
+        } else if (anyPaid) {
+          cardPaidStatusMap.set(card.id, "Parcialmente Pago");
+        } else {
+          cardPaidStatusMap.set(card.id, "Pendente");
+        }
+      }
+    });
+  }
 
   // Fetch total gasto por cartão para o MÊS SELECIONADO
   const { data: cardExpenses } = useQuery({
@@ -443,6 +505,7 @@ export default function CreditCards() {
       queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] });
       queryClient.invalidateQueries({ queryKey: ["card_expenses"] });
       queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] }); // Invalida o novo query
+      queryClient.invalidateQueries({ queryKey: ["monthly_card_accounts_payable"] }); // Invalida o status de pagamento da fatura
       toast.success(editingTransaction ? "Lançamento atualizado com sucesso!" : "Compra registrada com sucesso!");
       setIsTransactionFormOpen(false);
       setEditingTransaction(null);
@@ -467,10 +530,159 @@ export default function CreditCards() {
       queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] });
       queryClient.invalidateQueries({ queryKey: ["card_expenses"] });
       queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] }); // Invalida o novo query
+      queryClient.invalidateQueries({ queryKey: ["monthly_card_accounts_payable"] }); // Invalida o status de pagamento da fatura
       toast.success("Lançamento excluído com sucesso!");
     },
     onError: (error) => {
       toast.error("Erro ao excluir lançamento: " + error.message);
+      console.error(error);
+    },
+  });
+
+  // Mutation para marcar todas as contas a pagar de um cartão como pagas para o mês selecionado
+  const markAllCardAccountsAsPaidMutation = useMutation({
+    mutationFn: async (cardId: string) => {
+      if (!user?.id || !creditCardPaymentTypeId) {
+        toast.error("Usuário não autenticado ou tipo de pagamento de cartão não encontrado.");
+        throw new Error("User not authenticated or credit card payment type not found.");
+      }
+
+      const monthStart = startOfMonth(parseISO(`${selectedMonthYear}-01`));
+      const monthEnd = endOfMonth(parseISO(`${selectedMonthYear}-01`));
+      const paidDate = format(new Date(), "yyyy-MM-dd");
+
+      // 1. Buscar todas as contas a pagar NÃO pagas para este cartão e mês
+      const { data: unpaidAccounts, error: fetchError } = await supabase
+        .from("accounts_payable")
+        .select("id, description, amount, category_id, installments, current_installment, responsible_person_id, is_fixed, original_fixed_account_id")
+        .eq("created_by", user.id)
+        .eq("card_id", cardId)
+        .eq("payment_type_id", creditCardPaymentTypeId)
+        .eq("paid", false)
+        .gte("due_date", format(monthStart, "yyyy-MM-dd"))
+        .lte("due_date", format(monthEnd, "yyyy-MM-dd"));
+
+      if (fetchError) throw fetchError;
+
+      if (unpaidAccounts.length === 0) {
+        toast.info("Não há contas a pagar pendentes para este cartão no mês selecionado.");
+        return;
+      }
+
+      // 2. Marcar todas como pagas e criar transações de cartão
+      for (const account of unpaidAccounts) {
+        // Atualizar a conta a pagar
+        const { error: updateError } = await supabase
+          .from("accounts_payable")
+          .update({ paid: true, paid_date: paidDate })
+          .eq("id", account.id);
+        if (updateError) throw updateError;
+
+        // Inserir transação de cartão de crédito (se ainda não existir)
+        const { data: existingTransaction } = await supabase
+          .from("credit_card_transactions")
+          .select("id")
+          .eq("accounts_payable_id", account.id)
+          .single();
+
+        if (!existingTransaction) {
+          const transactionData = {
+            description: account.description,
+            amount: account.amount,
+            card_id: cardId,
+            category_id: account.category_id,
+            purchase_date: paidDate, // Usar a data de pagamento como data da compra para a transação
+            installments: account.installments || 1,
+            current_installment: account.current_installment || 1,
+            created_by: user.id,
+            responsible_person_id: account.responsible_person_id,
+            accounts_payable_id: account.id, // Vincular à conta a pagar
+            is_fixed: account.is_fixed,
+            original_fixed_transaction_id: account.original_fixed_account_id,
+          };
+          const { error: transactionError } = await supabase
+            .from("credit_card_transactions")
+            .insert(transactionData);
+          if (transactionError) {
+            console.error("Error inserting credit card transaction:", transactionError);
+            throw transactionError;
+          }
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accounts-payable"] });
+      queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["card_expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] });
+      queryClient.invalidateQueries({ queryKey: ["monthly_card_accounts_payable"] });
+      toast.success("Fatura do cartão marcada como paga!");
+    },
+    onError: (error) => {
+      toast.error("Erro ao marcar fatura como paga: " + error.message);
+      console.error(error);
+    },
+  });
+
+  // Mutation para estornar todas as contas a pagar de um cartão para o mês selecionado
+  const reverseAllCardAccountsAsPaidMutation = useMutation({
+    mutationFn: async (cardId: string) => {
+      if (!user?.id || !creditCardPaymentTypeId) {
+        toast.error("Usuário não autenticado ou tipo de pagamento de cartão não encontrado.");
+        throw new Error("User not authenticated or credit card payment type not found.");
+      }
+
+      const monthStart = startOfMonth(parseISO(`${selectedMonthYear}-01`));
+      const monthEnd = endOfMonth(parseISO(`${selectedMonthYear}-01`));
+
+      // 1. Buscar todas as contas a pagar pagas para este cartão e mês
+      const { data: paidAccounts, error: fetchError } = await supabase
+        .from("accounts_payable")
+        .select("id")
+        .eq("created_by", user.id)
+        .eq("card_id", cardId)
+        .eq("payment_type_id", creditCardPaymentTypeId)
+        .eq("paid", true)
+        .gte("due_date", format(monthStart, "yyyy-MM-dd"))
+        .lte("due_date", format(monthEnd, "yyyy-MM-dd"));
+
+      if (fetchError) throw fetchError;
+
+      if (paidAccounts.length === 0) {
+        toast.info("Não há contas a pagar pagas para este cartão no mês selecionado.");
+        return;
+      }
+
+      // 2. Marcar todas como não pagas e deletar transações de cartão
+      for (const account of paidAccounts) {
+        // Deletar transação de cartão de crédito vinculada
+        const { error: deleteTransactionError } = await supabase
+          .from("credit_card_transactions")
+          .delete()
+          .eq("accounts_payable_id", account.id);
+        if (deleteTransactionError) {
+          console.error("Error deleting linked credit card transaction on reverse all:", deleteTransactionError);
+          throw deleteTransactionError;
+        }
+
+        // Atualizar a conta a pagar
+        const { error: updateError } = await supabase
+          .from("accounts_payable")
+          .update({ paid: false, paid_date: null })
+          .eq("id", account.id);
+        if (updateError) throw updateError;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accounts-payable"] });
+      queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["card_expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] });
+      queryClient.invalidateQueries({ queryKey: ["monthly_card_accounts_payable"] });
+      toast.success("Fatura do cartão estornada!");
+    },
+    onError: (error) => {
+      toast.error("Erro ao estornar fatura: " + error.message);
       console.error(error);
     },
   });
@@ -756,7 +968,7 @@ export default function CreditCards() {
       </div>
 
       <main className="container mx-auto px-4 py-8">
-        {isLoadingCards ? (
+        {isLoadingCards || isLoadingMonthlyCardAccountsPayable ? (
           <p className="text-muted-foreground">Carregando cartões...</p>
         ) : cards && cards.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
@@ -765,6 +977,7 @@ export default function CreditCards() {
               const usedPercentage = card.credit_limit 
                 ? ((card.credit_limit - availableLimit) / card.credit_limit) * 100 
                 : 0;
+              const billStatus = cardPaidStatusMap.get(card.id) || "Sem Lançamentos";
 
               return (
                 <Card key={card.id} className="relative">
@@ -843,7 +1056,42 @@ export default function CreditCards() {
                         {usedPercentage.toFixed(1)}% utilizado
                       </p>
                     </div>
+                    <div className="flex justify-between items-center mt-4">
+                      <span className="text-sm font-medium">Fatura ({format(currentMonthStart, "MMM/yy", { locale: ptBR })}):</span>
+                      <Badge 
+                        className={cn(
+                          "text-xs",
+                          billStatus === "Pago" && "bg-income text-income-foreground hover:bg-income/80",
+                          billStatus === "Pendente" && "bg-destructive text-destructive-foreground hover:bg-destructive/80",
+                          billStatus === "Parcialmente Pago" && "bg-yellow-500 text-white hover:bg-yellow-500/80",
+                          billStatus === "Sem Lançamentos" && "bg-muted text-muted-foreground hover:bg-muted/80"
+                        )}
+                      >
+                        {billStatus}
+                      </Badge>
+                    </div>
                     <div className="flex justify-end gap-2 mt-4">
+                      {billStatus === "Pendente" || billStatus === "Parcialmente Pago" ? (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => markAllCardAccountsAsPaidMutation.mutate(card.id)}
+                          disabled={markAllCardAccountsAsPaidMutation.isPending}
+                          className="text-income border-income hover:bg-income/10"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" /> Marcar como Pago
+                        </Button>
+                      ) : billStatus === "Pago" ? (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => reverseAllCardAccountsAsPaidMutation.mutate(card.id)}
+                          disabled={reverseAllCardAccountsAsPaidMutation.isPending}
+                          className="text-destructive border-destructive hover:bg-destructive/10"
+                        >
+                          <RotateCcw className="h-4 w-4 mr-2" /> Estornar Fatura
+                        </Button>
+                      ) : null}
                       <Button 
                         variant="outline" 
                         size="sm" 

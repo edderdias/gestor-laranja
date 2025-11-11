@@ -208,15 +208,18 @@ export default function AccountsPayable() {
         throw new Error("User not authenticated.");
       }
 
+      let finalCardId = values.card_id;
       // Validação condicional para card_id
       if (values.payment_type_id === creditCardPaymentTypeId && !values.card_id) {
         toast.error("Selecione um cartão de crédito para o tipo de pagamento 'Cartão'.");
         throw new Error("Credit card selection required.");
+      } else if (values.payment_type_id !== creditCardPaymentTypeId) {
+        finalCardId = null; // Clear card_id if not a credit card payment
       }
 
       const baseAccountData = {
         payment_type_id: values.payment_type_id,
-        card_id: values.payment_type_id === creditCardPaymentTypeId ? values.card_id : null,
+        card_id: finalCardId,
         amount: parseFloat(values.amount),
         category_id: values.category_id,
         expense_type: "variavel" as const, // Mantido como enum fixo
@@ -311,6 +314,29 @@ export default function AccountsPayable() {
   // Deletar conta
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      // Antes de deletar a conta a pagar, verificar se há uma transação de cartão de crédito vinculada e deletá-la
+      const { data: existingTransaction, error: fetchError } = await supabase
+        .from("credit_card_transactions")
+        .select("id")
+        .eq("accounts_payable_id", id)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 means no rows found
+        console.error("Error fetching linked credit card transaction:", fetchError);
+        throw fetchError;
+      }
+
+      if (existingTransaction) {
+        const { error: deleteTransactionError } = await supabase
+          .from("credit_card_transactions")
+          .delete()
+          .eq("id", existingTransaction.id);
+        if (deleteTransactionError) {
+          console.error("Error deleting linked credit card transaction:", deleteTransactionError);
+          throw deleteTransactionError;
+        }
+      }
+
       const { error } = await supabase
         .from("accounts_payable")
         .delete()
@@ -320,6 +346,9 @@ export default function AccountsPayable() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-payable"] });
+      queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] }); // Invalida o cache de transações de cartão
+      queryClient.invalidateQueries({ queryKey: ["card_expenses"] }); // Invalida o cache de gastos do cartão
+      queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] }); // Invalida o cache de gastos por responsável
       toast.success("Conta deletada com sucesso!");
     },
     onError: (error) => {
@@ -336,10 +365,11 @@ export default function AccountsPayable() {
       }
 
       const formattedPaidDate = format(paidDate, "yyyy-MM-dd");
+      let insertedAccountId = account.id;
 
       // Step 1: Update/Insert accounts_payable
       if (account.is_generated_fixed_instance) {
-        const { error } = await supabase
+        const { data: newAccount, error } = await supabase
           .from("accounts_payable")
           .insert({
             description: account.description,
@@ -357,8 +387,11 @@ export default function AccountsPayable() {
             paid: true,
             paid_date: formattedPaidDate,
             original_fixed_account_id: account.original_fixed_account_id || account.id,
-          });
+          })
+          .select("id")
+          .single();
         if (error) throw error;
+        insertedAccountId = newAccount.id;
       } else {
         const { error } = await supabase
           .from("accounts_payable")
@@ -379,6 +412,8 @@ export default function AccountsPayable() {
           installments: account.installments || 1,
           current_installment: account.current_installment || 1,
           created_by: user.id,
+          responsible_person_id: account.responsible_person_id,
+          accounts_payable_id: insertedAccountId, // Link to the accounts_payable entry
         };
 
         const { error: transactionError } = await supabase
@@ -395,6 +430,8 @@ export default function AccountsPayable() {
       queryClient.invalidateQueries({ queryKey: ["accounts-payable"] });
       queryClient.invalidateQueries({ queryKey: ["credit-cards"] }); // Invalida o cache de cartões para atualizar limites
       queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] }); // Invalida o cache de transações de cartão
+      queryClient.invalidateQueries({ queryKey: ["card_expenses"] }); // Invalida o cache de gastos do cartão
+      queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] }); // Invalida o cache de gastos por responsável
       toast.success("Pagamento confirmado com sucesso!");
       setShowConfirmPaidDateDialog(false);
       setCurrentConfirmingAccount(null);
@@ -407,11 +444,25 @@ export default function AccountsPayable() {
 
   // Estornar pagamento
   const reversePaidMutation = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (account: AccountPayableWithGeneratedFlag) => {
+      // Se for um pagamento de cartão de crédito, deletar a transação de cartão correspondente
+      if (account.payment_type_id === creditCardPaymentTypeId && account.card_id) {
+        const { error: deleteTransactionError } = await supabase
+          .from("credit_card_transactions")
+          .delete()
+          .eq("accounts_payable_id", account.id); // Usar o accounts_payable_id para encontrar a transação
+        
+        if (deleteTransactionError) {
+          console.error("Error deleting linked credit card transaction on reverse:", deleteTransactionError);
+          toast.error("Erro ao remover transação de cartão de crédito vinculada.");
+          throw deleteTransactionError;
+        }
+      }
+
       const { error } = await supabase
         .from("accounts_payable")
         .update({ paid: false, paid_date: null })
-        .eq("id", id);
+        .eq("id", account.id);
       
       if (error) throw error;
     },
@@ -419,6 +470,8 @@ export default function AccountsPayable() {
       queryClient.invalidateQueries({ queryKey: ["accounts-payable"] });
       queryClient.invalidateQueries({ queryKey: ["credit-cards"] }); // Invalida o cache de cartões para atualizar limites
       queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] }); // Invalida o cache de transações de cartão
+      queryClient.invalidateQueries({ queryKey: ["card_expenses"] }); // Invalida o cache de gastos do cartão
+      queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] }); // Invalida o cache de gastos por responsável
       toast.success("Pagamento estornado com sucesso!");
     },
     onError: (error) => {
@@ -460,7 +513,7 @@ export default function AccountsPayable() {
       return;
     }
     if (confirm("Tem certeza que deseja estornar este pagamento? Ele voltará para o status de 'não pago'.")) {
-      reversePaidMutation.mutate(account.id);
+      reversePaidMutation.mutate(account); // Passar o objeto account completo
     }
   };
 
