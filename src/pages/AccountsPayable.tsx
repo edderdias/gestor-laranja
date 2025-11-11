@@ -36,7 +36,7 @@ const formSchema = z.object({
   amount: z.string().min(1, "Valor é obrigatório"),
   category_id: z.string().min(1, "Categoria é obrigatória"),
   is_fixed: z.boolean().default(false),
-  responsible_person_id: z.string().optional(),
+  responsible_person_id: z.string().optional(), // Tornar opcional no esquema
 }).superRefine((data, ctx) => {
   // Validação condicional para purchase_date
   if (!data.is_fixed && !data.purchase_date && data.payment_type_id !== "cartao") { // Only require purchase_date if not fixed AND not credit card
@@ -54,7 +54,7 @@ const formSchema = z.object({
         code: z.ZodIssueCode.custom,
         message: "Quantidade de parcelas é obrigatória e deve ser no mínimo 1 para contas não fixas",
         path: ["installments"],
-      });
+    });
     }
   }
 });
@@ -154,7 +154,7 @@ export default function AccountsPayable() {
         description: editingAccount.description,
         payment_type_id: editingAccount.payment_type_id || "",
         card_id: editingAccount.card_id || "",
-        purchase_date: editingAccount.purchase_date || format(new Date(), "yyyy-MM- muối-dd"),
+        purchase_date: editingAccount.purchase_date || format(new Date(), "yyyy-MM-dd"),
         due_date: editingAccount.due_date,
         installments: editingAccount.installments?.toString() || "1", // Set to "1" if null/undefined
         amount: editingAccount.amount.toString(),
@@ -274,7 +274,7 @@ export default function AccountsPayable() {
         amount: parseFloat(values.amount),
         category_id: values.category_id,
         expense_type: "variavel" as const, // Mantido como enum fixo
-        responsible_person_id: values.responsible_person_id || null,
+        responsible_person_id: values.payment_type_id === creditCardPaymentTypeId ? null : (values.responsible_person_id || null), // Definir como null se for cartão
         created_by: user.id,
       };
 
@@ -910,34 +910,36 @@ export default function AccountsPayable() {
                       )}
                     />
 
-                    <FormField
-                      control={form.control}
-                      name="responsible_person_id"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Responsável</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || ""}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione o responsável" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {isLoadingResponsiblePersons ? (
-                                <SelectItem value="loading" disabled>Carregando...</SelectItem>
-                              ) : (
-                                responsiblePersons?.map((person) => (
-                                  <SelectItem key={person.id} value={person.id}>
-                                    {person.name}
-                                  </SelectItem>
-                                ))
-                              )}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    {selectedPaymentTypeId !== creditCardPaymentTypeId && ( // Renderizar condicionalmente
+                      <FormField
+                        control={form.control}
+                        name="responsible_person_id"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Responsável</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value || ""}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione o responsável" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {isLoadingResponsiblePersons ? (
+                                  <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                                ) : (
+                                  responsiblePersons?.map((person) => (
+                                    <SelectItem key={person.id} value={person.id}>
+                                      {person.name}
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
 
                     <div className="bg-muted p-4 rounded-lg">
                       <p className="text-sm font-medium">
