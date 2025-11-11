@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { CreditCard, Plus, Edit, Trash2, ShoppingCart, CalendarIcon, ListChecks, Printer, Pencil, CheckCircle, RotateCcw } from "lucide-react";
+import { CreditCard, Plus, Edit, Trash2, ShoppingCart, CalendarIcon, ListChecks, Printer, Pencil, CheckCircle } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -624,69 +624,6 @@ export default function CreditCards() {
     },
   });
 
-  // Mutation para estornar todas as contas a pagar de um cartão para o mês selecionado
-  const reverseAllCardAccountsAsPaidMutation = useMutation({
-    mutationFn: async (cardId: string) => {
-      if (!user?.id || !creditCardPaymentTypeId) {
-        toast.error("Usuário não autenticado ou tipo de pagamento de cartão não encontrado.");
-        throw new Error("User not authenticated or credit card payment type not found.");
-      }
-
-      const monthStart = startOfMonth(parseISO(`${selectedMonthYear}-01`));
-      const monthEnd = endOfMonth(parseISO(`${selectedMonthYear}-01`));
-
-      // 1. Buscar todas as contas a pagar pagas para este cartão e mês
-      const { data: paidAccounts, error: fetchError } = await supabase
-        .from("accounts_payable")
-        .select("id")
-        .eq("created_by", user.id)
-        .eq("card_id", cardId)
-        .eq("payment_type_id", creditCardPaymentTypeId)
-        .eq("paid", true)
-        .gte("due_date", format(monthStart, "yyyy-MM-dd"))
-        .lte("due_date", format(monthEnd, "yyyy-MM-dd"));
-
-      if (fetchError) throw fetchError;
-
-      if (paidAccounts.length === 0) {
-        toast.info("Não há contas a pagar pagas para este cartão no mês selecionado.");
-        return;
-      }
-
-      // 2. Marcar todas como não pagas e deletar transações de cartão
-      for (const account of paidAccounts) {
-        // Deletar transação de cartão de crédito vinculada
-        const { error: deleteTransactionError } = await supabase
-          .from("credit_card_transactions")
-          .delete()
-          .eq("accounts_payable_id", account.id);
-        if (deleteTransactionError) {
-          console.error("Error deleting linked credit card transaction on reverse all:", deleteTransactionError);
-          throw deleteTransactionError;
-        }
-
-        // Atualizar a conta a pagar
-        const { error: updateError } = await supabase
-          .from("accounts_payable")
-          .update({ paid: false, paid_date: null })
-          .eq("id", account.id);
-        if (updateError) throw updateError;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["accounts-payable"] });
-      queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["card_expenses"] });
-      queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] });
-      queryClient.invalidateQueries({ queryKey: ["monthly_card_accounts_payable"] });
-      toast.success("Fatura do cartão estornada!");
-    },
-    onError: (error) => {
-      toast.error("Erro ao estornar fatura: " + error.message);
-      console.error(error);
-    },
-  });
-
   const handleCardSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -1081,17 +1018,7 @@ export default function CreditCards() {
                         >
                           <CheckCircle className="h-4 w-4 mr-2" /> Marcar como Pago
                         </Button>
-                      ) : billStatus === "Pago" ? (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => reverseAllCardAccountsAsPaidMutation.mutate(card.id)}
-                          disabled={reverseAllCardAccountsAsPaidMutation.isPending}
-                          className="text-destructive border-destructive hover:bg-destructive/10"
-                        >
-                          <RotateCcw className="h-4 w-4 mr-2" /> Estornar Fatura
-                        </Button>
-                      ) : null}
+                      ) : null} {/* Removido o botão de estornar fatura */}
                       <Button 
                         variant="outline" 
                         size="sm" 
