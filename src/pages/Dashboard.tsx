@@ -55,7 +55,7 @@ export default function Dashboard() {
 
   const [isTransferFormOpen, setIsTransferForm] = useState(false);
 
-  const transferForm = useForm<TransferToPiggyBankFormData>({
+  const transferForm = useForm<TransferToToPiggyBankFormData>({
     resolver: zodResolver(transferToPiggyBankSchema),
     defaultValues: {
       description: "",
@@ -387,7 +387,7 @@ export default function Dashboard() {
                 <TrendingDown className="h-4 w-4" />
                 <span>{numExpenseTransactions} pagamentos</span>
                 {monthlyExpensesForecast > 0 && (
-                  <span className="ml-auto text-muted-foreground">Previsão: R$ ${monthlyExpensesForecast.toFixed(2)}</span>
+                  <span className="ml-auto text-muted-foreground">Em Aberto: R$ {monthlyExpensesForecast.toFixed(2)}</span>
                 )}
               </div>
             </CardContent>
