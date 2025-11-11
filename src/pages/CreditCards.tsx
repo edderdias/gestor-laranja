@@ -432,12 +432,28 @@ export default function CreditCards() {
         throw new Error("Cannot edit generated fixed instance.");
       }
 
+      let adjustedPurchaseDate = values.purchase_date; // This is a Date object from the form
+
+      // Get the best_purchase_date for the selected card
+      const cardBestPurchaseDay = selectedCardForTransaction?.best_purchase_date;
+
+      if (cardBestPurchaseDay !== undefined && cardBestPurchaseDay !== null) {
+        // Compare the day of the actual purchase with the card's best purchase day
+        // If the purchase day is AFTER the best purchase day,
+        // the transaction belongs to the next month's statement.
+        if (adjustedPurchaseDate.getDate() > cardBestPurchaseDay) {
+          adjustedPurchaseDate = addMonths(adjustedPurchaseDate, 1);
+        }
+      }
+
+      const formattedPurchaseDate = format(adjustedPurchaseDate, "yyyy-MM-dd");
+
       const baseTransactionData = {
         description: values.description,
         amount: values.amount,
         card_id: selectedCardForTransaction.id,
         category_id: values.category_id,
-        purchase_date: format(values.purchase_date, "yyyy-MM-dd"),
+        purchase_date: formattedPurchaseDate, // Use the potentially adjusted date
         responsible_person_id: values.responsible_person_id || null,
         created_by: user.id,
       };
@@ -472,7 +488,7 @@ export default function CreditCards() {
           let firstInstallmentId: string | null = null;
 
           for (let i = 0; i < numInstallments; i++) {
-            const currentPurchaseDate = addMonths(values.purchase_date, i);
+            const currentPurchaseDate = addMonths(adjustedPurchaseDate, i); // Use adjustedPurchaseDate here
             const transactionDescription = numInstallments > 1
               ? `${values.description} (${i + 1}/${numInstallments})`
               : values.description;
