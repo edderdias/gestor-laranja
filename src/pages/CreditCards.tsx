@@ -272,10 +272,11 @@ export default function CreditCards() {
       
       const { data, error } = await supabase
         .from("credit_card_transactions")
-        .select("card_id, amount, purchase_date")
+        .select("card_id, amount, purchase_date, accounts_payable_id") // Adicionado accounts_payable_id
         .eq("created_by", user.id)
         .gte("purchase_date", format(currentMonthStart, "yyyy-MM-dd")) // Filtra pelo início do mês selecionado
-        .lte("purchase_date", format(currentMonthEnd, "yyyy-MM-dd"));   // Filtra pelo fim do mês selecionado
+        .lte("purchase_date", format(currentMonthEnd, "yyyy-MM-dd"))   // Filtra pelo fim do mês selecionado
+        .is("accounts_payable_id", null); // Adicionada a condição para excluir transações de contas a pagar
 
       if (error) throw error;
       
@@ -456,6 +457,7 @@ export default function CreditCards() {
         purchase_date: formattedPurchaseDate, // Use the potentially adjusted date
         responsible_person_id: values.responsible_person_id || null,
         created_by: user.id,
+        accounts_payable_id: null, // Sempre null para transações diretas de cartão
       };
 
       if (editingTransaction) {
