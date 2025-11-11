@@ -8,7 +8,7 @@ import { format, getMonth, getYear, subMonths, parseISO, addMonths, endOfMonth, 
 import { ptBR } from "date-fns/locale";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } = "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext"; // Corrigido: de '=' para 'from'
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
