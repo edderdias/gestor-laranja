@@ -8,7 +8,7 @@ import { format, getMonth, getYear, subMonths, parseISO, addMonths, endOfMonth, 
 import { ptBR } from "date-fns/locale";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } = "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -641,19 +641,19 @@ export default function AccountsPayable() {
   // Filtrar contas pagas para o resumo total (apenas do mês selecionado)
   const paidAccounts = processedAccounts.filter(account => account.paid) || [];
   const totalPaidAmount = paidAccounts.reduce((sum, account) => {
-    return sum + (account.amount * (account.installments || 1));
+    return sum + account.amount; // Soma apenas o valor da parcela
   }, 0) || 0;
 
   // Calcular o valor pago por cada responsável (apenas contas pagas do mês selecionado)
   const paidByResponsiblePerson = paidAccounts.reduce((acc: { [key: string]: number }, account) => {
     const personName = account.responsible_persons?.name || "Não Atribuído";
-    const amount = account.amount * (account.installments || 1);
+    const amount = account.amount; // Soma apenas o valor da parcela
     acc[personName] = (acc[personName] || 0) + amount;
     return acc;
   }, {});
 
   const totalAmountForecast = processedAccounts.reduce((sum, account) => {
-    return sum + (account.amount * (account.installments || 1));
+    return sum + account.amount; // Soma apenas o valor da parcela
   }, 0) || 0;
 
   return (
