@@ -221,11 +221,9 @@ export default function Dashboard() {
       if (isSameMonth(dueDate, today) && isSameYear(dueDate, today)) {
         if (account.paid) {
           // Adiciona ao novo total para exibição no card "Despesas do Mês"
-          // APENAS SE NÃO FOR UM PAGAMENTO DE CARTÃO DE CRÉDITO
-          if (account.payment_type_id !== creditCardPaymentTypeId) {
-            totalPaidAccountsPayableForDisplay += installmentAmount;
-            numExpenseTransactions++; // Incrementa para despesas pagas que não são de cartão
-          }
+          // AGORA INCLUI TODOS OS PAGAMENTOS, INCLUSIVE CARTÃO DE CRÉDITO
+          totalPaidAccountsPayableForDisplay += installmentAmount;
+          numExpenseTransactions++; // Incrementa para todas as despesas pagas
 
           // Para os gráficos, continua a usar apenas despesas pagas NÃO por cartão de crédito
           if (account.payment_type_id !== creditCardPaymentTypeId) {
