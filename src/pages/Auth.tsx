@@ -3,7 +3,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function Auth() {
@@ -47,7 +46,25 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-background">
-      {/* Lado Esquerdo: Formulário de Autenticação */}
+      {/* Lado Esquerdo: Imagem de Destaque */}
+      <div className="hidden md:flex flex-1 bg-muted relative overflow-hidden">
+        <img 
+          src="/método certo.png" 
+          alt="Método Certo" 
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-primary/10 mix-blend-multiply" />
+        <div className="absolute bottom-12 left-12 right-12 text-white z-10">
+          <blockquote className="space-y-2">
+            <p className="text-2xl font-medium italic">
+              "A melhor maneira de prever o futuro é criá-lo. Comece a organizar sua vida financeira hoje mesmo."
+            </p>
+            <footer className="text-lg font-semibold">— Equipe Método Certo</footer>
+          </blockquote>
+        </div>
+      </div>
+
+      {/* Lado Direito: Formulário de Autenticação */}
       <div className="flex-1 flex items-center justify-center p-6 md:p-12">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center md:text-left">
@@ -145,24 +162,6 @@ export default function Auth() {
           <p className="text-center text-sm text-muted-foreground px-8">
             Ao continuar, você concorda com nossos Termos de Serviço e Política de Privacidade.
           </p>
-        </div>
-      </div>
-
-      {/* Lado Direito: Imagem de Destaque */}
-      <div className="hidden md:flex flex-1 bg-muted relative overflow-hidden">
-        <img 
-          src="/método certo.png" 
-          alt="Método Certo" 
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-primary/10 mix-blend-multiply" />
-        <div className="absolute bottom-12 left-12 right-12 text-white z-10">
-          <blockquote className="space-y-2">
-            <p className="text-2xl font-medium italic">
-              "A melhor maneira de prever o futuro é criá-lo. Comece a organizar sua vida financeira hoje mesmo."
-            </p>
-            <footer className="text-lg font-semibold">— Equipe Método Certo</footer>
-          </blockquote>
         </div>
       </div>
     </div>
