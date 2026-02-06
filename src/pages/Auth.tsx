@@ -41,10 +41,16 @@ export default function Auth() {
           {/* Lado Esquerdo: Formulário (30%) */}
           <div className="w-full md:w-[30%] p-8 md:py-24 md:px-10 bg-white flex flex-col justify-center border-b md:border-b-0 md:border-r border-slate-100">
             <div className="w-full space-y-8">
-              <div className="space-y-6">
+              <div className="space-y-6 flex flex-col items-center text-center">
                 <img src="/logo.png" alt="Logo" className="h-16 w-auto" />
                 <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                  {mode === "signin" ? "Bem-vindo ao Método Certo" : "Crie sua conta"}
+                  {mode === "signin" ? (
+                    <>
+                      Bem-vindo ao <br /> Método Certo
+                    </>
+                  ) : (
+                    "Crie sua conta"
+                  )}
                 </h1>
               </div>
 
