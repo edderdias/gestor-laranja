@@ -39,11 +39,11 @@ export default function Auth() {
       <Card className="w-full max-w-7xl overflow-hidden border-none shadow-2xl">
         <CardContent className="p-0 flex flex-col md:flex-row">
           {/* Lado Esquerdo: Formulário (30%) */}
-          <div className="w-full md:w-[30%] p-8 md:py-24 md:px-10 bg-white flex flex-col justify-center border-b md:border-b-0 md:border-r border-slate-100">
+          <div className="w-full md:w-[30%] p-8 md:py-24 md:px-10 bg-[#2C7F24] flex flex-col justify-center border-b md:border-b-0 md:border-r border-slate-100">
             <div className="w-full space-y-8">
               <div className="space-y-6 flex flex-col items-center text-center">
-                <img src="/logo.png" alt="Logo" className="h-[70px] w-auto" />
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                <img src="/logo.png" alt="Logo" className="h-[70px] w-auto brightness-0 invert" />
+                <h1 className="text-2xl font-bold tracking-tight text-white">
                   {mode === "signin" ? (
                     <>
                       Bem-vindo ao <br /> Método Certo
@@ -57,19 +57,19 @@ export default function Auth() {
               <form onSubmit={handleSubmit} className="space-y-5">
                 {mode === "signup" && (
                   <div className="space-y-2">
-                    <Label htmlFor="fullName" className="text-slate-600">Nome completo</Label>
+                    <Label htmlFor="fullName" className="text-white/90">Nome completo</Label>
                     <Input
                       id="fullName"
                       name="fullName"
                       placeholder="Digite seu nome"
                       required
                       disabled={isLoading}
-                      className="bg-slate-50 border-slate-200 focus:bg-white"
+                      className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/20"
                     />
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-slate-600">Seu e-mail</Label>
+                  <Label htmlFor="email" className="text-white/90">Seu e-mail</Label>
                   <Input
                     id="email"
                     name="email"
@@ -77,11 +77,11 @@ export default function Auth() {
                     placeholder="Digite seu e-mail"
                     required
                     disabled={isLoading}
-                    className="bg-slate-50 border-slate-200 focus:bg-white"
+                    className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/20"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="text-slate-600">Sua senha</Label>
+                  <Label htmlFor="password" className="text-white/90">Sua senha</Label>
                   <Input
                     id="password"
                     name="password"
@@ -89,11 +89,11 @@ export default function Auth() {
                     placeholder="Digite sua senha"
                     required
                     disabled={isLoading}
-                    className="bg-slate-50 border-slate-200 focus:bg-white"
+                    className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/20"
                   />
                 </div>
                 
-                <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-6" disabled={isLoading}>
+                <Button type="submit" className="w-full bg-white text-[#2C7F24] hover:bg-slate-100 font-semibold py-6" disabled={isLoading}>
                   {isLoading ? "Processando..." : mode === "signin" ? "Entrar" : "Cadastrar"}
                 </Button>
               </form>
@@ -101,13 +101,13 @@ export default function Auth() {
               <div className="text-center space-y-2">
                 {mode === "signin" ? (
                   <>
-                    <button type="button" className="text-sm text-slate-500 hover:underline block w-full">
+                    <button type="button" className="text-sm text-white/80 hover:text-white hover:underline block w-full">
                       Esqueceu sua senha?
                     </button>
                     <button 
                       type="button" 
                       onClick={() => setMode("signup")}
-                      className="text-sm text-slate-500 hover:underline"
+                      className="text-sm text-white/80 hover:text-white hover:underline"
                     >
                       Não tem uma conta? Registre-se
                     </button>
@@ -116,7 +116,7 @@ export default function Auth() {
                   <button 
                     type="button" 
                     onClick={() => setMode("signin")}
-                    className="text-sm text-slate-500 hover:underline"
+                    className="text-sm text-white/80 hover:text-white hover:underline"
                   >
                     Já tem uma conta? Faça login
                   </button>
