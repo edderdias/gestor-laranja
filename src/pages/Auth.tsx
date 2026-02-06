@@ -42,7 +42,7 @@ export default function Auth() {
           <div className="w-full md:w-[30%] p-8 md:py-24 md:px-10 bg-[#2C7F24] flex flex-col justify-center border-b md:border-b-0 md:border-r border-slate-100">
             <div className="w-full space-y-8">
               <div className="space-y-6 flex flex-col items-center text-center">
-                <img src="/logo.png" alt="Logo" className="h-[70px] w-auto brightness-0 invert" />
+                <img src="/logo.png" alt="Logo" className="h-[70px] w-auto" />
                 <h1 className="text-2xl font-bold tracking-tight text-white">
                   {mode === "signin" ? (
                     <>
