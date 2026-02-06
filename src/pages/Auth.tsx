@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-// Removido Wallet
 
 export default function Auth() {
   const { signIn, signUp } = useAuth();
@@ -47,27 +46,27 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-secondary/20 to-primary/10 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <div className="flex items-center justify-center mb-4">
-            <div className="p-1">
-              <img src="/logo.png" alt="Método Certo Logo" className="h-40 w-40" /> {/* Dobrado de h-20 w-20 para h-40 w-40 */}
+    <div className="min-h-screen flex flex-col md:flex-row bg-background">
+      {/* Lado Esquerdo: Formulário de Autenticação */}
+      <div className="flex-1 flex items-center justify-center p-6 md:p-12">
+        <div className="w-full max-w-md space-y-8">
+          <div className="text-center md:text-left">
+            <div className="flex justify-center md:justify-start mb-6">
+              <img src="/logo.png" alt="Método Certo Logo" className="h-20 w-auto" />
             </div>
+            <h1 className="text-3xl font-bold tracking-tight">Bem-vindo ao Método Certo</h1>
+            <p className="text-muted-foreground mt-2">
+              Gerencie suas finanças de forma simples e eficiente.
+            </p>
           </div>
-          <CardTitle className="text-2xl font-bold text-center">Método Certo</CardTitle>
-          <CardDescription className="text-center">
-            Gerencie suas finanças de forma simples e eficiente
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+
           <Tabs defaultValue="signin" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-2 mb-8">
               <TabsTrigger value="signin">Entrar</TabsTrigger>
               <TabsTrigger value="signup">Cadastrar</TabsTrigger>
             </TabsList>
             
-            <TabsContent value="signin">
+            <TabsContent value="signin" className="space-y-4">
               <form onSubmit={handleSignIn} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="signin-email">Email</Label>
@@ -78,6 +77,7 @@ export default function Auth() {
                     placeholder="seu@email.com"
                     required
                     disabled={isLoading}
+                    className="h-11"
                   />
                 </div>
                 <div className="space-y-2">
@@ -88,15 +88,16 @@ export default function Auth() {
                     type="password"
                     required
                     disabled={isLoading}
+                    className="h-11"
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? "Entrando..." : "Entrar"}
+                <Button type="submit" className="w-full h-11 text-base" disabled={isLoading}>
+                  {isLoading ? "Entrando..." : "Entrar na Conta"}
                 </Button>
               </form>
             </TabsContent>
             
-            <TabsContent value="signup">
+            <TabsContent value="signup" className="space-y-4">
               <form onSubmit={handleSignUp} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="signup-name">Nome Completo</Label>
@@ -107,6 +108,7 @@ export default function Auth() {
                     placeholder="Seu nome"
                     required
                     disabled={isLoading}
+                    className="h-11"
                   />
                 </div>
                 <div className="space-y-2">
@@ -118,6 +120,7 @@ export default function Auth() {
                     placeholder="seu@email.com"
                     required
                     disabled={isLoading}
+                    className="h-11"
                   />
                 </div>
                 <div className="space-y-2">
@@ -129,16 +132,39 @@ export default function Auth() {
                     required
                     disabled={isLoading}
                     minLength={6}
+                    className="h-11"
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? "Cadastrando..." : "Criar Conta"}
+                <Button type="submit" className="w-full h-11 text-base" disabled={isLoading}>
+                  {isLoading ? "Cadastrando..." : "Criar Minha Conta"}
                 </Button>
               </form>
             </TabsContent>
           </Tabs>
-        </CardContent>
-      </Card>
+          
+          <p className="text-center text-sm text-muted-foreground px-8">
+            Ao continuar, você concorda com nossos Termos de Serviço e Política de Privacidade.
+          </p>
+        </div>
+      </div>
+
+      {/* Lado Direito: Imagem de Destaque */}
+      <div className="hidden md:flex flex-1 bg-muted relative overflow-hidden">
+        <img 
+          src="/método certo.png" 
+          alt="Método Certo" 
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-primary/10 mix-blend-multiply" />
+        <div className="absolute bottom-12 left-12 right-12 text-white z-10">
+          <blockquote className="space-y-2">
+            <p className="text-2xl font-medium italic">
+              "A melhor maneira de prever o futuro é criá-lo. Comece a organizar sua vida financeira hoje mesmo."
+            </p>
+            <footer className="text-lg font-semibold">— Equipe Método Certo</footer>
+          </blockquote>
+        </div>
+      </div>
     </div>
   );
 }
