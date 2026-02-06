@@ -37,8 +37,8 @@ export default function Auth() {
       <Card className="w-full max-w-7xl overflow-hidden border-none shadow-2xl">
         <CardContent className="p-0 flex flex-col md:flex-row">
           {/* Lado Esquerdo: Formulário */}
-          <div className="flex-1 p-8 md:p-16 bg-white">
-            <div className="max-w-sm mx-auto space-y-8">
+          <div className="flex-1 p-8 md:py-24 md:px-16 bg-white flex flex-col justify-center">
+            <div className="max-w-sm mx-auto w-full space-y-8">
               <div className="space-y-6">
                 <img src="/logo.png" alt="Logo" className="h-16 w-auto" />
                 <h1 className="text-2xl font-bold tracking-tight text-slate-900">
@@ -118,7 +118,7 @@ export default function Auth() {
           </div>
 
           {/* Lado Direito: Imagem */}
-          <div className="flex-1 bg-white flex items-center justify-center p-4 md:p-12 border-t md:border-t-0 md:border-l border-slate-100">
+          <div className="flex-1 bg-white flex items-center justify-center p-4 md:py-20 md:px-12 border-t md:border-t-0 md:border-l border-slate-100">
             <div className="relative w-full max-w-2xl flex items-center justify-center">
               <img 
                 src="/método certo.png" 
