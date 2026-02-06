@@ -118,7 +118,7 @@ export default function Auth() {
           </div>
 
           {/* Lado Direito: Imagem */}
-          <div className="flex-1 bg-white flex items-center justify-center p-4 md:p-8 border-t md:border-t-0 md:border-l border-slate-100">
+          <div className="flex-1 bg-white flex items-center justify-center p-2 md:p-8 border-t md:border-t-0 md:border-l border-slate-100">
             <div className="relative w-full max-w-lg flex items-center justify-center">
               <img 
                 src="/método certo.png" 
