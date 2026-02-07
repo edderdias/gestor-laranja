@@ -107,7 +107,7 @@ export default function UserManagement() {
 
   const updateFamilyNameMutation = useMutation({
     mutationFn: async (data: FamilyNameFormData) => {
-      if (!familyData.rootId) throw new Error("Root ID não encontrado");
+      if (!currentUser?.id) throw new Error("Usuário não identificado");
       
       const updateData: any = { 
         family_name: data.name, 
@@ -122,25 +122,27 @@ export default function UserManagement() {
       const { error } = await supabase
         .from("profiles")
         .update(updateData)
-        .eq("id", familyData.rootId);
+        .eq("id", currentUser.id);
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Família registrada com sucesso!");
       refreshFamily();
     },
-    onError: (error: any) => toast.error(error.message),
+    onError: (error: any) => toast.error("Erro ao salvar família. Verifique se as colunas foram criadas no banco."),
   });
 
   const joinFamilyMutation = useMutation({
     mutationFn: async (data: JoinFamilyFormData) => {
       if (!currentUser?.id) throw new Error("Não autenticado");
       
+      const cleanCode = data.familyCode.trim().toUpperCase();
+
       // Busca o dono da família pelo código
       const { data: headProfile, error: searchError } = await supabase
         .from("profiles")
         .select("id")
-        .eq("family_code", data.familyCode.toUpperCase())
+        .eq("family_code", cleanCode)
         .maybeSingle();
 
       if (searchError || !headProfile) {
@@ -301,7 +303,7 @@ export default function UserManagement() {
                       <FormItem><FormLabel>Nome Completo</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={createForm.control} name="email" render={({ field }) => (
-                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} type="email" /></FormControl><FormMessage /></FormItem>
+                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} type="email" /></FormControl><FormMessage /></FormMessage>
                     )} />
                     <FormField control={createForm.control} name="password" render={({ field }) => (
                       <FormItem><FormLabel>Senha</FormLabel><FormControl><Input {...field} type="password" /></FormControl><FormMessage /></FormItem>
@@ -340,7 +342,7 @@ export default function UserManagement() {
                       <FormItem><FormLabel>Nome Completo</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={inviteForm.control} name="email" render={({ field }) => (
-                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} type="email" /></FormControl><FormMessage /></FormItem>
+                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} type="email" /></FormControl><FormMessage /></FormMessage>
                     )} />
                     <FormField control={inviteForm.control} name="isFamilyMember" render={({ field }) => (
                       <FormItem className="flex items-center justify-between rounded-lg border p-3">
