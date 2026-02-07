@@ -13,11 +13,12 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Pencil, Trash2, UserPlus, UserCheck } from "lucide-react";
+import { Pencil, Trash2, UserPlus, UserCheck, Users, Link as LinkIcon, Copy } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
 
 type Profile = Tables<'profiles'> & {
   email?: string;
+  family_name?: string | null;
 };
 
 const inviteSchema = z.object({
@@ -39,16 +40,27 @@ const editUserSchema = z.object({
   isFamilyMember: z.boolean(),
 });
 
+const familyNameSchema = z.object({
+  name: z.string().min(1, "Nome da família é obrigatório"),
+});
+
+const joinFamilySchema = z.object({
+  familyCode: z.string().min(1, "Código da família é obrigatório"),
+});
+
 type InviteFormData = z.infer<typeof inviteSchema>;
 type CreateFormData = z.infer<typeof createSchema>;
 type EditUserFormData = z.infer<typeof editUserSchema>;
+type FamilyNameFormData = z.infer<typeof familyNameSchema>;
+type JoinFamilyFormData = z.infer<typeof joinFamilySchema>;
 
 export default function UserManagement() {
-  const { user: currentUser, session } = useAuth();
+  const { user: currentUser, session, familyData, refreshFamily } = useAuth();
   const queryClient = useQueryClient();
   const [isInviteFormOpen, setIsInviteFormOpen] = useState(false);
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
   const [isEditFormOpen, setIsEditFormOpen] = useState(false);
+  const [isJoinFormOpen, setIsJoinFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
 
   const inviteForm = useForm<InviteFormData>({
@@ -66,6 +78,16 @@ export default function UserManagement() {
     defaultValues: { id: "", fullName: "", isFamilyMember: false },
   });
 
+  const familyNameForm = useForm<FamilyNameFormData>({
+    resolver: zodResolver(familyNameSchema),
+    defaultValues: { name: familyData.name || "" },
+  });
+
+  const joinFamilyForm = useForm<JoinFamilyFormData>({
+    resolver: zodResolver(joinFamilySchema),
+    defaultValues: { familyCode: "" },
+  });
+
   const { data: users, isLoading: isLoadingUsers } = useQuery({
     queryKey: ["users", currentUser?.id],
     queryFn: async () => {
@@ -75,10 +97,43 @@ export default function UserManagement() {
         .select("id, full_name, is_family_member, invited_by_user_id");
 
       if (profilesError) throw profilesError;
-
       return profilesData as Profile[];
     },
     enabled: !!currentUser?.id,
+  });
+
+  const updateFamilyNameMutation = useMutation({
+    mutationFn: async (data: FamilyNameFormData) => {
+      if (!familyData.rootId) throw new Error("Root ID não encontrado");
+      const { error } = await supabase
+        .from("profiles")
+        .update({ family_name: data.name } as any)
+        .eq("id", familyData.rootId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Nome da família atualizado!");
+      refreshFamily();
+    },
+    onError: (error: any) => toast.error(error.message),
+  });
+
+  const joinFamilyMutation = useMutation({
+    mutationFn: async (data: JoinFamilyFormData) => {
+      if (!currentUser?.id) throw new Error("Não autenticado");
+      const { error } = await supabase
+        .from("profiles")
+        .update({ invited_by_user_id: data.familyCode, is_family_member: true })
+        .eq("id", currentUser.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Você agora faz parte da família!");
+      setIsJoinFormOpen(false);
+      refreshFamily();
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (error: any) => toast.error("Código inválido ou erro ao vincular."),
   });
 
   const inviteUserMutation = useMutation({
@@ -143,6 +198,7 @@ export default function UserManagement() {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       toast.success("Usuário atualizado!");
       setIsEditFormOpen(false);
+      refreshFamily();
     },
     onError: (error: any) => toast.error(error.message),
   });
@@ -159,12 +215,43 @@ export default function UserManagement() {
     onError: (error: any) => toast.error(error.message),
   });
 
+  const copyFamilyCode = () => {
+    if (currentUser?.id) {
+      navigator.clipboard.writeText(currentUser.id);
+      toast.success("Código copiado!");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
-          <h1 className="text-3xl font-bold">Gerenciamento de Usuários</h1>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <Users className="h-8 w-8" /> Gerenciamento de Família
+          </h1>
           <div className="flex gap-2">
+            <Dialog open={isJoinFormOpen} onOpenChange={setIsJoinFormOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <LinkIcon className="mr-2 h-4 w-4" /> Vincular-se a Família
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Vincular-se a uma Família</DialogTitle>
+                  <DialogDescription>Insira o código de família de outro usuário para compartilhar contas.</DialogDescription>
+                </DialogHeader>
+                <Form {...joinFamilyForm}>
+                  <form onSubmit={joinFamilyForm.handleSubmit((data) => joinFamilyMutation.mutate(data))} className="space-y-4">
+                    <FormField control={joinFamilyForm.control} name="familyCode" render={({ field }) => (
+                      <FormItem><FormLabel>Código da Família</FormLabel><FormControl><Input {...field} placeholder="Cole o código aqui" /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <DialogFooter><Button type="submit" disabled={joinFamilyMutation.isPending}>Vincular</Button></DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+
             <Dialog open={isCreateFormOpen} onOpenChange={setIsCreateFormOpen}>
               <DialogTrigger asChild>
                 <Button variant="default">
@@ -189,7 +276,10 @@ export default function UserManagement() {
                     )} />
                     <FormField control={createForm.control} name="isFamilyMember" render={({ field }) => (
                       <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                        <div className="space-y-0.5"><FormLabel>Membro da Família</FormLabel></div>
+                        <div className="space-y-0.5">
+                          <FormLabel>Membro da Família</FormLabel>
+                          <FormDescription>Compartilha lançamentos financeiros.</FormDescription>
+                        </div>
                         <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                       </FormItem>
                     )} />
@@ -222,7 +312,10 @@ export default function UserManagement() {
                     )} />
                     <FormField control={inviteForm.control} name="isFamilyMember" render={({ field }) => (
                       <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                        <div className="space-y-0.5"><FormLabel>Membro da Família</FormLabel></div>
+                        <div className="space-y-0.5">
+                          <FormLabel>Membro da Família</FormLabel>
+                          <FormDescription>Compartilha lançamentos financeiros.</FormDescription>
+                        </div>
                         <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                       </FormItem>
                     )} />
@@ -236,23 +329,55 @@ export default function UserManagement() {
           </div>
         </div>
 
+        <div className="grid gap-6 md:grid-cols-2 mb-8">
+          <Card>
+            <CardHeader><CardTitle>Minha Família</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <Form {...familyNameForm}>
+                <form onSubmit={familyNameForm.handleSubmit((data) => updateFamilyNameMutation.mutate(data))} className="flex gap-2 items-end">
+                  <FormField control={familyNameForm.control} name="name" render={({ field }) => (
+                    <FormItem className="flex-1"><FormLabel>Nome da Família</FormLabel><FormControl><Input {...field} placeholder="Ex: Família Silva" /></FormControl></FormItem>
+                  )} />
+                  <Button type="submit" disabled={updateFamilyNameMutation.isPending}>Salvar</Button>
+                </form>
+              </Form>
+              <div className="pt-4 border-t">
+                <p className="text-sm font-medium mb-2">Seu Código de Família (Compartilhe para vincular outros):</p>
+                <div className="flex gap-2">
+                  <Input value={currentUser?.id || ""} readOnly className="bg-muted" />
+                  <Button variant="outline" size="icon" onClick={copyFamilyCode}><Copy className="h-4 w-4" /></Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle>Resumo</CardTitle></CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">
+                Usuários marcados como <strong>Membro da Família</strong> compartilham automaticamente suas contas a pagar, receber e cofrinho com o grupo.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
         <Card>
-          <CardHeader><CardTitle>Usuários</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Membros e Convidados</CardTitle></CardHeader>
           <CardContent>
             {isLoadingUsers ? <p>Carregando...</p> : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
-                    <TableHead>Membro da Família</TableHead>
+                    <TableHead>Compartilha Dados?</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {users?.map((user) => (
                     <TableRow key={user.id}>
-                      <TableCell>{user.full_name}</TableCell>
-                      <TableCell>{user.is_family_member ? "Sim" : "Não"}</TableCell>
+                      <TableCell className="font-medium">{user.full_name} {user.id === currentUser?.id && "(Você)"}</TableCell>
+                      <TableCell>{user.is_family_member ? "Sim (Família)" : "Não (Individual)"}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button variant="ghost" size="icon" onClick={() => {
@@ -283,12 +408,15 @@ export default function UserManagement() {
                 )} />
                 <FormField control={editForm.control} name="isFamilyMember" render={({ field }) => (
                   <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                    <div className="space-y-0.5"><FormLabel>Membro da Família</FormLabel></div>
+                    <div className="space-y-0.5">
+                      <FormLabel>Membro da Família</FormLabel>
+                      <FormDescription>Ative para compartilhar lançamentos financeiros com o grupo.</FormDescription>
+                    </div>
                     <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                   </FormItem>
                 )} />
                 <DialogFooter>
-                  <Button type="submit" disabled={updateUserMutation.isPending}>Salvar</Button>
+                  <Button type="submit" disabled={updateUserMutation.isPending}>Salvar Alterações</Button>
                 </DialogFooter>
               </form>
             </Form>
