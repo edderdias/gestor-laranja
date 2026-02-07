@@ -184,9 +184,9 @@ export function MainLayout() {
 
       {/* Footer */}
       <footer className="border-t py-6 bg-background">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
+        <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-center gap-4 md:gap-12 text-sm text-muted-foreground">
           <p>Copyright (c) 2026 Eder Dias</p>
-          <p className="mt-1">Desenvolvido por Eder Dias</p>
+          <p>Desenvolvido por Eder Dias</p>
         </div>
       </footer>
     </div>
