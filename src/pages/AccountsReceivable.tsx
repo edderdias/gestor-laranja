@@ -21,9 +21,13 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tables } from "@/integrations/supabase/types";
 
-// Estender o tipo de conta para incluir a flag de instância gerada
+// Estender o tipo de conta para incluir a flag de instância gerada e campos vinculados
 type AccountReceivableWithGeneratedFlag = Tables<'accounts_receivable'> & {
   is_generated_fixed_instance?: boolean;
+  income_sources?: { name: string };
+  payers?: { name: string };
+  income_types?: { name: string };
+  responsible_persons?: { name: string };
 };
 
 const formSchema = z.object({
@@ -62,7 +66,6 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
-// Esquema de validação para o formulário de transferência para o cofrinho
 const transferToPiggyBankSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Valor inválido").transform(Number).refine(val => val > 0, "O valor deve ser positivo"),
@@ -79,13 +82,9 @@ export default function AccountsReceivable() {
   const queryClient = useQueryClient();
   
   const [selectedMonthYear, setSelectedMonthYear] = useState(format(new Date(), "yyyy-MM"));
-
-  // Estados para o diálogo de confirmação de data
   const [showConfirmDateDialog, setShowConfirmDateDialog] = useState(false);
   const [currentConfirmingAccount, setCurrentConfirmingAccount] = useState<AccountReceivableWithGeneratedFlag | null>(null);
   const [selectedReceivedDate, setSelectedReceivedDate] = useState<Date | undefined>(new Date());
-
-  // Estados e formulário para a transferência para o cofrinho
   const [isTransferToPiggyBankFormOpen, setIsTransferToPiggyBankFormOpen] = useState(false);
   const [transferringAccount, setTransferringAccount] = useState<AccountReceivableWithGeneratedFlag | null>(null);
 
@@ -148,45 +147,23 @@ export default function AccountsReceivable() {
     }
   }, [isFormOpen, editingAccount, form]);
 
-  useEffect(() => {
-    if (isTransferToPiggyBankFormOpen && transferringAccount) {
-      transferForm.reset({
-        description: `Transferência de ${transferringAccount.description}`,
-        amount: transferringAccount.amount,
-        entry_date: new Date(),
-        bank_id: "",
-      });
-    } else if (!isTransferToPiggyBankFormOpen) {
-      transferForm.reset({
-        description: "",
-        amount: 0,
-        entry_date: new Date(),
-        bank_id: "",
-      });
-    }
-  }, [isTransferToPiggyBankFormOpen, transferringAccount, transferForm]);
-
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
     queryKey: ["accounts-receivable"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("accounts_receivable")
-        .select("*, income_sources(id, name), payers(name), income_types(name), responsible_persons(id, name)")
+        .select("*, income_sources(name), payers(name), income_types(name), responsible_persons(name)")
         .order("receive_date", { ascending: true });
       
       if (error) throw error;
-      return data;
+      return data as AccountReceivableWithGeneratedFlag[];
     },
   });
 
   const { data: sources } = useQuery({
     queryKey: ["income-sources"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("income_sources")
-        .select("*")
-        .order("name");
-      
+      const { data, error } = await supabase.from("income_sources").select("*").order("name");
       if (error) throw error;
       return data;
     },
@@ -195,11 +172,7 @@ export default function AccountsReceivable() {
   const { data: payers, isLoading: isLoadingPayers } = useQuery({
     queryKey: ["payers"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("payers")
-        .select("*")
-        .order("name");
-      
+      const { data, error } = await supabase.from("payers").select("*").order("name");
       if (error) throw error;
       return data;
     },
@@ -208,11 +181,7 @@ export default function AccountsReceivable() {
   const { data: incomeTypes, isLoading: isLoadingIncomeTypes } = useQuery({
     queryKey: ["income-types"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("income_types")
-        .select("*")
-        .order("name");
-      
+      const { data, error } = await supabase.from("income_types").select("*").order("name");
       if (error) throw error;
       return data;
     },
@@ -221,11 +190,7 @@ export default function AccountsReceivable() {
   const { data: responsiblePersons, isLoading: isLoadingResponsiblePersons } = useQuery({
     queryKey: ["responsible-persons"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("responsible_persons")
-        .select("*")
-        .order("name");
-      
+      const { data, error } = await supabase.from("responsible_persons").select("*").order("name");
       if (error) throw error;
       return data;
     },
@@ -234,11 +199,7 @@ export default function AccountsReceivable() {
   const { data: banks, isLoading: isLoadingBanks } = useQuery({
     queryKey: ["banks"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("banks")
-        .select("*")
-        .order("name");
-      
+      const { data, error } = await supabase.from("banks").select("*").order("name");
       if (error) throw error;
       return data;
     },
@@ -246,25 +207,14 @@ export default function AccountsReceivable() {
 
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
-      if (!user?.id) {
-        toast.error("Usuário não autenticado. Não foi possível salvar conta.");
-        throw new Error("User not authenticated.");
-      }
-
+      if (!user?.id) throw new Error("User not authenticated.");
       let finalPayerId = values.payer_id;
-
       if (values.payer_id === "new-payer" && values.new_payer_name) {
-        const { data: newPayer, error: newPayerError } = await supabase
-          .from("payers")
-          .insert({ name: values.new_payer_name })
-          .select("id")
-          .single();
-
+        const { data: newPayer, error: newPayerError } = await supabase.from("payers").insert({ name: values.new_payer_name }).select("id").single();
         if (newPayerError) throw newPayerError;
         finalPayerId = newPayer.id;
         queryClient.invalidateQueries({ queryKey: ["payers"] });
       }
-
       const accountData = {
         description: values.description,
         income_type_id: values.income_type_id,
@@ -278,209 +228,108 @@ export default function AccountsReceivable() {
         responsible_person_id: values.responsible_person_id || null,
         original_fixed_account_id: editingAccount?.original_fixed_account_id || null,
       };
-
       if (editingAccount && !editingAccount.is_generated_fixed_instance) {
-        const { error } = await supabase
-          .from("accounts_receivable")
-          .update(accountData)
-          .eq("id", editingAccount.id);
-        
+        const { error } = await supabase.from("accounts_receivable").update(accountData).eq("id", editingAccount.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from("accounts_receivable")
-          .insert(accountData);
-        
+        const { error } = await supabase.from("accounts_receivable").insert(accountData);
         if (error) throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
-      toast.success(editingAccount ? "Conta atualizada com sucesso!" : "Conta criada com sucesso!");
+      toast.success(editingAccount ? "Conta atualizada!" : "Conta criada!");
       setIsFormOpen(false);
       setEditingAccount(null);
       form.reset();
     },
-    onError: (error) => {
-      toast.error("Erro ao salvar conta: " + error.message);
-    },
+    onError: (error: any) => toast.error("Erro ao salvar: " + error.message),
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("accounts_receivable")
-        .delete()
-        .eq("id", id);
-      
+      const { error } = await supabase.from("accounts_receivable").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
-      toast.success("Conta deletada com sucesso!");
+      toast.success("Conta deletada!");
     },
-    onError: (error) => {
-      toast.error("Erro ao deletar conta: " + error.message);
-    },
+    onError: (error: any) => toast.error("Erro ao deletar: " + error.message),
   });
 
   const confirmReceiveMutation = useMutation({
     mutationFn: async ({ account, receivedDate }: { account: AccountReceivableWithGeneratedFlag; receivedDate: Date }) => {
-      if (!user?.id) {
-        toast.error("Usuário não autenticado. Não foi possível confirmar recebimento.");
-        throw new Error("User not authenticated.");
-      }
-
+      if (!user?.id) throw new Error("User not authenticated.");
       const formattedReceivedDate = format(receivedDate, "yyyy-MM-dd");
-
       if (account.is_generated_fixed_instance) {
-        const { error } = await supabase
-          .from("accounts_receivable")
-          .insert({
-            description: account.description,
-            income_type_id: account.income_type_id,
-            receive_date: account.receive_date,
-            installments: account.installments,
-            amount: account.amount,
-            source_id: account.source_id,
-            payer_id: account.payer_id,
-            created_by: user.id,
-            is_fixed: false,
-            responsible_person_id: account.responsible_person_id,
-            received: true,
-            received_date: formattedReceivedDate,
-            original_fixed_account_id: account.original_fixed_account_id || account.id,
-          });
+        const { error } = await supabase.from("accounts_receivable").insert({
+          description: account.description,
+          income_type_id: account.income_type_id,
+          receive_date: account.receive_date,
+          installments: account.installments,
+          amount: account.amount,
+          source_id: account.source_id,
+          payer_id: account.payer_id,
+          created_by: user.id,
+          is_fixed: false,
+          responsible_person_id: account.responsible_person_id,
+          received: true,
+          received_date: formattedReceivedDate,
+          original_fixed_account_id: account.original_fixed_account_id || account.id,
+        });
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from("accounts_receivable")
-          .update({ received: true, received_date: formattedReceivedDate })
-          .eq("id", account.id);
-        
+        const { error } = await supabase.from("accounts_receivable").update({ received: true, received_date: formattedReceivedDate }).eq("id", account.id);
         if (error) throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
-      toast.success("Recebimento confirmado com sucesso!");
+      toast.success("Recebimento confirmado!");
       setShowConfirmDateDialog(false);
-      setCurrentConfirmingAccount(null);
-      setSelectedReceivedDate(new Date());
     },
-    onError: (error) => {
-      toast.error("Erro ao confirmar recebimento: " + error.message);
-    },
+    onError: (error: any) => toast.error("Erro ao confirmar: " + error.message),
   });
 
   const reverseReceiveMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("accounts_receivable")
-        .update({ received: false, received_date: null })
-        .eq("id", id);
-      
+      const { error } = await supabase.from("accounts_receivable").update({ received: false, received_date: null }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
-      toast.success("Recebimento estornado com sucesso!");
+      toast.success("Recebimento estornado!");
     },
-    onError: (error) => {
-      toast.error("Erro ao estornar recebimento: " + error.message);
-    },
+    onError: (error: any) => toast.error("Erro ao estornar: " + error.message),
   });
 
   const transferToPiggyBankMutation = useMutation({
     mutationFn: async (values: TransferToPiggyBankFormData) => {
-      if (!user?.id) {
-        toast.error("Usuário não autenticado. Não foi possível transferir para o cofrinho.");
-        throw new Error("User not authenticated.");
-      }
-
-      const entryData = {
+      if (!user?.id) throw new Error("User not authenticated.");
+      const { error } = await supabase.from("piggy_bank_entries").insert({
         description: values.description,
         amount: values.amount,
         entry_date: format(values.entry_date, "yyyy-MM-dd"),
-        type: "deposit" as const,
+        type: "deposit",
         user_id: user.id,
         bank_id: values.bank_id,
-      };
-
-      const { error } = await supabase
-        .from("piggy_bank_entries")
-        .insert(entryData);
-      
+      });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["piggy_bank_entries"] });
-      toast.success("Valor transferido para o cofrinho com sucesso!");
+      toast.success("Transferido para o cofrinho!");
       setIsTransferToPiggyBankFormOpen(false);
-      setTransferringAccount(null);
-      transferForm.reset();
     },
-    onError: (error) => {
-      toast.error("Erro ao transferir para o cofrinho: " + error.message);
-    },
+    onError: (error: any) => toast.error("Erro ao transferir: " + error.message),
   });
-
-  const onSubmit = (values: FormData) => {
-    saveMutation.mutate(values);
-  };
-
-  const onTransferSubmit = (values: TransferToPiggyBankFormData) => {
-    transferToPiggyBankMutation.mutate(values);
-  };
-
-  const handleEdit = (account: AccountReceivableWithGeneratedFlag) => {
-    if (account.is_generated_fixed_instance) {
-      toast.info("Edite a conta fixa original para alterar esta ocorrência.");
-      return;
-    }
-    setEditingAccount(account);
-    setIsFormOpen(true);
-  };
-
-  const handleDelete = (account: AccountReceivableWithGeneratedFlag) => {
-    if (account.is_generated_fixed_instance) {
-      toast.info("Não é possível excluir uma ocorrência gerada. Exclua a conta fixa original se desejar.");
-      return;
-    }
-    if (confirm("Tem certeza que deseja deletar esta conta?")) {
-      deleteMutation.mutate(account.id);
-    }
-  };
-
-  const handleReverse = (account: AccountReceivableWithGeneratedFlag) => {
-    if (account.is_generated_fixed_instance) {
-      toast.info("Não é possível estornar uma ocorrência gerada que ainda não foi confirmada.");
-      return;
-    }
-    if (confirm("Tem certeza que deseja estornar este recebimento? Ele voltará para o status de 'não recebido'.")) {
-      reverseReceiveMutation.mutate(account.id);
-    }
-  };
-
-  const handleConfirmReceiveClick = (account: AccountReceivableWithGeneratedFlag) => {
-    setCurrentConfirmingAccount(account);
-    setSelectedReceivedDate(new Date());
-    setShowConfirmDateDialog(true);
-  };
-
-  const handleTransferToPiggyBankClick = (account: AccountReceivableWithGeneratedFlag) => {
-    setTransferringAccount(account);
-    setIsTransferToPiggyBankFormOpen(true);
-  };
 
   const generateMonthOptions = () => {
     const options = [];
     let date = subMonths(new Date(), 11);
     for (let i = 0; i < 18; i++) {
-      options.push({
-        value: format(date, "yyyy-MM"),
-        label: format(date, "MMMM yyyy", { locale: ptBR }),
-      });
+      options.push({ value: format(date, "yyyy-MM"), label: format(date, "MMMM yyyy", { locale: ptBR }) });
       date = addMonths(date, 1);
     }
     return options;
@@ -490,30 +339,18 @@ export default function AccountsReceivable() {
   const [selectedYear, selectedMonth] = selectedMonthYear.split('-').map(Number);
   const selectedMonthDate = parseISO(`${selectedMonthYear}-01`);
 
-  const processedAccounts = accounts?.flatMap(account => {
+  const processedAccounts = (accounts?.flatMap(account => {
     const accountReceiveDate = parseISO(account.receive_date);
     const currentMonthAccounts: AccountReceivableWithGeneratedFlag[] = [];
-
     if (!account.is_fixed && isSameMonth(accountReceiveDate, selectedMonthDate) && isSameYear(accountReceiveDate, selectedMonthDate)) {
       currentMonthAccounts.push(account);
-    } 
-    else if (account.is_fixed && isSameMonth(accountReceiveDate, selectedMonthDate) && isSameYear(accountReceiveDate, selectedMonthDate)) {
+    } else if (account.is_fixed && isSameMonth(accountReceiveDate, selectedMonthDate) && isSameYear(accountReceiveDate, selectedMonthDate)) {
       currentMonthAccounts.push(account);
-    }
-    else if (account.is_fixed && accountReceiveDate <= endOfMonth(selectedMonthDate)) {
-      const existingOccurrence = accounts.find(
-        (a) => a.original_fixed_account_id === account.id &&
-               isSameMonth(parseISO(a.receive_date), selectedMonthDate) &&
-               isSameYear(parseISO(a.receive_date), selectedMonthDate)
-      );
-
+    } else if (account.is_fixed && accountReceiveDate <= endOfMonth(selectedMonthDate)) {
+      const existingOccurrence = accounts.find(a => a.original_fixed_account_id === account.id && isSameMonth(parseISO(a.receive_date), selectedMonthDate) && isSameYear(parseISO(a.receive_date), selectedMonthDate));
       if (!existingOccurrence) {
         const displayDate = new Date(selectedYear, selectedMonth - 1, accountReceiveDate.getDate());
-        if (displayDate.getMonth() !== selectedMonth - 1) {
-          displayDate.setDate(0);
-          displayDate.setDate(displayDate.getDate() + 1);
-        }
-
+        if (displayDate.getMonth() !== selectedMonth - 1) displayDate.setDate(0);
         currentMonthAccounts.push({
           ...account,
           id: `temp-${account.id}-${selectedMonthYear}`,
@@ -526,23 +363,11 @@ export default function AccountsReceivable() {
       }
     }
     return currentMonthAccounts;
-  }).sort((a, b) => parseISO(a.receive_date).getTime() - parseISO(b.receive_date).getTime()) || [];
+  }) || []).sort((a, b) => parseISO(a.receive_date).getTime() - parseISO(b.receive_date).getTime());
 
-  const receivedAccounts = processedAccounts.filter(account => account.received) || [];
-  const totalAmount = receivedAccounts.reduce((sum, account) => {
-    return sum + (account.amount * (account.installments || 1));
-  }, 0) || 0;
-
-  const receivedByResponsiblePerson = receivedAccounts.reduce((acc: { [key: string]: number }, account) => {
-    const personName = account.responsible_persons?.name || "Não Atribuído";
-    const amount = account.amount * (account.installments || 1);
-    acc[personName] = (acc[personName] || 0) + amount;
-    return acc;
-  }, {});
-
-  const monthlyForecast = processedAccounts.filter(account => !account.received).reduce((sum, account) => {
-    return sum + (account.amount * (account.installments || 1));
-  }, 0) || 0;
+  const receivedAccounts = processedAccounts.filter(account => account.received);
+  const totalAmount = receivedAccounts.reduce((sum, account) => sum + (account.amount * (account.installments || 1)), 0);
+  const monthlyForecast = processedAccounts.filter(account => !account.received).reduce((sum, account) => sum + (account.amount * (account.installments || 1)), 0);
 
   return (
     <div className="min-h-screen bg-background">
@@ -551,282 +376,33 @@ export default function AccountsReceivable() {
           <h1 className="text-2xl font-bold">Contas a Receber</h1>
           <div className="flex items-center gap-4">
             <Select value={selectedMonthYear} onValueChange={setSelectedMonthYear}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Selecione o mês" />
-              </SelectTrigger>
-              <SelectContent>
-                {monthOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
+              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Selecione o mês" /></SelectTrigger>
+              <SelectContent>{monthOptions.map((option) => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent>
             </Select>
             <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => setEditingAccount(null)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Nova Conta
-                </Button>
-              </DialogTrigger>
+              <DialogTrigger asChild><Button onClick={() => setEditingAccount(null)}><Plus className="mr-2 h-4 w-4" /> Nova Conta</Button></DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>{editingAccount ? "Editar Conta" : "Nova Conta a Receber"}</DialogTitle>
-                </DialogHeader>
+                <DialogHeader><DialogTitle>{editingAccount ? "Editar Conta" : "Nova Conta a Receber"}</DialogTitle></DialogHeader>
                 <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="description"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Descrição</FormLabel>
-                          <FormControl>
-                            <Input {...field} placeholder="Ex: Pagamento cliente X" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
+                  <form onSubmit={form.handleSubmit((v) => saveMutation.mutate(v))} className="space-y-4">
+                    <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Descrição</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="income_type_id"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Tipo de Recebimento</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value || ""}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione o tipo" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {isLoadingIncomeTypes ? (
-                                  <SelectItem value="loading" disabled>Carregando...</SelectItem>
-                                ) : (
-                                  incomeTypes?.map((type) => (
-                                    <SelectItem key={type.id} value={type.id}>
-                                      {type.name}
-                                    </SelectItem>
-                                  ))
-                                )}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="is_fixed"
-                        render={({ field }) => (
-                          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-                            <div className="space-y-0.5">
-                              <FormLabel className="text-base">Receita Fixa</FormLabel>
-                              <FormDescription>
-                                Marque se esta receita se repete todos os meses.
-                              </FormDescription>
-                            </div>
-                            <FormControl>
-                              <Switch
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
+                      <FormField control={form.control} name="income_type_id" render={({ field }) => (<FormItem><FormLabel>Tipo</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{incomeTypes?.map(t => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
+                      <FormField control={form.control} name="is_fixed" render={({ field }) => (<FormItem className="flex items-center justify-between border p-3 rounded-lg"><FormLabel>Fixa</FormLabel><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)} />
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="receive_date"
-                        render={({ field }) => (
-                          <FormItem className={cn(isFixed && "col-span-2")}>
-                            <FormLabel>Data do Recebimento</FormLabel>
-                            <FormControl>
-                              <Input type="date" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
+                    <FormField control={form.control} name="receive_date" render={({ field }) => (<FormItem><FormLabel>Data</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>)} />
                     {!isFixed && (
                       <div className="grid grid-cols-2 gap-4">
-                        <FormField
-                          control={form.control}
-                          name="installments"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Quantidade de Parcelas</FormLabel>
-                              <FormControl>
-                                <Input type="number" min="1" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name="amount"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Valor da Parcela</FormLabel>
-                              <FormControl>
-                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                        <FormField control={form.control} name="installments" render={({ field }) => (<FormItem><FormLabel>Parcelas</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField control={form.control} name="amount" render={({ field }) => (<FormItem><FormLabel>Valor</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
                       </div>
                     )}
-
-                    {isFixed && (
-                      <div className="grid grid-cols-1 gap-4">
-                        <FormField
-                          control={form.control}
-                          name="amount"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Valor da Parcela</FormLabel>
-                              <FormControl>
-                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="source_id"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Fonte de Receita</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value || ""}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione a fonte" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {sources?.map((source) => (
-                                  <SelectItem key={source.id} value={source.id}>
-                                    {source.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <div className="bg-muted p-4 rounded-lg flex items-center">
-                        <p className="text-sm font-medium">
-                          Valor Total: R$ {(parseFloat(form.watch("amount") || "0") * (isFixed ? 1 : parseInt(form.watch("installments") || "1"))).toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <FormField
-                      control={form.control}
-                      name="payer_id"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Pagador</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || ""}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione o pagador" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {isLoadingPayers ? (
-                                <SelectItem value="loading" disabled>Carregando...</SelectItem>
-                              ) : (
-                                <>
-                                  {payers?.map((payer) => (
-                                    <SelectItem key={payer.id} value={payer.id}>
-                                      {payer.name}
-                                    </SelectItem>
-                                  ))}
-                                  <SelectItem value="new-payer">
-                                    + Novo Pagador
-                                  </SelectItem>
-                                </>
-                              )}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    {selectedPayerId === "new-payer" && (
-                      <FormField
-                        control={form.control}
-                        name="new_payer_name"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Nome do Novo Pagador</FormLabel>
-                            <FormControl>
-                              <Input {...field} placeholder="Nome do novo pagador" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    )}
-
-                    <FormField
-                      control={form.control}
-                      name="responsible_person_id"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Recebedor</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || ""}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione o recebedor" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {isLoadingResponsiblePersons ? (
-                                <SelectItem value="loading" disabled>Carregando...</SelectItem>
-                              ) : (
-                                responsiblePersons?.map((person) => (
-                                  <SelectItem key={person.id} value={person.id}>
-                                    {person.name}
-                                  </SelectItem>
-                                ))
-                              )}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <div className="flex justify-end gap-2">
-                      <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
-                        Cancelar
-                      </Button>
-                      <Button type="submit" disabled={saveMutation.isPending}>
-                        {saveMutation.isPending ? "Salvando..." : editingAccount ? "Atualizar" : "Criar"}
-                      </Button>
-                    </div>
+                    {isFixed && (<FormField control={form.control} name="amount" render={({ field }) => (<FormItem><FormLabel>Valor</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />)}
+                    <FormField control={form.control} name="source_id" render={({ field }) => (<FormItem><FormLabel>Fonte</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{sources?.map(s => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
+                    <FormField control={form.control} name="payer_id" render={({ field }) => (<FormItem><FormLabel>Pagador</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{payers?.map(p => (<SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>))}<SelectItem value="new-payer">+ Novo</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
+                    {selectedPayerId === "new-payer" && (<FormField control={form.control} name="new_payer_name" render={({ field }) => (<FormItem><FormLabel>Nome do Novo Pagador</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />)}
+                    <FormField control={form.control} name="responsible_person_id" render={({ field }) => (<FormItem><FormLabel>Recebedor</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{responsiblePersons?.map(p => (<SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
+                    <DialogFooter><Button type="submit" disabled={saveMutation.isPending}>Salvar</Button></DialogFooter>
                   </form>
                 </Form>
               </DialogContent>
@@ -834,336 +410,41 @@ export default function AccountsReceivable() {
           </div>
         </div>
       </div>
-
       <main className="container mx-auto px-4 py-8">
         <div className="grid gap-6 md:grid-cols-2 mb-6">
-          <Card>
-            <CardHeader className="relative pb-3">
-              <CardTitle>Resumo Total</CardTitle>
-              <div className="absolute top-4 right-4 text-sm text-muted-foreground flex items-center gap-1">
-                <span className="font-medium">Previsão do Mês:</span>
-                <span className="font-bold text-income">R$ {monthlyForecast.toFixed(2)}</span>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-income">
-                Total Recebido: R$ {totalAmount.toFixed(2)}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Recebido por Recebedor</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {receivedByResponsiblePerson && Object.keys(receivedByResponsiblePerson).length > 0 ? (
-                <ul className="space-y-2">
-                  {Object.entries(receivedByResponsiblePerson).map(([name, amount]) => (
-                    <li key={name} className="flex justify-between text-sm">
-                      <span>{name}:</span>
-                      <span className="font-semibold text-income">R$ {(amount as number).toFixed(2)}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-muted-foreground text-sm">Nenhum valor recebido por recebedor.</p>
-              )}
-            </CardContent>
-          </Card>
+          <Card><CardHeader><CardTitle>Total Recebido</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-income">R$ {totalAmount.toFixed(2)}</div></CardContent></Card>
+          <Card><CardHeader><CardTitle>Previsão Pendente</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-muted-foreground">R$ {monthlyForecast.toFixed(2)}</div></CardContent></Card>
         </div>
-
-        {loadingAccounts ? (
-          <p className="text-muted-foreground">Carregando contas...</p>
-        ) : processedAccounts && processedAccounts.length > 0 ? (
+        {loadingAccounts ? (<p>Carregando...</p>) : (
           <div className="grid gap-4 md:grid-cols-2">
             {processedAccounts.map((account) => (
               <Card key={account.id} className={cn(account.received ? "border-l-4 border-income" : "border-l-4 border-muted")}>
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lg mb-2">{account.description}</h3>
-                      <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                        <div>
-                          <span className="font-medium">Tipo:</span>{" "}
-                          {account.income_types?.name || "N/A"}
-                        </div>
-                        <div>
-                          <span className="font-medium">Recebimento:</span>{" "}
-                          {format(parseISO(account.receive_date), "dd/MM/yyyy")}
-                        </div>
-                        {!account.is_fixed && (
-                          <div>
-                            <span className="font-medium">Parcelas:</span> {account.installments || 1}x
-                          </div>
-                        )}
-                        <div>
-                          <span className="font-medium">Valor da Parcela:</span> R$ {account.amount.toFixed(2)}
-                        </div>
-                        <div>
-                          <span className="font-medium">Valor Total:</span>{" "}
-                          <span className="text-income font-semibold">
-                            R$ {(account.amount * (account.installments || 1)).toFixed(2)}
-                          </span>
-                        </div>
-                        {account.income_sources && (
-                          <div>
-                            <span className="font-medium">Fonte:</span> {account.income_sources.name}
-                          </div>
-                        )}
-                        {account.payers && (
-                          <div>
-                            <span className="font-medium">Pagador:</span> {account.payers.name}
-                          </div>
-                        )}
-                        {account.responsible_persons && (
-                          <div>
-                            <span className="font-medium">Recebedor:</span> {account.responsible_persons.name}
-                          </div>
-                        )}
-                        {account.received && account.received_date && (
-                          <div className="col-span-2 flex items-center gap-1 text-income">
-                            <CheckCircle className="h-4 w-4" />
-                            <span className="font-medium">Recebido em: {format(parseISO(account.received_date), "dd/MM/yyyy")}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-2 ml-4">
-                      {account.received ? (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => handleReverse(account)}
-                          disabled={reverseReceiveMutation.isPending || account.is_generated_fixed_instance}
-                          className="text-destructive border-destructive hover:bg-destructive/10"
-                        >
-                          <RotateCcw className="h-4 w-4 mr-2" /> Estornar
-                        </Button>
-                      ) : (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => handleConfirmReceiveClick(account)}
-                          disabled={confirmReceiveMutation.isPending}
-                          className="text-income border-income hover:bg-income/10"
-                        >
-                          <CheckCircle className="h-4 w-4 mr-2" /> Confirmar
-                        </Button>
-                      )}
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => handleEdit(account)}
-                        disabled={account.is_generated_fixed_instance}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      {account.received && (
-                        <Dialog open={isTransferToPiggyBankFormOpen && transferringAccount?.id === account.id} onOpenChange={setIsTransferToPiggyBankFormOpen}>
-                          <DialogTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              onClick={() => handleTransferToPiggyBankClick(account)}
-                              disabled={transferToPiggyBankMutation.isPending || account.is_generated_fixed_instance}
-                            >
-                              <PiggyBankIcon className="h-4 w-4 text-neutral" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="max-w-md">
-                            <DialogHeader>
-                              <DialogTitle>Transferir para Cofrinho</DialogTitle>
-                              <CardDescription>
-                                Adicione o valor de "{transferringAccount?.description}" ao seu cofrinho.
-                              </CardDescription>
-                            </DialogHeader>
-                            <Form {...transferForm}>
-                              <form onSubmit={transferForm.handleSubmit(onTransferSubmit)} className="space-y-4">
-                                <FormField
-                                  control={transferForm.control}
-                                  name="description"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Descrição</FormLabel>
-                                      <FormControl>
-                                        <Input {...field} placeholder="Ex: Economia extra, Bônus" />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                                <FormField
-                                  control={transferForm.control}
-                                  name="amount"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Valor</FormLabel>
-                                      <FormControl>
-                                        <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                                <FormField
-                                  control={transferForm.control}
-                                  name="entry_date"
-                                  render={({ field }) => (
-                                    <FormItem className="flex flex-col">
-                                      <FormLabel>Data da Transferência</FormLabel>
-                                      <Popover>
-                                        <PopoverTrigger asChild>
-                                          <FormControl>
-                                            <Button
-                                              variant={"outline"}
-                                              className={cn(
-                                                "w-full pl-3 text-left font-normal",
-                                                !field.value && "text-muted-foreground"
-                                              )}
-                                            >
-                                              {field.value ? (
-                                                format(field.value, "PPP", { locale: ptBR })
-                                              ) : (
-                                                <span>Selecione uma data</span>
-                                              )}
-                                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                            </Button>
-                                          </FormControl>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0" align="start">
-                                          <Calendar
-                                            mode="single"
-                                            selected={field.value}
-                                            onSelect={field.onChange}
-                                            disabled={(date) =>
-                                              date > new Date() || date < new Date("1900-01-01")
-                                            }
-                                            initialFocus
-                                            locale={ptBR}
-                                          />
-                                        </PopoverContent>
-                                      </Popover>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                                <FormField
-                                  control={transferForm.control}
-                                  name="bank_id"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Banco *</FormLabel>
-                                      <Select onValueChange={field.onChange} value={field.value || ""}>
-                                        <FormControl>
-                                          <SelectTrigger>
-                                            <SelectValue placeholder="Selecione um banco" />
-                                          </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                          {isLoadingBanks ? (
-                                            <SelectItem value="loading" disabled>Carregando...</SelectItem>
-                                          ) : (
-                                            banks?.map((bank) => (
-                                              <SelectItem key={bank.id} value={bank.id}>
-                                                {bank.name}
-                                              </SelectItem>
-                                            ))
-                                          )}
-                                        </SelectContent>
-                                      </Select>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                                <DialogFooter>
-                                  <Button type="button" variant="outline" onClick={() => setIsTransferToPiggyBankFormOpen(false)}>
-                                    Cancelar
-                                  </Button>
-                                  <Button type="submit" disabled={transferToPiggyBankMutation.isPending}>
-                                    {transferToPiggyBankMutation.isPending ? "Transferindo..." : "Transferir"}
-                                  </Button>
-                                </DialogFooter>
-                              </form>
-                            </Form>
-                          </DialogContent>
-                        </Dialog>
-                      )}
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => handleDelete(account)}
-                        disabled={deleteMutation.isPending || account.is_generated_fixed_instance}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
+                <CardContent className="pt-6 flex justify-between items-start">
+                  <div className="space-y-1">
+                    <h3 className="font-semibold">{account.description}</h3>
+                    <p className="text-sm text-muted-foreground">{format(parseISO(account.receive_date), "dd/MM/yyyy")} - R$ {account.amount.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">Pagador: {account.payers?.name || "N/A"} | Recebedor: {account.responsible_persons?.name || "N/A"}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    {account.received ? (
+                      <Button variant="outline" size="sm" onClick={() => reverseReceiveMutation.mutate(account.id)}><RotateCcw className="h-4 w-4" /></Button>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={() => { setCurrentConfirmingAccount(account); setShowConfirmDateDialog(true); }}><CheckCircle className="h-4 w-4" /></Button>
+                    )}
+                    <Button variant="ghost" size="icon" onClick={() => handleEdit(account)}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(account)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
-        ) : (
-          <Card>
-            <CardContent className="py-8 text-center text-muted-foreground">
-              Nenhuma conta a receber cadastrada para o mês selecionado.
-            </CardContent>
-          </Card>
         )}
       </main>
-
-      {/* Diálogo para selecionar a data de recebimento */}
       <Dialog open={showConfirmDateDialog} onOpenChange={setShowConfirmDateDialog}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Confirmar Data de Recebimento</DialogTitle>
-            <CardDescription>Selecione a data em que o recebimento ocorreu.</CardDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant={"outline"}
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !selectedReceivedDate && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {selectedReceivedDate ? format(selectedReceivedDate, "PPP", { locale: ptBR }) : <span>Selecione uma data</span>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={selectedReceivedDate}
-                  onSelect={setSelectedReceivedDate}
-                  initialFocus
-                  locale={ptBR}
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-          <DialogFooter>
-            <Button 
-              onClick={() => {
-                if (currentConfirmingAccount && selectedReceivedDate) {
-                  confirmReceiveMutation.mutate({ 
-                    account: currentConfirmingAccount, 
-                    receivedDate: selectedReceivedDate 
-                  });
-                } else {
-                  toast.error("Selecione uma data para confirmar o recebimento.");
-                }
-              }}
-              disabled={confirmReceiveMutation.isPending || !selectedReceivedDate}
-            >
-              {confirmReceiveMutation.isPending ? "Confirmando..." : "Confirmar Recebimento"}
-            </Button>
-            <Button variant="outline" onClick={() => setShowConfirmDateDialog(false)}>
-              Cancelar
-            </Button>
-          </DialogFooter>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Confirmar Data</DialogTitle></DialogHeader>
+          <div className="py-4"><Calendar mode="single" selected={selectedReceivedDate} onSelect={setSelectedReceivedDate} locale={ptBR} /></div>
+          <DialogFooter><Button onClick={() => currentConfirmingAccount && selectedReceivedDate && confirmReceiveMutation.mutate({ account: currentConfirmingAccount, receivedDate: selectedReceivedDate })}>Confirmar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
