@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 
 interface AuthContextType {
@@ -22,6 +22,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [familyMemberIds, setFamilyMemberIds] = useState<string[]>([]);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const fetchFamilyMembers = async (userId: string) => {
     try {
@@ -29,9 +30,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from("profiles")
         .select("id, invited_by_user_id")
         .eq("id", userId)
-        .single();
+        .maybeSingle();
 
-      if (profileError) {
+      if (profileError || !profile) {
         setFamilyMemberIds([userId]);
         return;
       }
@@ -57,33 +58,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          await fetchFamilyMembers(session.user.id);
-        } else {
-          setFamilyMemberIds([]);
-        }
-
-        if (event === 'SIGNED_IN') {
-          navigate('/dashboard');
-        }
-      }
-    );
-
+    // Inicializa a sessão
     const initSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          await fetchFamilyMembers(session.user.id);
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        setSession(initialSession);
+        const currentUser = initialSession?.user ?? null;
+        setUser(currentUser);
+        
+        if (currentUser) {
+          // Busca membros da família em segundo plano para não travar o loading
+          fetchFamilyMembers(currentUser.id);
         }
       } catch (error) {
-        console.error("Erro na sessão inicial:", error);
+        console.error("Erro ao inicializar sessão:", error);
       } finally {
         setLoading(false);
       }
@@ -91,41 +79,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initSession();
 
+    // Escuta mudanças na autenticação
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, currentSession) => {
+        setSession(currentSession);
+        const currentUser = currentSession?.user ?? null;
+        setUser(currentUser);
+        
+        if (currentUser) {
+          fetchFamilyMembers(currentUser.id);
+        } else {
+          setFamilyMemberIds([]);
+        }
+
+        if (event === 'SIGNED_IN' && location.pathname === '/auth') {
+          navigate('/dashboard');
+        }
+        
+        if (event === 'SIGNED_OUT') {
+          navigate('/auth');
+        }
+      }
+    );
+
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, location.pathname]);
 
   const signIn = async (email: string, password: string) => {
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) toast.error(error.message);
-    } catch (error: any) {
-      toast.error("Erro ao fazer login");
-    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: fullName } }
-      });
-      if (error) toast.error(error.message);
-      else toast.success("Cadastro realizado!");
-    } catch (error: any) {
-      toast.error("Erro ao criar conta");
-    }
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName } }
+    });
+    if (error) throw error;
+    toast.success("Cadastro realizado! Verifique seu e-mail.");
   };
 
   const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } finally {
-      setSession(null);
-      setUser(null);
-      setFamilyMemberIds([]);
-      navigate('/auth');
-    }
+    await supabase.auth.signOut();
   };
 
   return (
