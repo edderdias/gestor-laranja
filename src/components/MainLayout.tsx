@@ -1,17 +1,17 @@
 import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LogOut, Settings as SettingsIcon, Users, PiggyBank as PiggyBankIcon, Menu } from "lucide-react"; // Importar Menu
+import { LogOut, Settings as SettingsIcon, Users, PiggyBank as PiggyBankIcon, Menu } from "lucide-react";
 import {
   NavigationMenu,
   NavigationMenuItem,
   NavigationMenuList,
   navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"; // Importar Sheet components
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import React, { useState } from "react"; // Importar useState
-import { useIsMobile } from "@/hooks/use-mobile"; // Importar useIsMobile
+import React, { useState } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const ListItem = React.forwardRef<
   React.ElementRef<"a">,
@@ -19,7 +19,6 @@ const ListItem = React.forwardRef<
 >(({ className, title, children, ...props }, ref) => {
   return (
     <li>
-      {/* This ListItem is not currently used in MainLayout, but keeping its definition */}
       <a
         ref={ref}
         className={cn(
@@ -41,37 +40,61 @@ ListItem.displayName = "ListItem";
 export function MainLayout() {
   const { signOut, user } = useAuth();
   const isMobile = useIsMobile();
-  const [isSheetOpen, setIsSheetOpen] = useState(false); // Estado para controlar o Sheet
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
 
   const navLinks = (
     <>
       <NavigationMenuItem>
-        <Link to="/accounts-payable" className={navigationMenuTriggerStyle()} onClick={() => isMobile && setIsSheetOpen(false)}>
+        <Link 
+          to="/accounts-payable" 
+          className={cn(navigationMenuTriggerStyle(), "bg-transparent text-white hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white")} 
+          onClick={() => isMobile && setIsSheetOpen(false)}
+        >
           Contas a Pagar
         </Link>
       </NavigationMenuItem>
       <NavigationMenuItem>
-        <Link to="/accounts-receivable" className={navigationMenuTriggerStyle()} onClick={() => isMobile && setIsSheetOpen(false)}>
+        <Link 
+          to="/accounts-receivable" 
+          className={cn(navigationMenuTriggerStyle(), "bg-transparent text-white hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white")} 
+          onClick={() => isMobile && setIsSheetOpen(false)}
+        >
           Contas a Receber
         </Link>
       </NavigationMenuItem>
       <NavigationMenuItem>
-        <Link to="/credit-cards" className={navigationMenuTriggerStyle()} onClick={() => isMobile && setIsSheetOpen(false)}>
+        <Link 
+          to="/credit-cards" 
+          className={cn(navigationMenuTriggerStyle(), "bg-transparent text-white hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white")} 
+          onClick={() => isMobile && setIsSheetOpen(false)}
+        >
           Cartões de Crédito
         </Link>
       </NavigationMenuItem>
       <NavigationMenuItem>
-        <Link to="/piggy-bank" className={navigationMenuTriggerStyle()} onClick={() => isMobile && setIsSheetOpen(false)}>
+        <Link 
+          to="/piggy-bank" 
+          className={cn(navigationMenuTriggerStyle(), "bg-transparent text-white hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white")} 
+          onClick={() => isMobile && setIsSheetOpen(false)}
+        >
           <PiggyBankIcon className="mr-2 h-4 w-4" /> Cofrinho
         </Link>
       </NavigationMenuItem>
       <NavigationMenuItem>
-        <Link to="/user-management" className={navigationMenuTriggerStyle()} onClick={() => isMobile && setIsSheetOpen(false)}>
+        <Link 
+          to="/user-management" 
+          className={cn(navigationMenuTriggerStyle(), "bg-transparent text-white hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white")} 
+          onClick={() => isMobile && setIsSheetOpen(false)}
+        >
           <Users className="mr-2 h-4 w-4" /> Usuários
         </Link>
       </NavigationMenuItem>
       <NavigationMenuItem>
-        <Link to="/settings" className={navigationMenuTriggerStyle()} onClick={() => isMobile && setIsSheetOpen(false)}>
+        <Link 
+          to="/settings" 
+          className={cn(navigationMenuTriggerStyle(), "bg-transparent text-white hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white")} 
+          onClick={() => isMobile && setIsSheetOpen(false)}
+        >
           <SettingsIcon className="mr-2 h-4 w-4" /> Configurações
         </Link>
       </NavigationMenuItem>
@@ -81,13 +104,13 @@ export function MainLayout() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <header className="border-b bg-card">
+      <header className="border-b bg-[#2C7F24] text-white">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-6">
             {isMobile && (
               <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
                     <Menu className="h-5 w-5" />
                   </Button>
                 </SheetTrigger>
@@ -95,7 +118,7 @@ export function MainLayout() {
                   <div className="flex flex-col gap-4 pt-8">
                     <Link to="/dashboard" className="flex items-center gap-3 mb-4" onClick={() => setIsSheetOpen(false)}>
                       <div className="p-1">
-                        <img src="/logo.png" alt="Método Certo Logo" className="h-[140px] w-[140px]" />
+                        <img src="/logo.png" alt="Método Certo Logo" className="h-[100px] w-[100px] object-contain" />
                       </div>
                       <div>
                         <h1 className="text-xl font-bold">Método Certo</h1>
@@ -104,7 +127,25 @@ export function MainLayout() {
                     </Link>
                     <NavigationMenu orientation="vertical" className="flex-col items-start">
                       <NavigationMenuList className="flex-col items-start space-y-2">
-                        {navLinks}
+                        {/* No mobile, os links usam o estilo padrão do shadcn para o menu lateral */}
+                        <NavigationMenuItem>
+                          <Link to="/accounts-payable" className="block px-4 py-2 text-sm font-medium hover:bg-accent rounded-md" onClick={() => setIsSheetOpen(false)}>Contas a Pagar</Link>
+                        </NavigationMenuItem>
+                        <NavigationMenuItem>
+                          <Link to="/accounts-receivable" className="block px-4 py-2 text-sm font-medium hover:bg-accent rounded-md" onClick={() => setIsSheetOpen(false)}>Contas a Receber</Link>
+                        </NavigationMenuItem>
+                        <NavigationMenuItem>
+                          <Link to="/credit-cards" className="block px-4 py-2 text-sm font-medium hover:bg-accent rounded-md" onClick={() => setIsSheetOpen(false)}>Cartões de Crédito</Link>
+                        </NavigationMenuItem>
+                        <NavigationMenuItem>
+                          <Link to="/piggy-bank" className="flex items-center px-4 py-2 text-sm font-medium hover:bg-accent rounded-md" onClick={() => setIsSheetOpen(false)}><PiggyBankIcon className="mr-2 h-4 w-4" /> Cofrinho</Link>
+                        </NavigationMenuItem>
+                        <NavigationMenuItem>
+                          <Link to="/user-management" className="flex items-center px-4 py-2 text-sm font-medium hover:bg-accent rounded-md" onClick={() => setIsSheetOpen(false)}><Users className="mr-2 h-4 w-4" /> Usuários</Link>
+                        </NavigationMenuItem>
+                        <NavigationMenuItem>
+                          <Link to="/settings" className="flex items-center px-4 py-2 text-sm font-medium hover:bg-accent rounded-md" onClick={() => setIsSheetOpen(false)}><SettingsIcon className="mr-2 h-4 w-4" /> Configurações</Link>
+                        </NavigationMenuItem>
                       </NavigationMenuList>
                     </NavigationMenu>
                   </div>
@@ -113,17 +154,16 @@ export function MainLayout() {
             )}
             <Link to="/dashboard" className="flex items-center gap-3">
               <div className="p-1">
-                <img src="/logo.png" alt="Método Certo Logo" className="h-[140px] w-[140px]" />
+                <img src="/logo.png" alt="Método Certo Logo" className="h-[80px] w-[80px] object-contain" />
               </div>
-              {!isMobile && ( // Esconder o texto do título no mobile quando o menu lateral está presente
+              {!isMobile && (
                 <div>
-                  <h1 className="text-xl font-bold">Método Certo</h1>
-                  <p className="text-sm text-muted-foreground">{user?.email}</p>
+                  <h1 className="text-xl font-bold text-white">Método Certo</h1>
+                  <p className="text-sm text-white/80">{user?.email}</p>
                 </div>
               )}
             </Link>
 
-            {/* Navigation Menu for Desktop */}
             {!isMobile && (
               <NavigationMenu>
                 <NavigationMenuList>
@@ -132,7 +172,7 @@ export function MainLayout() {
               </NavigationMenu>
             )}
           </div>
-          <Button variant="ghost" size="icon" onClick={signOut}>
+          <Button variant="ghost" size="icon" onClick={signOut} className="text-white hover:bg-white/10">
             <LogOut className="h-5 w-5" />
           </Button>
         </div>
