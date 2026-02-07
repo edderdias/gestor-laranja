@@ -8,7 +8,7 @@ import { format, getMonth, getYear, subMonths, parseISO, addMonths, endOfMonth, 
 import { ptBR } from "date-fns/locale";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext"; // Corrigido: de '=' para 'from'
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -29,25 +29,23 @@ type AccountPayableWithGeneratedFlag = Tables<'accounts_payable'> & {
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   payment_type_id: z.string().min(1, "Tipo de pagamento é obrigatório"),
-  card_id: z.string().optional(), // Optional by default, will be conditionally validated
+  card_id: z.string().optional(),
   purchase_date: z.string().optional(),
   due_date: z.string().min(1, "Data de vencimento é obrigatória"),
-  installments: z.string().optional(), // Make optional here, refine later
+  installments: z.string().optional(),
   amount: z.string().min(1, "Valor é obrigatório"),
   category_id: z.string().min(1, "Categoria é obrigatória"),
   is_fixed: z.boolean().default(false),
-  responsible_person_id: z.string().optional(), // Tornar opcional no esquema
+  responsible_person_id: z.string().optional(),
 }).superRefine((data, ctx) => {
-  // Validação condicional para purchase_date
-  if (!data.is_fixed && !data.purchase_date && data.payment_type_id !== "cartao") { // Only require purchase_date if not fixed AND not credit card
+  if (!data.is_fixed && !data.purchase_date && data.payment_type_id !== "cartao") {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Data da compra é obrigatória para contas não fixas",
       path: ["purchase_date"],
     });
   }
-  // Validação condicional para installments
-  if (!data.is_fixed && data.payment_type_id !== "cartao") { // Only validate installments if not fixed AND not credit card
+  if (!data.is_fixed && data.payment_type_id !== "cartao") {
     const numInstallments = parseInt(data.installments || "0");
     if (numInstallments < 1) {
       ctx.addIssue({
@@ -69,7 +67,6 @@ export default function AccountsPayable() {
 
   const [selectedMonthYear, setSelectedMonthYear] = useState(format(new Date(), "yyyy-MM"));
 
-  // Estados para o diálogo de confirmação de data de pagamento
   const [showConfirmPaidDateDialog, setShowConfirmPaidDateDialog] = useState(false);
   const [currentConfirmingAccount, setCurrentConfirmingAccount] = useState<AccountPayableWithGeneratedFlag | null>(null);
   const [selectedPaidDate, setSelectedPaidDate] = useState<Date | undefined>(new Date());
@@ -94,7 +91,6 @@ export default function AccountsPayable() {
   const selectedCardId = form.watch("card_id");
   const selectedDueDate = form.watch("due_date");
 
-  // Encontrar o ID do tipo de pagamento "cartao"
   const { data: paymentTypes, isLoading: isLoadingPaymentTypes } = useQuery({
     queryKey: ["payment-types"],
     queryFn: async () => {
@@ -109,7 +105,6 @@ export default function AccountsPayable() {
   });
   const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name === "cartao")?.id;
 
-  // Buscar cartões
   const { data: cards, isLoading: isLoadingCards } = useQuery({
     queryKey: ["credit-cards"],
     queryFn: async () => {
@@ -126,7 +121,6 @@ export default function AccountsPayable() {
     enabled: !!user?.id,
   });
 
-  // Fetch credit card transactions for the selected card and due date month
   const { data: monthlyCardTransactions, isLoading: isLoadingMonthlyCardTransactions } = useQuery({
     queryKey: ["credit_card_transactions_for_bill", selectedCardId, selectedDueDate],
     queryFn: async () => {
@@ -145,7 +139,7 @@ export default function AccountsPayable() {
       if (error) throw error;
       return data;
     },
-    enabled: !!selectedCardId && !!selectedDueDate && selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount, // Only enable for new entries
+    enabled: !!selectedCardId && !!selectedDueDate && selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount,
   });
 
   useEffect(() => {
@@ -156,7 +150,7 @@ export default function AccountsPayable() {
         card_id: editingAccount.card_id || "",
         purchase_date: editingAccount.purchase_date || format(new Date(), "yyyy-MM-dd"),
         due_date: editingAccount.due_date,
-        installments: editingAccount.installments?.toString() || "1", // Set to "1" if null/undefined
+        installments: editingAccount.installments?.toString() || "1",
         amount: editingAccount.amount.toString(),
         category_id: editingAccount.category_id || "",
         is_fixed: editingAccount.is_fixed || false,
@@ -177,36 +171,27 @@ export default function AccountsPayable() {
     }
   }, [isFormOpen, editingAccount, form]);
 
-  // Effect to auto-fill amount and description for credit card bills
   useEffect(() => {
-    // Ensure all necessary data is loaded before proceeding
     if (!cards || !creditCardPaymentTypeId || isLoadingMonthlyCardTransactions) {
       return;
     }
 
+    // Só preenche automaticamente se for uma nova conta e for pagamento de fatura de cartão
     if (selectedPaymentTypeId === creditCardPaymentTypeId && selectedCardId && selectedDueDate && !editingAccount) {
-      if (monthlyCardTransactions) {
+      if (monthlyCardTransactions && monthlyCardTransactions.length > 0) {
         const totalBillAmount = monthlyCardTransactions.reduce((sum, transaction) => sum + transaction.amount, 0);
         form.setValue("amount", totalBillAmount.toFixed(2));
-        form.setValue("installments", "1"); // Force 1 installment for bill payment
-        form.setValue("is_fixed", false); // Bill payment is not fixed
+        form.setValue("installments", "1");
+        form.setValue("is_fixed", false);
         
-        // Suggest description
         const cardName = cards.find(c => c.id === selectedCardId)?.name || "Cartão"; 
         const formattedMonth = format(parseISO(selectedDueDate), "MMMM/yyyy", { locale: ptBR });
         form.setValue("description", `Fatura ${cardName} - ${formattedMonth}`);
       }
-    } else if (!editingAccount) {
-      // Reset amount and description if card/payment type changes or is not credit card
-      form.setValue("amount", "");
-      form.setValue("description", "");
-      form.setValue("installments", "1");
-      form.setValue("is_fixed", false);
     }
+    // Removido o bloco 'else if' que limpava os campos, para evitar que o usuário perca o que digitou ao trocar opções
   }, [selectedPaymentTypeId, selectedCardId, selectedDueDate, monthlyCardTransactions, editingAccount, form, cards, creditCardPaymentTypeId, isLoadingMonthlyCardTransactions]);
 
-
-  // Buscar contas a pagar
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
     queryKey: ["accounts-payable"],
     queryFn: async () => {
@@ -223,7 +208,6 @@ export default function AccountsPayable() {
     enabled: !!user?.id,
   });
 
-  // Buscar categorias
   const { data: categories, isLoading: isLoadingCategories } = useQuery({
     queryKey: ["expense-categories"],
     queryFn: async () => {
@@ -237,7 +221,6 @@ export default function AccountsPayable() {
     },
   });
 
-  // Buscar responsáveis
   const { data: responsiblePersons, isLoading: isLoadingResponsiblePersons } = useQuery({
     queryKey: ["responsible-persons"],
     queryFn: async () => {
@@ -251,7 +234,6 @@ export default function AccountsPayable() {
     },
   });
 
-  // Criar/Atualizar conta
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
       if (!user?.id) {
@@ -260,12 +242,11 @@ export default function AccountsPayable() {
       }
 
       let finalCardId = values.card_id;
-      // Validação condicional para card_id
       if (values.payment_type_id === creditCardPaymentTypeId && !values.card_id) {
         toast.error("Selecione um cartão de crédito para o tipo de pagamento 'Cartão'.");
         throw new Error("Credit card selection required.");
       } else if (values.payment_type_id !== creditCardPaymentTypeId) {
-        finalCardId = null; // Clear card_id if not a credit card payment
+        finalCardId = null;
       }
 
       const baseAccountData = {
@@ -273,46 +254,41 @@ export default function AccountsPayable() {
         card_id: finalCardId,
         amount: parseFloat(values.amount),
         category_id: values.category_id,
-        expense_type: "variavel" as const, // Mantido como enum fixo
-        responsible_person_id: values.payment_type_id === creditCardPaymentTypeId ? null : (values.responsible_person_id || null), // Definir como null se for cartão
+        expense_type: "variavel" as const,
+        responsible_person_id: values.payment_type_id === creditCardPaymentTypeId ? null : (values.responsible_person_id || null),
         created_by: user.id,
       };
 
       if (editingAccount) {
-        // Se estiver editando uma conta existente (fixa original ou não fixa)
-        // Não permite editar instâncias geradas (is_generated_fixed_instance)
         const { error } = await supabase
           .from("accounts_payable")
           .update({
             ...baseAccountData,
-            description: editingAccount.is_fixed ? values.description : editingAccount.description, // Only update description for original fixed
-            purchase_date: values.is_fixed || values.payment_type_id === creditCardPaymentTypeId ? null : values.purchase_date, // Null if fixed or credit card
+            description: editingAccount.is_fixed ? values.description : editingAccount.description,
+            purchase_date: values.is_fixed || values.payment_type_id === creditCardPaymentTypeId ? null : values.purchase_date,
             due_date: values.due_date,
-            installments: values.is_fixed || values.payment_type_id === creditCardPaymentTypeId ? 1 : parseInt(values.installments || "1"), // 1 if fixed or credit card
+            installments: values.is_fixed || values.payment_type_id === creditCardPaymentTypeId ? 1 : parseInt(values.installments || "1"),
             is_fixed: values.is_fixed,
           })
           .eq("id", editingAccount.id);
         
         if (error) throw error;
       } else {
-        // Criar nova conta
         if (values.is_fixed) {
-          // Inserir uma única conta fixa (template)
           const { error } = await supabase
             .from("accounts_payable")
             .insert({
               ...baseAccountData,
               description: values.description,
-              purchase_date: null, // Fixed accounts don't have a single purchase date
+              purchase_date: null,
               due_date: values.due_date,
-              installments: 1, // Fixed accounts always have 1 installment in DB
+              installments: 1,
               current_installment: 1,
               is_fixed: true,
               original_fixed_account_id: null,
             });
           if (error) throw error;
         } else {
-          // Lidar com contas não fixas com múltiplas parcelas
           const numInstallments = parseInt(values.installments || "1");
           let firstInstallmentId: string | null = null;
 
@@ -329,22 +305,22 @@ export default function AccountsPayable() {
               description: installmentDescription,
               due_date: format(currentDueDate, "yyyy-MM-dd"),
               purchase_date: currentPurchaseDate ? format(currentPurchaseDate, "yyyy-MM-dd") : null,
-              installments: numInstallments, // Total installments for the series
-              current_installment: i + 1, // Current installment number
+              installments: numInstallments,
+              current_installment: i + 1,
               is_fixed: false,
-              original_fixed_account_id: firstInstallmentId, // Link to the first installment
+              original_fixed_account_id: firstInstallmentId,
             };
 
             const { data: insertedData, error } = await supabase
               .from("accounts_payable")
               .insert(installmentData)
-              .select("id") // Select the ID to link subsequent installments
+              .select("id")
               .single();
 
             if (error) throw error;
 
             if (i === 0) {
-              firstInstallmentId = insertedData.id; // Capturar o ID da primeira parcela
+              firstInstallmentId = insertedData.id;
             }
           }
         }
@@ -362,17 +338,15 @@ export default function AccountsPayable() {
     },
   });
 
-  // Deletar conta
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      // Antes de deletar a conta a pagar, verificar se há uma transação de cartão de crédito vinculada e deletá-la
       const { data: existingTransaction, error: fetchError } = await supabase
         .from("credit_card_transactions")
         .select("id")
         .eq("accounts_payable_id", id)
         .single();
 
-      if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 means no rows found
+      if (fetchError && fetchError.code !== 'PGRST116') {
         console.error("Error fetching linked credit card transaction:", fetchError);
         throw fetchError;
       }
@@ -397,9 +371,9 @@ export default function AccountsPayable() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-payable"] });
-      queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] }); // Invalida o cache de transações de cartão
-      queryClient.invalidateQueries({ queryKey: ["card_expenses"] }); // Invalida o cache de gastos do cartão
-      queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] }); // Invalida o cache de gastos por responsável
+      queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["card_expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] });
       toast.success("Conta deletada com sucesso!");
     },
     onError: (error) => {
@@ -407,7 +381,6 @@ export default function AccountsPayable() {
     },
   });
 
-  // Confirmar pagamento (agora com data selecionável e lógica para instâncias geradas)
   const confirmPaidMutation = useMutation({
     mutationFn: async ({ account, paidDate }: { account: AccountPayableWithGeneratedFlag; paidDate: Date }) => {
       if (!user?.id) {
@@ -418,7 +391,6 @@ export default function AccountsPayable() {
       const formattedPaidDate = format(paidDate, "yyyy-MM-dd");
       let insertedAccountId = account.id;
 
-      // Step 1: Update/Insert accounts_payable
       if (account.is_generated_fixed_instance) {
         const { data: newAccount, error } = await supabase
           .from("accounts_payable")
@@ -452,7 +424,6 @@ export default function AccountsPayable() {
         if (error) throw error;
       }
 
-      // Step 2: If paid with credit card, record transaction
       if (account.payment_type_id === creditCardPaymentTypeId && account.card_id) {
         const transactionData = {
           description: account.description,
@@ -464,7 +435,7 @@ export default function AccountsPayable() {
           current_installment: account.current_installment || 1,
           created_by: user.id,
           responsible_person_id: account.responsible_person_id,
-          accounts_payable_id: insertedAccountId, // Link to the accounts_payable entry
+          accounts_payable_id: insertedAccountId,
         };
 
         const { error: transactionError } = await supabase
@@ -479,10 +450,10 @@ export default function AccountsPayable() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-payable"] });
-      queryClient.invalidateQueries({ queryKey: ["credit-cards"] }); // Invalida o cache de cartões para atualizar limites
-      queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] }); // Invalida o cache de transações de cartão
-      queryClient.invalidateQueries({ queryKey: ["card_expenses"] }); // Invalida o cache de gastos do cartão
-      queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] }); // Invalida o cache de gastos por responsável
+      queryClient.invalidateQueries({ queryKey: ["credit-cards"] });
+      queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["card_expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] });
       toast.success("Pagamento confirmado com sucesso!");
       setShowConfirmPaidDateDialog(false);
       setCurrentConfirmingAccount(null);
@@ -493,15 +464,13 @@ export default function AccountsPayable() {
     },
   });
 
-  // Estornar pagamento
   const reversePaidMutation = useMutation({
     mutationFn: async (account: AccountPayableWithGeneratedFlag) => {
-      // Se for um pagamento de cartão de crédito, deletar a transação de cartão correspondente
       if (account.payment_type_id === creditCardPaymentTypeId && account.card_id) {
         const { error: deleteTransactionError } = await supabase
           .from("credit_card_transactions")
           .delete()
-          .eq("accounts_payable_id", account.id); // Usar o accounts_payable_id para encontrar a transação
+          .eq("accounts_payable_id", account.id);
         
         if (deleteTransactionError) {
           console.error("Error deleting linked credit card transaction on reverse:", deleteTransactionError);
@@ -519,10 +488,10 @@ export default function AccountsPayable() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-payable"] });
-      queryClient.invalidateQueries({ queryKey: ["credit-cards"] }); // Invalida o cache de cartões para atualizar limites
-      queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] }); // Invalida o cache de transações de cartão
-      queryClient.invalidateQueries({ queryKey: ["card_expenses"] }); // Invalida o cache de gastos do cartão
-      queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] }); // Invalida o cache de gastos por responsável
+      queryClient.invalidateQueries({ queryKey: ["credit-cards"] });
+      queryClient.invalidateQueries({ queryKey: ["credit_card_transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["card_expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["responsible_person_spending"] });
       toast.success("Pagamento estornado com sucesso!");
     },
     onError: (error) => {
@@ -531,7 +500,6 @@ export default function AccountsPayable() {
   });
 
   const onSubmit = (values: FormData) => {
-    // Validação condicional para card_id antes de mutar
     if (values.payment_type_id === creditCardPaymentTypeId && !values.card_id) {
       toast.error("Selecione um cartão de crédito para o tipo de pagamento 'Cartão'.");
       return;
@@ -564,27 +532,25 @@ export default function AccountsPayable() {
       return;
     }
     if (confirm("Tem certeza que deseja estornar este pagamento? Ele voltará para o status de 'não pago'.")) {
-      reversePaidMutation.mutate(account); // Passar o objeto account completo
+      reversePaidMutation.mutate(account);
     }
   };
 
-  // Função para abrir o diálogo de confirmação de data de pagamento
   const handleConfirmPaidClick = (account: AccountPayableWithGeneratedFlag) => {
     setCurrentConfirmingAccount(account);
-    setSelectedPaidDate(new Date()); // Define a data padrão como hoje
+    setSelectedPaidDate(new Date());
     setShowConfirmPaidDateDialog(true);
   };
 
-  // Lógica para o seletor de mês
   const generateMonthOptions = () => {
     const options = [];
-    let date = subMonths(new Date(), 11); // Começa 11 meses atrás
-    for (let i = 0; i < 18; i++) { // 11 meses passados + mês atual + 6 meses futuros = 18 meses
+    let date = subMonths(new Date(), 11);
+    for (let i = 0; i < 18; i++) {
       options.push({
         value: format(date, "yyyy-MM"),
         label: format(date, "MMMM yyyy", { locale: ptBR }),
       });
-      date = addMonths(date, 1); // Incrementa um mês
+      date = addMonths(date, 1);
     }
     return options;
   };
@@ -593,22 +559,17 @@ export default function AccountsPayable() {
   const [selectedYear, selectedMonth] = selectedMonthYear.split('-').map(Number);
   const selectedMonthDate = parseISO(`${selectedMonthYear}-01`);
 
-  // Processar contas para exibição, incluindo a replicação de contas fixas
   const processedAccounts = accounts?.flatMap(account => {
     const accountDueDate = parseISO(account.due_date);
     const currentMonthAccounts: AccountPayableWithGeneratedFlag[] = [];
 
-    // 1. Incluir contas não fixas que pertencem ao mês selecionado
     if (!account.is_fixed && isSameMonth(accountDueDate, selectedMonthDate) && isSameYear(accountDueDate, selectedMonthDate)) {
       currentMonthAccounts.push(account);
     } 
-    // 2. Incluir contas fixas originais que pertencem ao mês selecionado
     else if (account.is_fixed && isSameMonth(accountDueDate, selectedMonthDate) && isSameYear(accountDueDate, selectedMonthDate)) {
       currentMonthAccounts.push(account);
     }
-    // 3. Gerar ocorrências para contas fixas em meses futuros
     else if (account.is_fixed && accountDueDate <= endOfMonth(selectedMonthDate)) {
-      // Verificar se já existe uma ocorrência real para este mês e esta conta fixa
       const existingOccurrence = accounts.find(
         (a) => a.original_fixed_account_id === account.id &&
                isSameMonth(parseISO(a.due_date), selectedMonthDate) &&
@@ -616,44 +577,40 @@ export default function AccountsPayable() {
       );
 
       if (!existingOccurrence) {
-        // Se não existe uma ocorrência real, cria uma instância gerada para exibição
         const displayDate = new Date(selectedYear, selectedMonth - 1, accountDueDate.getDate());
-        // Ajusta o dia se o mês selecionado não tiver aquele dia (ex: 31 de fevereiro)
         if (displayDate.getMonth() !== selectedMonth - 1) {
-          displayDate.setDate(0); // Vai para o último dia do mês anterior
-          displayDate.setDate(displayDate.getDate() + 1); // Adiciona 1 dia para o último dia do mês atual
+          displayDate.setDate(0);
+          displayDate.setDate(displayDate.getDate() + 1);
         }
 
         currentMonthAccounts.push({
           ...account,
-          id: `temp-${account.id}-${selectedMonthYear}`, // ID temporário para instâncias geradas
+          id: `temp-${account.id}-${selectedMonthYear}`,
           due_date: format(displayDate, "yyyy-MM-dd"),
-          paid: false, // Instâncias geradas são sempre não pagas por padrão
+          paid: false,
           paid_date: null,
           is_generated_fixed_instance: true,
-          original_fixed_account_id: account.id, // Referência ao modelo fixo original
+          original_fixed_account_id: account.id,
         });
       }
     }
     return currentMonthAccounts;
   }).sort((a, b) => parseISO(a.due_date).getTime() - parseISO(b.due_date).getTime()) || [];
 
-  // Filtrar contas pagas para o resumo total (apenas do mês selecionado)
   const paidAccounts = processedAccounts.filter(account => account.paid) || [];
   const totalPaidAmount = paidAccounts.reduce((sum, account) => {
-    return sum + account.amount; // Soma apenas o valor da parcela
+    return sum + account.amount;
   }, 0) || 0;
 
-  // Calcular o valor pago por cada responsável (apenas contas pagas do mês selecionado)
   const paidByResponsiblePerson = paidAccounts.reduce((acc: { [key: string]: number }, account) => {
     const personName = account.responsible_persons?.name || "Não Atribuído";
-    const amount = account.amount; // Soma apenas o valor da parcela
+    const amount = account.amount;
     acc[personName] = (acc[personName] || 0) + amount;
     return acc;
   }, {});
 
   const totalAmountForecast = processedAccounts.reduce((sum, account) => {
-    return sum + account.amount; // Soma apenas o valor da parcela
+    return sum + account.amount;
   }, 0) || 0;
 
   return (
@@ -746,7 +703,7 @@ export default function AccountsPayable() {
                               <Switch
                                 checked={field.value}
                                 onCheckedChange={field.onChange}
-                                disabled={selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount} // Disable if credit card and new entry
+                                disabled={selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount}
                               />
                             </FormControl>
                           </FormItem>
@@ -784,18 +741,13 @@ export default function AccountsPayable() {
                               </SelectContent>
                             </Select>
                             <FormMessage />
-                            {!creditCardPaymentTypeId && (
-                              <FormDescription className="text-destructive">
-                                O tipo de pagamento "cartao" não foi encontrado nas configurações. Por favor, adicione-o em Configurações &gt; Tipos de Pagamento.
-                              </FormDescription>
-                            )}
                           </FormItem>
                         )}
                       />
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {!(selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount) && !isFixed && ( // Hide purchase_date if credit card and new entry, or if fixed
+                      {!(selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount) && !isFixed && (
                         <FormField
                           control={form.control}
                           name="purchase_date"
@@ -825,7 +777,7 @@ export default function AccountsPayable() {
                       />
                     </div>
 
-                    {!(selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount) && !isFixed && ( // Hide if credit card and new entry, or if fixed
+                    {!(selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount) && !isFixed && (
                       <div className="grid grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
@@ -857,7 +809,7 @@ export default function AccountsPayable() {
                       </div>
                     )}
 
-                    {(isFixed || (selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount)) && ( // Show if fixed OR credit card and new entry
+                    {(isFixed || (selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount)) && (
                       <div className="grid grid-cols-1 gap-4">
                         <FormField
                           control={form.control}
@@ -871,7 +823,7 @@ export default function AccountsPayable() {
                                   step="0.01" 
                                   placeholder="0.00" 
                                   {...field} 
-                                  disabled={selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount} // Disable if credit card and new entry
+                                  disabled={selectedPaymentTypeId === creditCardPaymentTypeId && !editingAccount}
                                 />
                               </FormControl>
                               <FormMessage />
@@ -910,7 +862,7 @@ export default function AccountsPayable() {
                       )}
                     />
 
-                    {selectedPaymentTypeId !== creditCardPaymentTypeId && ( // Renderizar condicionalmente
+                    {selectedPaymentTypeId !== creditCardPaymentTypeId && (
                       <FormField
                         control={form.control}
                         name="responsible_person_id"
@@ -1113,7 +1065,6 @@ export default function AccountsPayable() {
         )}
       </main>
 
-      {/* Diálogo para selecionar a data de pagamento */}
       <Dialog open={showConfirmPaidDateDialog} onOpenChange={setShowConfirmPaidDateDialog}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
