@@ -27,7 +27,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchFamilyMembers = async (userId: string) => {
     try {
-      // Tentamos buscar o perfil. Se a coluna family_id não existir, o Supabase retornará erro 42703
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("*")
@@ -35,13 +34,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (profileError) {
-        if (profileError.code === '42703') { // Coluna não existe
+        if (profileError.code === '42703') {
           setIsFamilySchemaReady(false);
         }
         throw profileError;
       }
 
-      // Lógica de fallback: family_id -> invited_by_user_id -> id próprio
+      // Lógica de identificação: family_id ou fallback para invited_by_user_id
       const rootId = profile.family_id || profile.invited_by_user_id || profile.id;
 
       const { data: members, error: membersError } = await supabase
@@ -78,14 +77,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        await fetchFamilyMembers(session.user.id);
+    const initSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          await fetchFamilyMembers(session.user.id);
+        }
+      } catch (error) {
+        console.error("Erro na sessão inicial:", error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    };
+
+    initSession();
 
     return () => subscription.unsubscribe();
   }, [navigate]);
@@ -93,13 +100,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        toast.error(error.message || "Erro ao fazer login");
-      } else {
-        toast.success("Login realizado com sucesso!");
-      }
+      if (error) toast.error(error.message);
     } catch (error: any) {
-      toast.error(error.message || "Erro inesperado ao fazer login");
+      toast.error("Erro ao fazer login");
     }
   };
 
@@ -108,26 +111,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: { full_name: fullName }
-        }
+        options: { data: { full_name: fullName } }
       });
-
-      if (error) {
-        toast.error(error.message || "Erro ao criar conta");
-      } else {
-        toast.success("Cadastro realizado com sucesso!");
-      }
+      if (error) toast.error(error.message);
+      else toast.success("Cadastro realizado!");
     } catch (error: any) {
-      toast.error(error.message || "Erro inesperado ao criar conta");
+      toast.error("Erro ao criar conta");
     }
   };
 
   const signOut = async () => {
     try {
       await supabase.auth.signOut();
-    } catch (error: any) {
-      console.error("Logout error:", error);
     } finally {
       setSession(null);
       setUser(null);
@@ -145,8 +140,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (context === undefined) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 }
