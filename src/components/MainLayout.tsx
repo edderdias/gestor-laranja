@@ -127,7 +127,6 @@ export function MainLayout() {
                     </Link>
                     <NavigationMenu orientation="vertical" className="flex-col items-start">
                       <NavigationMenuList className="flex-col items-start space-y-2">
-                        {/* No mobile, os links usam o estilo padrão do shadcn para o menu lateral */}
                         <NavigationMenuItem>
                           <Link to="/accounts-payable" className="block px-4 py-2 text-sm font-medium hover:bg-accent rounded-md" onClick={() => setIsSheetOpen(false)}>Contas a Pagar</Link>
                         </NavigationMenuItem>
@@ -182,6 +181,14 @@ export function MainLayout() {
       <main className="flex-1">
         <Outlet />
       </main>
+
+      {/* Footer */}
+      <footer className="border-t py-6 bg-background">
+        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
+          <p>Copyright (c) 2026 Eder Dias</p>
+          <p className="mt-1">Desenvolvido por Eder Dias</p>
+        </div>
+      </footer>
     </div>
   );
 }
