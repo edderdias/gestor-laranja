@@ -19,7 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tables } from "@/integrations/supabase/types"; // Importar tipos do Supabase
+import { Tables } from "@/integrations/supabase/types";
 
 // Estender o tipo de conta para incluir a flag de instância gerada
 type AccountReceivableWithGeneratedFlag = Tables<'accounts_receivable'> & {
@@ -67,7 +67,7 @@ const transferToPiggyBankSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Valor inválido").transform(Number).refine(val => val > 0, "O valor deve ser positivo"),
   entry_date: z.date({ required_error: "Data é obrigatória" }),
-  bank_id: z.string().min(1, "Banco é obrigatório"), // Alterado para obrigatório
+  bank_id: z.string().min(1, "Banco é obrigatório"),
 });
 
 type TransferToPiggyBankFormData = z.infer<typeof transferToPiggyBankSchema>;
@@ -95,7 +95,7 @@ export default function AccountsReceivable() {
       description: "",
       amount: 0,
       entry_date: new Date(),
-      bank_id: "", // Valor padrão vazio para campo obrigatório
+      bank_id: "",
     },
   });
 
@@ -148,14 +148,13 @@ export default function AccountsReceivable() {
     }
   }, [isFormOpen, editingAccount, form]);
 
-  // Efeito para preencher o formulário de transferência para o cofrinho
   useEffect(() => {
     if (isTransferToPiggyBankFormOpen && transferringAccount) {
       transferForm.reset({
         description: `Transferência de ${transferringAccount.description}`,
         amount: transferringAccount.amount,
-        entry_date: new Date(), // Data atual como padrão
-        bank_id: "", // Resetar o banco selecionado para vazio
+        entry_date: new Date(),
+        bank_id: "",
       });
     } else if (!isTransferToPiggyBankFormOpen) {
       transferForm.reset({
@@ -167,8 +166,6 @@ export default function AccountsReceivable() {
     }
   }, [isTransferToPiggyBankFormOpen, transferringAccount, transferForm]);
 
-
-  // Buscar contas a receber
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
     queryKey: ["accounts-receivable"],
     queryFn: async () => {
@@ -182,7 +179,6 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Buscar fontes de receita
   const { data: sources } = useQuery({
     queryKey: ["income-sources"],
     queryFn: async () => {
@@ -196,7 +192,6 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Buscar pagadores
   const { data: payers, isLoading: isLoadingPayers } = useQuery({
     queryKey: ["payers"],
     queryFn: async () => {
@@ -210,7 +205,6 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Buscar tipos de recebimento
   const { data: incomeTypes, isLoading: isLoadingIncomeTypes } = useQuery({
     queryKey: ["income-types"],
     queryFn: async () => {
@@ -224,7 +218,6 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Buscar responsáveis
   const { data: responsiblePersons, isLoading: isLoadingResponsiblePersons } = useQuery({
     queryKey: ["responsible-persons"],
     queryFn: async () => {
@@ -238,7 +231,6 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Buscar bancos
   const { data: banks, isLoading: isLoadingBanks } = useQuery({
     queryKey: ["banks"],
     queryFn: async () => {
@@ -252,7 +244,6 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Criar/Atualizar conta
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
       if (!user?.id) {
@@ -285,10 +276,10 @@ export default function AccountsReceivable() {
         created_by: user.id,
         is_fixed: values.is_fixed,
         responsible_person_id: values.responsible_person_id || null,
-        original_fixed_account_id: editingAccount?.original_fixed_account_id || null, // Manter o link se for uma edição de ocorrência
+        original_fixed_account_id: editingAccount?.original_fixed_account_id || null,
       };
 
-      if (editingAccount && !editingAccount.is_generated_fixed_instance) { // Só edita se não for uma instância gerada
+      if (editingAccount && !editingAccount.is_generated_fixed_instance) {
         const { error } = await supabase
           .from("accounts_receivable")
           .update(accountData)
@@ -315,7 +306,6 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Deletar conta
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
@@ -334,7 +324,6 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Confirmar recebimento (agora com data selecionável e lógica para instâncias geradas)
   const confirmReceiveMutation = useMutation({
     mutationFn: async ({ account, receivedDate }: { account: AccountReceivableWithGeneratedFlag; receivedDate: Date }) => {
       if (!user?.id) {
@@ -345,27 +334,25 @@ export default function AccountsReceivable() {
       const formattedReceivedDate = format(receivedDate, "yyyy-MM-dd");
 
       if (account.is_generated_fixed_instance) {
-        // Se for uma instância gerada, insere uma nova conta (não fixa)
         const { error } = await supabase
           .from("accounts_receivable")
           .insert({
             description: account.description,
             income_type_id: account.income_type_id,
-            receive_date: account.receive_date, // Usa a data da instância gerada (já é string yyyy-MM-dd)
+            receive_date: account.receive_date,
             installments: account.installments,
             amount: account.amount,
             source_id: account.source_id,
             payer_id: account.payer_id,
             created_by: user.id,
-            is_fixed: false, // A ocorrência é uma entrada única
+            is_fixed: false,
             responsible_person_id: account.responsible_person_id,
             received: true,
             received_date: formattedReceivedDate,
-            original_fixed_account_id: account.original_fixed_account_id || account.id, // Link para o modelo fixo original
+            original_fixed_account_id: account.original_fixed_account_id || account.id,
           });
         if (error) throw error;
       } else {
-        // Se for uma conta existente (fixa original ou não fixa), atualiza
         const { error } = await supabase
           .from("accounts_receivable")
           .update({ received: true, received_date: formattedReceivedDate })
@@ -377,16 +364,15 @@ export default function AccountsReceivable() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
       toast.success("Recebimento confirmado com sucesso!");
-      setShowConfirmDateDialog(false); // Fecha o diálogo
+      setShowConfirmDateDialog(false);
       setCurrentConfirmingAccount(null);
-      setSelectedReceivedDate(new Date()); // Reseta a data
+      setSelectedReceivedDate(new Date());
     },
     onError: (error) => {
       toast.error("Erro ao confirmar recebimento: " + error.message);
     },
   });
 
-  // Estornar recebimento
   const reverseReceiveMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
@@ -405,7 +391,6 @@ export default function AccountsReceivable() {
     },
   });
 
-  // Mutation para transferir para o cofrinho
   const transferToPiggyBankMutation = useMutation({
     mutationFn: async (values: TransferToPiggyBankFormData) => {
       if (!user?.id) {
@@ -417,9 +402,9 @@ export default function AccountsReceivable() {
         description: values.description,
         amount: values.amount,
         entry_date: format(values.entry_date, "yyyy-MM-dd"),
-        type: "deposit" as const, // Sempre um depósito
+        type: "deposit" as const,
         user_id: user.id,
-        bank_id: values.bank_id, // Incluir bank_id
+        bank_id: values.bank_id,
       };
 
       const { error } = await supabase
@@ -429,7 +414,7 @@ export default function AccountsReceivable() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["piggy_bank_entries"] }); // Invalida o cache do cofrinho
+      queryClient.invalidateQueries({ queryKey: ["piggy_bank_entries"] });
       toast.success("Valor transferido para o cofrinho com sucesso!");
       setIsTransferToPiggyBankFormOpen(false);
       setTransferringAccount(null);
@@ -451,7 +436,6 @@ export default function AccountsReceivable() {
   const handleEdit = (account: AccountReceivableWithGeneratedFlag) => {
     if (account.is_generated_fixed_instance) {
       toast.info("Edite a conta fixa original para alterar esta ocorrência.");
-      // Poderíamos redirecionar para a edição da conta original se tivéssemos o ID
       return;
     }
     setEditingAccount(account);
@@ -478,29 +462,26 @@ export default function AccountsReceivable() {
     }
   };
 
-  // Função para abrir o diálogo de confirmação de data
   const handleConfirmReceiveClick = (account: AccountReceivableWithGeneratedFlag) => {
     setCurrentConfirmingAccount(account);
-    setSelectedReceivedDate(new Date()); // Define a data padrão como hoje
+    setSelectedReceivedDate(new Date());
     setShowConfirmDateDialog(true);
   };
 
-  // Função para abrir o diálogo de transferência para o cofrinho
   const handleTransferToPiggyBankClick = (account: AccountReceivableWithGeneratedFlag) => {
     setTransferringAccount(account);
     setIsTransferToPiggyBankFormOpen(true);
   };
 
-  // Lógica para o seletor de mês
   const generateMonthOptions = () => {
     const options = [];
-    let date = subMonths(new Date(), 11); // Começa 11 meses atrás
-    for (let i = 0; i < 18; i++) { // 11 meses passados + mês atual + 6 meses futuros = 18 meses
+    let date = subMonths(new Date(), 11);
+    for (let i = 0; i < 18; i++) {
       options.push({
         value: format(date, "yyyy-MM"),
         label: format(date, "MMMM yyyy", { locale: ptBR }),
       });
-      date = addMonths(date, 1); // Incrementa um mês
+      date = addMonths(date, 1);
     }
     return options;
   };
@@ -509,22 +490,17 @@ export default function AccountsReceivable() {
   const [selectedYear, selectedMonth] = selectedMonthYear.split('-').map(Number);
   const selectedMonthDate = parseISO(`${selectedMonthYear}-01`);
 
-  // Processar contas para exibição, incluindo a replicação de contas fixas
   const processedAccounts = accounts?.flatMap(account => {
     const accountReceiveDate = parseISO(account.receive_date);
     const currentMonthAccounts: AccountReceivableWithGeneratedFlag[] = [];
 
-    // 1. Incluir contas não fixas que pertencem ao mês selecionado
     if (!account.is_fixed && isSameMonth(accountReceiveDate, selectedMonthDate) && isSameYear(accountReceiveDate, selectedMonthDate)) {
       currentMonthAccounts.push(account);
     } 
-    // 2. Incluir contas fixas originais que pertencem ao mês selecionado
     else if (account.is_fixed && isSameMonth(accountReceiveDate, selectedMonthDate) && isSameYear(accountReceiveDate, selectedMonthDate)) {
       currentMonthAccounts.push(account);
     }
-    // 3. Gerar ocorrências para contas fixas em meses futuros
     else if (account.is_fixed && accountReceiveDate <= endOfMonth(selectedMonthDate)) {
-      // Verificar se já existe uma ocorrência real para este mês e esta conta fixa
       const existingOccurrence = accounts.find(
         (a) => a.original_fixed_account_id === account.id &&
                isSameMonth(parseISO(a.receive_date), selectedMonthDate) &&
@@ -532,35 +508,31 @@ export default function AccountsReceivable() {
       );
 
       if (!existingOccurrence) {
-        // Se não existe uma ocorrência real, cria uma instância gerada para exibição
         const displayDate = new Date(selectedYear, selectedMonth - 1, accountReceiveDate.getDate());
-        // Ajusta o dia se o mês selecionado não tiver aquele dia (ex: 31 de fevereiro)
         if (displayDate.getMonth() !== selectedMonth - 1) {
-          displayDate.setDate(0); // Vai para o último dia do mês anterior
-          displayDate.setDate(displayDate.getDate() + 1); // Adiciona 1 dia para o último dia do mês atual
+          displayDate.setDate(0);
+          displayDate.setDate(displayDate.getDate() + 1);
         }
 
         currentMonthAccounts.push({
           ...account,
-          id: `temp-${account.id}-${selectedMonthYear}`, // ID temporário para instâncias geradas
+          id: `temp-${account.id}-${selectedMonthYear}`,
           receive_date: format(displayDate, "yyyy-MM-dd"),
-          received: false, // Instâncias geradas são sempre não recebidas por padrão
+          received: false,
           received_date: null,
           is_generated_fixed_instance: true,
-          original_fixed_account_id: account.id, // Referência ao modelo fixo original
+          original_fixed_account_id: account.id,
         });
       }
     }
     return currentMonthAccounts;
   }).sort((a, b) => parseISO(a.receive_date).getTime() - parseISO(b.receive_date).getTime()) || [];
 
-  // Filtrar contas recebidas para o resumo total (apenas do mês selecionado)
   const receivedAccounts = processedAccounts.filter(account => account.received) || [];
   const totalAmount = receivedAccounts.reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
 
-  // Calcular o valor recebido por cada recebedor (apenas contas recebidas do mês selecionado)
   const receivedByResponsiblePerson = receivedAccounts.reduce((acc: { [key: string]: number }, account) => {
     const personName = account.responsible_persons?.name || "Não Atribuído";
     const amount = account.amount * (account.installments || 1);
@@ -568,7 +540,6 @@ export default function AccountsReceivable() {
     return acc;
   }, {});
 
-  // Calcular previsão de recebimento do mês (contas NÃO recebidas para o mês selecionado)
   const monthlyForecast = processedAccounts.filter(account => !account.received).reduce((sum, account) => {
     return sum + (account.amount * (account.installments || 1));
   }, 0) || 0;
@@ -829,7 +800,7 @@ export default function AccountsReceivable() {
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Selecione o recebedor" />
-                            </SelectTrigger>
+                              </SelectTrigger>
                             </FormControl>
                             <SelectContent>
                               {isLoadingResponsiblePersons ? (
@@ -859,7 +830,7 @@ export default function AccountsReceivable() {
                   </form>
                 </Form>
               </DialogContent>
-            </Select>
+            </Dialog>
           </div>
         </div>
       </div>
@@ -964,7 +935,7 @@ export default function AccountsReceivable() {
                           variant="outline" 
                           size="sm" 
                           onClick={() => handleReverse(account)}
-                          disabled={reverseReceiveMutation.isPending || account.is_generated_fixed_instance} // Desabilita estorno para geradas
+                          disabled={reverseReceiveMutation.isPending || account.is_generated_fixed_instance}
                           className="text-destructive border-destructive hover:bg-destructive/10"
                         >
                           <RotateCcw className="h-4 w-4 mr-2" /> Estornar
@@ -984,18 +955,18 @@ export default function AccountsReceivable() {
                         variant="ghost" 
                         size="icon" 
                         onClick={() => handleEdit(account)}
-                        disabled={account.is_generated_fixed_instance} // Desabilita edição para geradas
+                        disabled={account.is_generated_fixed_instance}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      {account.received && ( // Condição adicionada aqui
+                      {account.received && (
                         <Dialog open={isTransferToPiggyBankFormOpen && transferringAccount?.id === account.id} onOpenChange={setIsTransferToPiggyBankFormOpen}>
                           <DialogTrigger asChild>
                             <Button 
                               variant="ghost" 
                               size="icon" 
                               onClick={() => handleTransferToPiggyBankClick(account)}
-                              disabled={transferToPiggyBankMutation.isPending || account.is_generated_fixed_instance} // Desabilita para geradas
+                              disabled={transferToPiggyBankMutation.isPending || account.is_generated_fixed_instance}
                             >
                               <PiggyBankIcon className="h-4 w-4 text-neutral" />
                             </Button>
@@ -1082,7 +1053,7 @@ export default function AccountsReceivable() {
                                   name="bank_id"
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel>Banco *</FormLabel> {/* Marcado como obrigatório */}
+                                      <FormLabel>Banco *</FormLabel>
                                       <Select onValueChange={field.onChange} value={field.value || ""}>
                                         <FormControl>
                                           <SelectTrigger>
@@ -1122,7 +1093,7 @@ export default function AccountsReceivable() {
                         variant="ghost" 
                         size="icon" 
                         onClick={() => handleDelete(account)}
-                        disabled={deleteMutation.isPending || account.is_generated_fixed_instance} // Desabilita exclusão para geradas
+                        disabled={deleteMutation.isPending || account.is_generated_fixed_instance}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
