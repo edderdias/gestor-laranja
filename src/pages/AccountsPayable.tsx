@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2, CheckCircle, RotateCcw, CalendarIcon } from "lucide-react";
+import { Plus, Pencil, Trash2, CheckCircle, RotateCcw, CalendarIcon, AlertTriangle } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tables } from "@/integrations/supabase/types";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 type AccountPayableWithRelations = Tables<'accounts_payable'> & {
   is_generated_fixed_instance?: boolean;
@@ -45,7 +46,7 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 export default function AccountsPayable() {
-  const { user, familyMemberIds } = useAuth();
+  const { user, familyMemberIds, isFamilySchemaReady } = useAuth();
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountPayableWithRelations | null>(null);
@@ -281,6 +282,16 @@ export default function AccountsPayable() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-4">
+        {!isFamilySchemaReady && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Configuração Necessária</AlertTitle>
+            <AlertDescription>
+              A estrutura de família ainda não foi detectada no banco de dados. Por favor, execute o comando SQL fornecido ou entre em contato com o suporte para vincular seu ID de família.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
           <h1 className="text-2xl font-bold">Contas a Pagar (Família)</h1>
           <div className="flex items-center gap-4">
@@ -326,7 +337,7 @@ export default function AccountsPayable() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {processedAccounts.length > 0 ? processedAccounts.map(account => (
+          {loadingAccounts ? <p className="col-span-2 text-center py-12">Carregando contas...</p> : processedAccounts.length > 0 ? processedAccounts.map(account => (
             <Card key={account.id} className={cn("border-l-4", account.paid ? "border-income" : "border-destructive")}>
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between">

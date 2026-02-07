@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PiggyBank as PiggyBankIcon, Plus, ArrowUp, ArrowDown, Trash2, CalendarIcon } from "lucide-react";
+import { PiggyBank as PiggyBankIcon, Plus, ArrowUp, ArrowDown, Trash2, CalendarIcon, AlertTriangle } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -19,6 +19,7 @@ import { z } from "zod";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const entrySchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -31,7 +32,7 @@ const entrySchema = z.object({
 type EntryFormData = z.infer<typeof entrySchema>;
 
 export default function PiggyBank() {
-  const { user, familyMemberIds } = useAuth();
+  const { user, familyMemberIds, isFamilySchemaReady } = useAuth();
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
 
@@ -105,6 +106,16 @@ export default function PiggyBank() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {!isFamilySchemaReady && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Configuração Necessária</AlertTitle>
+          <AlertDescription>
+            A estrutura de família ainda não foi detectada no banco de dados. Por favor, execute o comando SQL fornecido ou entre em contato com o suporte para vincular seu ID de família.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold flex items-center gap-2">
           <PiggyBankIcon className="h-7 w-7" /> Cofrinho Familiar
@@ -159,7 +170,6 @@ export default function PiggyBank() {
                     <TableCell>{entry.description}</TableCell>
                     <TableCell>{(entry.banks as any)?.name || "N/A"}</TableCell>
                     <TableCell className={`text-right font-medium ${entry.type === "deposit" ? "text-income" : "text-expense"}`}>
-                      {entry.type === "deposit" ? <ArrowUp className="inline h-4 w-4 mr-1" /> : <ArrowDown className="inline h-4 w-4 mr-1" />}
                       R$ {entry.amount.toFixed(2)}
                     </TableCell>
                     <TableCell className="text-right">

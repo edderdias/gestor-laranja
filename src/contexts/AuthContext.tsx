@@ -9,6 +9,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   familyMemberIds: string[];
+  isFamilySchemaReady: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -21,20 +22,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [familyMemberIds, setFamilyMemberIds] = useState<string[]>([]);
+  const [isFamilySchemaReady, setIsFamilySchemaReady] = useState(true);
   const navigate = useNavigate();
 
   const fetchFamilyMembers = async (userId: string) => {
     try {
-      // Busca o perfil do usuário atual para pegar o family_id
+      // Tentamos buscar o perfil. Se a coluna family_id não existir, o Supabase retornará erro 42703
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("family_id, id, invited_by_user_id")
+        .select("*")
         .eq("id", userId)
         .single();
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        if (profileError.code === '42703') { // Coluna não existe
+          setIsFamilySchemaReady(false);
+        }
+        throw profileError;
+      }
 
-      // Se não tiver family_id (coluna nova), usamos a lógica de invited_by_user_id como fallback
+      // Lógica de fallback: family_id -> invited_by_user_id -> id próprio
       const rootId = profile.family_id || profile.invited_by_user_id || profile.id;
 
       const { data: members, error: membersError } = await supabase
@@ -46,6 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const ids = members.map(m => m.id);
       setFamilyMemberIds(ids.length > 0 ? ids : [userId]);
+      setIsFamilySchemaReady(true);
     } catch (error) {
       console.error("Erro ao buscar membros da família:", error);
       setFamilyMemberIds([userId]);
@@ -97,12 +105,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
-      const redirectUrl = `${window.location.origin}/`;
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: redirectUrl,
           data: { full_name: fullName }
         }
       });
@@ -119,10 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      if (user) { 
-        await supabase.auth.signOut();
-        toast.success("Logout realizado com sucesso!");
-      }
+      await supabase.auth.signOut();
     } catch (error: any) {
       console.error("Logout error:", error);
     } finally {
@@ -134,7 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, familyMemberIds, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, familyMemberIds, isFamilySchemaReady, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
