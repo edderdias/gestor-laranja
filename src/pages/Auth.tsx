@@ -64,7 +64,7 @@ export default function Auth() {
                       placeholder="Digite seu nome"
                       required
                       disabled={isLoading}
-                      className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/20"
+                      className="bg-white border-white/20 text-slate-900 placeholder:text-slate-400 focus:bg-white"
                     />
                   </div>
                 )}
@@ -77,7 +77,7 @@ export default function Auth() {
                     placeholder="Digite seu e-mail"
                     required
                     disabled={isLoading}
-                    className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/20"
+                    className="bg-white border-white/20 text-slate-900 placeholder:text-slate-400 focus:bg-white"
                   />
                 </div>
                 <div className="space-y-2">
@@ -89,7 +89,7 @@ export default function Auth() {
                     placeholder="Digite sua senha"
                     required
                     disabled={isLoading}
-                    className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/20"
+                    className="bg-white border-white/20 text-slate-900 placeholder:text-slate-400 focus:bg-white"
                   />
                 </div>
                 
