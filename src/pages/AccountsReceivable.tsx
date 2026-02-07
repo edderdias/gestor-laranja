@@ -503,8 +503,8 @@ export default function AccountsReceivable() {
     else if (account.is_fixed && accountReceiveDate <= endOfMonth(selectedMonthDate)) {
       const existingOccurrence = accounts.find(
         (a) => a.original_fixed_account_id === account.id &&
-               isSameMonth(parseISO(a.receive_date), selectedMonthDate) &&
-               isSameYear(parseISO(a.receive_date), selectedMonthDate)
+               isSameMonth(parseISO(a.due_date), selectedMonthDate) &&
+               isSameYear(parseISO(a.due_date), selectedMonthDate)
       );
 
       if (!existingOccurrence) {
