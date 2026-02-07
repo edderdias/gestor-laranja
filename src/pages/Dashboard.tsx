@@ -1,27 +1,22 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowDownCircle, ArrowUpCircle, CreditCard, Wallet, TrendingUp, TrendingDown, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, parseISO, getMonth, getYear, isSameMonth, isSameYear } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { parseISO, isSameMonth } from "date-fns";
 import { MonthlyExpensesChart } from "@/components/charts/MonthlyExpensesChart";
 import { CategoryExpensesChart } from "@/components/charts/CategoryExpensesChart";
-import { ResponsiblePersonExpensesChart } from "@/components/charts/ResponsiblePersonExpensesChart";
-import { MonthlyIncomeChart } from "@/components/charts/MonthlyIncomeChart";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function Dashboard() {
-  const { user, familyMemberIds, isFamilySchemaReady } = useAuth();
+  const { familyMemberIds } = useAuth();
   const today = new Date();
 
-  const { data: accountsPayable, isLoading: isLoadingPayable } = useQuery({
+  const { data: accountsPayable } = useQuery({
     queryKey: ["dashboard-accounts-payable", familyMemberIds],
     queryFn: async () => {
       if (familyMemberIds.length === 0) return [];
       const { data, error } = await supabase
         .from("accounts_payable")
-        .select("*, expense_categories(name), payment_types(name), responsible_persons(name)")
+        .select("*, expense_categories(name)")
         .in("created_by", familyMemberIds);
       if (error) throw error;
       return data;
@@ -29,13 +24,13 @@ export default function Dashboard() {
     enabled: familyMemberIds.length > 0,
   });
 
-  const { data: accountsReceivable, isLoading: isLoadingReceivable } = useQuery({
+  const { data: accountsReceivable } = useQuery({
     queryKey: ["dashboard-accounts-receivable", familyMemberIds],
     queryFn: async () => {
       if (familyMemberIds.length === 0) return [];
       const { data, error } = await supabase
         .from("accounts_receivable")
-        .select("*, income_types(name)")
+        .select("*")
         .in("created_by", familyMemberIds);
       if (error) throw error;
       return data;
@@ -57,25 +52,12 @@ export default function Dashboard() {
     enabled: familyMemberIds.length > 0,
   });
 
-  const isLoading = isLoadingPayable || isLoadingReceivable;
-
-  // Cálculos de resumo
   const totalIncome = accountsReceivable?.filter(a => a.received && isSameMonth(parseISO(a.receive_date), today)).reduce((sum, a) => sum + a.amount, 0) || 0;
   const totalExpenses = accountsPayable?.filter(a => a.paid && isSameMonth(parseISO(a.due_date), today)).reduce((sum, a) => sum + a.amount, 0) || 0;
 
   return (
     <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-8">
-        {!isFamilySchemaReady && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Aviso de Configuração</AlertTitle>
-            <AlertDescription>
-              A identificação de família não foi encontrada. O sistema está mostrando apenas seus dados individuais.
-            </AlertDescription>
-          </Alert>
-        )}
-
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
           <Card className="bg-income-light border-income/20">
             <CardHeader className="pb-2"><CardDescription className="text-income">Receitas (Mês)</CardDescription><CardTitle className="text-2xl text-income">R$ {totalIncome.toFixed(2)}</CardTitle></CardHeader>

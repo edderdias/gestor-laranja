@@ -9,7 +9,6 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   familyMemberIds: string[];
-  isFamilySchemaReady: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -22,37 +21,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [familyMemberIds, setFamilyMemberIds] = useState<string[]>([]);
-  const [isFamilySchemaReady, setIsFamilySchemaReady] = useState(true);
   const navigate = useNavigate();
 
   const fetchFamilyMembers = async (userId: string) => {
     try {
+      // Busca o perfil do usuário atual
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("*")
+        .select("id, invited_by_user_id")
         .eq("id", userId)
         .single();
 
-      if (profileError) {
-        if (profileError.code === '42703') {
-          setIsFamilySchemaReady(false);
-        }
-        throw profileError;
-      }
+      if (profileError) throw profileError;
 
-      // Lógica de identificação: family_id ou fallback para invited_by_user_id
-      const rootId = profile.family_id || profile.invited_by_user_id || profile.id;
+      // O "rootId" é o ID do administrador da família (quem convidou ou o próprio usuário se ele for o admin)
+      const rootId = profile.invited_by_user_id || profile.id;
 
+      // Busca todos os membros vinculados a esse rootId
       const { data: members, error: membersError } = await supabase
         .from("profiles")
         .select("id")
-        .or(`family_id.eq.${rootId},id.eq.${rootId},invited_by_user_id.eq.${rootId}`);
+        .or(`id.eq.${rootId},invited_by_user_id.eq.${rootId}`);
 
       if (membersError) throw membersError;
 
       const ids = members.map(m => m.id);
       setFamilyMemberIds(ids.length > 0 ? ids : [userId]);
-      setIsFamilySchemaReady(true);
     } catch (error) {
       console.error("Erro ao buscar membros da família:", error);
       setFamilyMemberIds([userId]);
@@ -132,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, familyMemberIds, isFamilySchemaReady, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, familyMemberIds, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );

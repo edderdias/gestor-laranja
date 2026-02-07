@@ -1,26 +1,24 @@
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2, CheckCircle, RotateCcw, CalendarIcon, AlertTriangle } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { Plus, Pencil, Trash2, CheckCircle, RotateCcw } from "lucide-react";
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { format, parseISO, addMonths, endOfMonth, isSameMonth, isSameYear, subMonths, isValid } from "date-fns";
+import { format, parseISO, endOfMonth, isSameMonth, isSameYear, subMonths, isValid, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tables } from "@/integrations/supabase/types";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 type AccountPayableWithRelations = Tables<'accounts_payable'> & {
   is_generated_fixed_instance?: boolean;
@@ -46,7 +44,7 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 export default function AccountsPayable() {
-  const { user, familyMemberIds, isFamilySchemaReady } = useAuth();
+  const { user, familyMemberIds } = useAuth();
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountPayableWithRelations | null>(null);
@@ -282,16 +280,6 @@ export default function AccountsPayable() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-4">
-        {!isFamilySchemaReady && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Configuração Necessária</AlertTitle>
-            <AlertDescription>
-              A estrutura de família ainda não foi detectada no banco de dados. Por favor, execute o comando SQL fornecido ou entre em contato com o suporte para vincular seu ID de família.
-            </AlertDescription>
-          </Alert>
-        )}
-
         <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
           <h1 className="text-2xl font-bold">Contas a Pagar (Família)</h1>
           <div className="flex items-center gap-4">
