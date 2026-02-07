@@ -18,7 +18,6 @@ import { Tables } from "@/integrations/supabase/types";
 
 type Profile = Tables<'profiles'> & {
   email?: string;
-  family_name?: string | null;
 };
 
 const inviteSchema = z.object({
@@ -105,9 +104,10 @@ export default function UserManagement() {
   const updateFamilyNameMutation = useMutation({
     mutationFn: async (data: FamilyNameFormData) => {
       if (!familyData.rootId) throw new Error("Root ID não encontrado");
+      // Ao definir o nome da família, garantimos que o dono também seja marcado como membro da família
       const { error } = await supabase
         .from("profiles")
-        .update({ family_name: data.name } as any)
+        .update({ family_name: data.name, is_family_member: true })
         .eq("id", familyData.rootId);
       if (error) throw error;
     },
@@ -222,6 +222,8 @@ export default function UserManagement() {
     }
   };
 
+  const isRoot = currentUser?.id === familyData.rootId;
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
@@ -333,14 +335,21 @@ export default function UserManagement() {
           <Card>
             <CardHeader><CardTitle>Minha Família</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <Form {...familyNameForm}>
-                <form onSubmit={familyNameForm.handleSubmit((data) => updateFamilyNameMutation.mutate(data))} className="flex gap-2 items-end">
-                  <FormField control={familyNameForm.control} name="name" render={({ field }) => (
-                    <FormItem className="flex-1"><FormLabel>Nome da Família</FormLabel><FormControl><Input {...field} placeholder="Ex: Família Silva" /></FormControl></FormItem>
-                  )} />
-                  <Button type="submit" disabled={updateFamilyNameMutation.isPending}>Salvar</Button>
-                </form>
-              </Form>
+              {isRoot ? (
+                <Form {...familyNameForm}>
+                  <form onSubmit={familyNameForm.handleSubmit((data) => updateFamilyNameMutation.mutate(data))} className="flex gap-2 items-end">
+                    <FormField control={familyNameForm.control} name="name" render={({ field }) => (
+                      <FormItem className="flex-1"><FormLabel>Nome da Família</FormLabel><FormControl><Input {...field} placeholder="Ex: Família Silva" /></FormControl></FormItem>
+                    )} />
+                    <Button type="submit" disabled={updateFamilyNameMutation.isPending}>Salvar</Button>
+                  </form>
+                </Form>
+              ) : (
+                <div className="p-3 bg-muted rounded-md">
+                  <p className="text-sm font-medium">Família: {familyData.name || "Sem nome definido"}</p>
+                  <p className="text-xs text-muted-foreground">Apenas o dono da família pode alterar o nome.</p>
+                </div>
+              )}
               <div className="pt-4 border-t">
                 <p className="text-sm font-medium mb-2">Seu Código de Família (Compartilhe para vincular outros):</p>
                 <div className="flex gap-2">
