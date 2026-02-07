@@ -29,21 +29,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchFamilyMembers = async (userId: string) => {
     try {
+      // Busca o perfil do usuário atual
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("id, invited_by_user_id, is_family_member")
         .eq("id", userId)
         .maybeSingle();
 
+      // Se não houver perfil ou erro, o usuário está sozinho
       if (profileError || !profile) {
         setFamilyMemberIds([userId]);
+        setFamilyData({ name: null, rootId: userId });
         return;
       }
 
-      // Se o usuário não for membro da família e não for o "root" (não convidou ninguém), ele só vê as próprias contas
+      // Define quem é o "dono" da família (o próprio ou quem o convidou)
       const rootId = profile.invited_by_user_id || profile.id;
       
-      // Busca o nome da família do perfil do root
+      // Busca o nome da família no perfil do root
       const { data: rootProfile } = await supabase
         .from("profiles")
         .select("family_name")
@@ -52,31 +55,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setFamilyData({ name: rootProfile?.family_name || null, rootId });
 
-      // Se o usuário atual NÃO for membro da família (e não for o root), ele só vê o dele
+      // Se o usuário NÃO for membro da família (e não for o root), ele só vê os próprios dados
       if (!profile.is_family_member && profile.invited_by_user_id) {
         setFamilyMemberIds([userId]);
         return;
       }
 
-      // Busca membros: o root e todos que o root convidou que são "is_family_member = true"
+      // Busca todos os membros vinculados ao root
       const { data: members, error: membersError } = await supabase
         .from("profiles")
         .select("id, is_family_member")
         .or(`id.eq.${rootId},invited_by_user_id.eq.${rootId}`);
 
-      if (membersError) {
+      if (membersError || !members) {
         setFamilyMemberIds([userId]);
         return;
       }
 
-      // Filtra IDs: inclui o root, o próprio usuário, e outros que sejam is_family_member
+      // Filtra IDs: inclui o root, o próprio usuário, e outros que aceitaram ser membros da família
       const ids = members
         .filter(m => m.id === rootId || m.id === userId || m.is_family_member)
         .map(m => m.id);
 
       setFamilyMemberIds(ids.length > 0 ? ids : [userId]);
     } catch (error) {
-      console.error("Erro ao buscar membros da família:", error);
+      console.error("Erro ao processar membros da família:", error);
       setFamilyMemberIds([userId]);
     }
   };
@@ -92,9 +95,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(initialSession);
         const currentUser = initialSession?.user ?? null;
         setUser(currentUser);
-        if (currentUser) await fetchFamilyMembers(currentUser.id);
+        
+        if (currentUser) {
+          await fetchFamilyMembers(currentUser.id);
+        }
       } catch (error) {
-        console.error("Erro ao inicializar sessão:", error);
+        console.error("Erro na inicialização:", error);
       } finally {
         setLoading(false);
       }
