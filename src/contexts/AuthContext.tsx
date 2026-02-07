@@ -28,25 +28,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const location = useLocation();
 
   const fetchFamilyMembers = async (userId: string) => {
+    if (!userId) return;
     try {
-      // Busca o perfil do usuário atual
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile } = await supabase
         .from("profiles")
         .select("id, invited_by_user_id, is_family_member")
         .eq("id", userId)
         .maybeSingle();
 
-      // Se não houver perfil ou erro, o usuário está sozinho
-      if (profileError || !profile) {
+      if (!profile) {
         setFamilyMemberIds([userId]);
         setFamilyData({ name: null, rootId: userId });
         return;
       }
 
-      // Define quem é o "dono" da família (o próprio ou quem o convidou)
       const rootId = profile.invited_by_user_id || profile.id;
       
-      // Busca o nome da família no perfil do root
       const { data: rootProfile } = await supabase
         .from("profiles")
         .select("family_name")
@@ -55,31 +52,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setFamilyData({ name: rootProfile?.family_name || null, rootId });
 
-      // Se o usuário NÃO for membro da família (e não for o root), ele só vê os próprios dados
       if (!profile.is_family_member && profile.invited_by_user_id) {
         setFamilyMemberIds([userId]);
         return;
       }
 
-      // Busca todos os membros vinculados ao root
-      const { data: members, error: membersError } = await supabase
+      const { data: members } = await supabase
         .from("profiles")
         .select("id, is_family_member")
         .or(`id.eq.${rootId},invited_by_user_id.eq.${rootId}`);
 
-      if (membersError || !members) {
+      if (!members) {
         setFamilyMemberIds([userId]);
         return;
       }
 
-      // Filtra IDs: inclui o root, o próprio usuário, e outros que aceitaram ser membros da família
       const ids = members
         .filter(m => m.id === rootId || m.id === userId || m.is_family_member)
         .map(m => m.id);
 
       setFamilyMemberIds(ids.length > 0 ? ids : [userId]);
     } catch (error) {
-      console.error("Erro ao processar membros da família:", error);
+      console.error("Erro ao buscar família:", error);
       setFamilyMemberIds([userId]);
     }
   };
@@ -89,7 +83,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    const initSession = async () => {
+    // 1. Verifica sessão inicial de forma rápida
+    const initAuth = async () => {
       try {
         const { data: { session: initialSession } } = await supabase.auth.getSession();
         setSession(initialSession);
@@ -97,17 +92,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(currentUser);
         
         if (currentUser) {
-          await fetchFamilyMembers(currentUser.id);
+          // Busca família em background, não bloqueia o loading
+          fetchFamilyMembers(currentUser.id);
         }
-      } catch (error) {
-        console.error("Erro na inicialização:", error);
+      } catch (e) {
+        console.error("Erro auth:", e);
       } finally {
         setLoading(false);
       }
     };
 
-    initSession();
+    initAuth();
 
+    // 2. Escuta mudanças de estado
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
         setSession(currentSession);
@@ -115,23 +112,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(currentUser);
         
         if (currentUser) {
-          await fetchFamilyMembers(currentUser.id);
+          fetchFamilyMembers(currentUser.id);
+          if (location.pathname === '/auth') {
+            navigate('/dashboard');
+          }
         } else {
           setFamilyMemberIds([]);
           setFamilyData({ name: null, rootId: null });
-        }
-
-        if (event === 'SIGNED_IN' && location.pathname === '/auth') {
-          navigate('/dashboard');
-        }
-        if (event === 'SIGNED_OUT') {
-          navigate('/auth');
+          if (location.pathname !== '/auth') {
+            navigate('/auth');
+          }
         }
       }
     );
 
     return () => subscription.unsubscribe();
-  }, [navigate, location.pathname]);
+  }, []); // Array vazio para rodar apenas uma vez no mount
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
