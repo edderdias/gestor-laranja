@@ -60,16 +60,28 @@ export default function Dashboard() {
       <main className="container mx-auto px-4 py-8">
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
           <Card className="bg-income-light border-income/20">
-            <CardHeader className="pb-2"><CardDescription className="text-income">Receitas (Mês)</CardDescription><CardTitle className="text-2xl text-income">R$ {totalIncome.toFixed(2)}</CardTitle></CardHeader>
+            <CardHeader className="pb-2">
+              <CardDescription className="text-income">Receitas (Mês)</CardDescription>
+              <CardTitle className="text-2xl text-income">R$ {totalIncome.toFixed(2)}</CardTitle>
+            </CardHeader>
           </Card>
           <Card className="bg-expense-light border-expense/20">
-            <CardHeader className="pb-2"><CardDescription className="text-expense">Despesas (Mês)</CardDescription><CardTitle className="text-2xl text-expense">R$ {totalExpenses.toFixed(2)}</CardTitle></CardHeader>
+            <CardHeader className="pb-2">
+              <CardDescription className="text-expense">Despesas (Mês)</CardDescription>
+              <CardTitle className="text-2xl text-expense">R$ {totalExpenses.toFixed(2)}</CardTitle>
+            </CardHeader>
           </Card>
           <Card>
-            <CardHeader className="pb-2"><CardDescription>Saldo</CardDescription><CardTitle className="text-2xl">R$ {(totalIncome - totalExpenses).toFixed(2)}</CardTitle></CardHeader>
+            <CardHeader className="pb-2">
+              <CardDescription>Saldo</CardDescription>
+              <CardTitle className="text-2xl">R$ {(totalIncome - totalExpenses).toFixed(2)}</CardTitle>
+            </CardHeader>
           </Card>
           <Card>
-            <CardHeader className="pb-2"><CardDescription>Cartões</CardDescription><CardTitle className="text-2xl">{creditCards?.length || 0}</CardTitle></CardHeader>
+            <CardHeader className="pb-2">
+              <CardDescription>Cartões</CardDescription>
+              <CardTitle className="text-2xl">{creditCards?.length || 0}</CardTitle>
+            </CardHeader>
           </Card>
         </div>
 

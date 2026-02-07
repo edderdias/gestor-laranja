@@ -1,16 +1,12 @@
 import { Button } from "@/components/ui/button";
-import { CreditCard, Plus, Edit, Trash2, ShoppingCart, ListChecks, AlertTriangle } from "lucide-react";
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { CreditCard, Plus } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function CreditCards() {
-  const { user, familyMemberIds, isFamilySchemaReady } = useAuth();
-  const queryClient = useQueryClient();
+  const { familyMemberIds } = useAuth();
 
   const { data: cards, isLoading } = useQuery({
     queryKey: ["credit_cards", familyMemberIds],
@@ -30,14 +26,6 @@ export default function CreditCards() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
-        {!isFamilySchemaReady && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Aviso</AlertTitle>
-            <AlertDescription>Mostrando apenas seus cartões individuais.</AlertDescription>
-          </Alert>
-        )}
-
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Cartões da Família</h1>
           <Button><Plus className="mr-2 h-4 w-4" /> Novo Cartão</Button>

@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2, CheckCircle, RotateCcw, CalendarIcon, PiggyBank as PiggyBankIcon, AlertTriangle } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { format, parseISO, addMonths, endOfMonth, isSameMonth, isSameYear, subMonths, isValid } from "date-fns";
+import { format, parseISO, endOfMonth, isSameMonth, isSameYear, subMonths, isValid, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,15 +12,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tables } from "@/integrations/supabase/types";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 type AccountReceivableWithRelations = Tables<'accounts_receivable'> & {
   is_generated_fixed_instance?: boolean;
@@ -59,26 +56,12 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
-const transferToPiggyBankSchema = z.object({
-  description: z.string().min(1, "Descrição é obrigatória"),
-  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Valor inválido").transform(Number).refine(val => val > 0, "O valor deve ser positivo"),
-  entry_date: z.date({ required_error: "Data é obrigatória" }),
-  bank_id: z.string().min(1, "Banco é obrigatório"),
-});
-
-type TransferToPiggyBankFormData = z.infer<typeof transferToPiggyBankSchema>;
-
 export default function AccountsReceivable() {
-  const { user, familyMemberIds, isFamilySchemaReady } = useAuth();
+  const { user, familyMemberIds } = useAuth();
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountReceivableWithRelations | null>(null);
   const [selectedMonthYear, setSelectedMonthYear] = useState(format(new Date(), "yyyy-MM"));
-  const [showConfirmDateDialog, setShowConfirmDateDialog] = useState(false);
-  const [currentConfirmingAccount, setCurrentConfirmingAccount] = useState<AccountReceivableWithRelations | null>(null);
-  const [selectedReceivedDate, setSelectedReceivedDate] = useState<Date | undefined>(new Date());
-  const [isTransferToPiggyBankFormOpen, setIsTransferToPiggyBankFormOpen] = useState(false);
-  const [transferringAccount, setTransferringAccount] = useState<AccountReceivableWithRelations | null>(null);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -93,16 +76,6 @@ export default function AccountsReceivable() {
       new_payer_name: "",
       is_fixed: false,
       responsible_person_id: undefined,
-    },
-  });
-
-  const transferForm = useForm<TransferToPiggyBankFormData>({
-    resolver: zodResolver(transferToPiggyBankSchema),
-    defaultValues: {
-      description: "",
-      amount: 0,
-      entry_date: new Date(),
-      bank_id: "",
     },
   });
 
@@ -155,15 +128,6 @@ export default function AccountsReceivable() {
     queryKey: ["responsible-persons"],
     queryFn: async () => {
       const { data, error } = await supabase.from("responsible_persons").select("*").order("name");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: banks } = useQuery({
-    queryKey: ["banks"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("banks").select("*").order("name");
       if (error) throw error;
       return data;
     },
@@ -274,16 +238,6 @@ export default function AccountsReceivable() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-4">
-        {!isFamilySchemaReady && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Configuração Necessária</AlertTitle>
-            <AlertDescription>
-              A estrutura de família ainda não foi detectada no banco de dados. Por favor, execute o comando SQL fornecido ou entre em contato com o suporte para vincular seu ID de família.
-            </AlertDescription>
-          </Alert>
-        )}
-
         <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
           <h1 className="text-2xl font-bold">Contas a Receber</h1>
           <div className="flex items-center gap-4">

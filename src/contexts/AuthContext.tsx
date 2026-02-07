@@ -25,25 +25,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchFamilyMembers = async (userId: string) => {
     try {
-      // Busca o perfil do usuário atual
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("id, invited_by_user_id")
         .eq("id", userId)
         .single();
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        setFamilyMemberIds([userId]);
+        return;
+      }
 
-      // O "rootId" é o ID do administrador da família (quem convidou ou o próprio usuário se ele for o admin)
       const rootId = profile.invited_by_user_id || profile.id;
 
-      // Busca todos os membros vinculados a esse rootId
       const { data: members, error: membersError } = await supabase
         .from("profiles")
         .select("id")
         .or(`id.eq.${rootId},invited_by_user_id.eq.${rootId}`);
 
-      if (membersError) throw membersError;
+      if (membersError) {
+        setFamilyMemberIds([userId]);
+        return;
+      }
 
       const ids = members.map(m => m.id);
       setFamilyMemberIds(ids.length > 0 ? ids : [userId]);
