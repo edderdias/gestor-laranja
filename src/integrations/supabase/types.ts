@@ -575,6 +575,7 @@ export type Database = {
           invited_by_user_id: string | null
           is_family_member: boolean | null
           family_name: string | null
+          family_code: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -585,6 +586,7 @@ export type Database = {
           invited_by_user_id?: string | null
           is_family_member?: boolean | null
           family_name?: string | null
+          family_code?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -595,6 +597,7 @@ export type Database = {
           invited_by_user_id?: string | null
           is_family_member?: boolean | null
           family_name?: string | null
+          family_code?: string | null
         }
         Relationships: [
           {

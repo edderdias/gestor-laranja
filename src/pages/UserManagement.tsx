@@ -101,18 +101,32 @@ export default function UserManagement() {
     enabled: !!currentUser?.id,
   });
 
+  const generateFamilyCode = () => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  };
+
   const updateFamilyNameMutation = useMutation({
     mutationFn: async (data: FamilyNameFormData) => {
       if (!familyData.rootId) throw new Error("Root ID não encontrado");
-      // Ao definir o nome da família, garantimos que o dono também seja marcado como membro da família
+      
+      const updateData: any = { 
+        family_name: data.name, 
+        is_family_member: true 
+      };
+
+      // Gera o código apenas se ainda não existir
+      if (!familyData.code) {
+        updateData.family_code = generateFamilyCode();
+      }
+
       const { error } = await supabase
         .from("profiles")
-        .update({ family_name: data.name, is_family_member: true })
+        .update(updateData)
         .eq("id", familyData.rootId);
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Nome da família atualizado!");
+      toast.success("Família registrada com sucesso!");
       refreshFamily();
     },
     onError: (error: any) => toast.error(error.message),
@@ -121,9 +135,25 @@ export default function UserManagement() {
   const joinFamilyMutation = useMutation({
     mutationFn: async (data: JoinFamilyFormData) => {
       if (!currentUser?.id) throw new Error("Não autenticado");
+      
+      // Busca o dono da família pelo código
+      const { data: headProfile, error: searchError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("family_code", data.familyCode.toUpperCase())
+        .maybeSingle();
+
+      if (searchError || !headProfile) {
+        throw new Error("Código de família inválido ou não encontrado.");
+      }
+
+      if (headProfile.id === currentUser.id) {
+        throw new Error("Você não pode vincular-se ao seu próprio código.");
+      }
+
       const { error } = await supabase
         .from("profiles")
-        .update({ invited_by_user_id: data.familyCode, is_family_member: true })
+        .update({ invited_by_user_id: headProfile.id, is_family_member: true })
         .eq("id", currentUser.id);
       if (error) throw error;
     },
@@ -133,7 +163,7 @@ export default function UserManagement() {
       refreshFamily();
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
-    onError: (error: any) => toast.error("Código inválido ou erro ao vincular."),
+    onError: (error: any) => toast.error(error.message),
   });
 
   const inviteUserMutation = useMutation({
@@ -216,8 +246,8 @@ export default function UserManagement() {
   });
 
   const copyFamilyCode = () => {
-    if (currentUser?.id) {
-      navigator.clipboard.writeText(currentUser.id);
+    if (familyData.code) {
+      navigator.clipboard.writeText(familyData.code);
       toast.success("Código copiado!");
     }
   };
@@ -246,7 +276,7 @@ export default function UserManagement() {
                 <Form {...joinFamilyForm}>
                   <form onSubmit={joinFamilyForm.handleSubmit((data) => joinFamilyMutation.mutate(data))} className="space-y-4">
                     <FormField control={joinFamilyForm.control} name="familyCode" render={({ field }) => (
-                      <FormItem><FormLabel>Código da Família</FormLabel><FormControl><Input {...field} placeholder="Cole o código aqui" /></FormControl><FormMessage /></FormItem>
+                      <FormItem><FormLabel>Código da Família</FormLabel><FormControl><Input {...field} placeholder="Ex: A1B2C3" /></FormControl><FormMessage /></FormItem>
                     )} />
                     <DialogFooter><Button type="submit" disabled={joinFamilyMutation.isPending}>Vincular</Button></DialogFooter>
                   </form>
@@ -350,13 +380,16 @@ export default function UserManagement() {
                   <p className="text-xs text-muted-foreground">Apenas o dono da família pode alterar o nome.</p>
                 </div>
               )}
-              <div className="pt-4 border-t">
-                <p className="text-sm font-medium mb-2">Seu Código de Família (Compartilhe para vincular outros):</p>
-                <div className="flex gap-2">
-                  <Input value={currentUser?.id || ""} readOnly className="bg-muted" />
-                  <Button variant="outline" size="icon" onClick={copyFamilyCode}><Copy className="h-4 w-4" /></Button>
+              
+              {familyData.code && (
+                <div className="pt-4 border-t">
+                  <p className="text-sm font-medium mb-2">Código da Família (Compartilhe para vincular outros):</p>
+                  <div className="flex gap-2">
+                    <Input value={familyData.code} readOnly className="bg-muted font-mono text-lg text-center tracking-widest" />
+                    <Button variant="outline" size="icon" onClick={copyFamilyCode}><Copy className="h-4 w-4" /></Button>
+                  </div>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 

@@ -9,7 +9,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   familyMemberIds: string[];
-  familyData: { name: string | null; rootId: string | null };
+  familyData: { name: string | null; rootId: string | null; code: string | null };
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -23,7 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [familyMemberIds, setFamilyMemberIds] = useState<string[]>([]);
-  const [familyData, setFamilyData] = useState<{ name: string | null; rootId: string | null }>({ name: null, rootId: null });
+  const [familyData, setFamilyData] = useState<{ name: string | null; rootId: string | null; code: string | null }>({ name: null, rootId: null, code: null });
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -38,7 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!profile) {
         setFamilyMemberIds([userId]);
-        setFamilyData({ name: null, rootId: userId });
+        setFamilyData({ name: null, rootId: userId, code: null });
         return;
       }
 
@@ -46,11 +46,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       const { data: rootProfile } = await supabase
         .from("profiles")
-        .select("family_name")
+        .select("family_name, family_code")
         .eq("id", rootId)
         .maybeSingle();
 
-      setFamilyData({ name: rootProfile?.family_name || null, rootId });
+      setFamilyData({ 
+        name: rootProfile?.family_name || null, 
+        rootId, 
+        code: rootProfile?.family_code || null 
+      });
 
       if (!profile.is_family_member && profile.invited_by_user_id) {
         setFamilyMemberIds([userId]);
@@ -83,7 +87,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // 1. Verifica sessão inicial de forma rápida
     const initAuth = async () => {
       try {
         const { data: { session: initialSession } } = await supabase.auth.getSession();
@@ -92,7 +95,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(currentUser);
         
         if (currentUser) {
-          // Busca família em background, não bloqueia o loading
           fetchFamilyMembers(currentUser.id);
         }
       } catch (e) {
@@ -104,7 +106,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth();
 
-    // 2. Escuta mudanças de estado
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
         setSession(currentSession);
@@ -118,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } else {
           setFamilyMemberIds([]);
-          setFamilyData({ name: null, rootId: null });
+          setFamilyData({ name: null, rootId: null, code: null });
           if (location.pathname !== '/auth') {
             navigate('/auth');
           }
@@ -127,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
 
     return () => subscription.unsubscribe();
-  }, []); // Array vazio para rodar apenas uma vez no mount
+  }, []);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
