@@ -8,6 +8,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  familyMemberIds: string[];
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -19,25 +20,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [familyMemberIds, setFamilyMemberIds] = useState<string[]>([]);
   const navigate = useNavigate();
 
+  const fetchFamilyMembers = async (userId: string) => {
+    try {
+      // Busca o perfil do usuário atual para pegar o family_id
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("family_id, id, invited_by_user_id")
+        .eq("id", userId)
+        .single();
+
+      if (profileError) throw profileError;
+
+      // Se não tiver family_id (coluna nova), usamos a lógica de invited_by_user_id como fallback
+      const rootId = profile.family_id || profile.invited_by_user_id || profile.id;
+
+      const { data: members, error: membersError } = await supabase
+        .from("profiles")
+        .select("id")
+        .or(`family_id.eq.${rootId},id.eq.${rootId},invited_by_user_id.eq.${rootId}`);
+
+      if (membersError) throw membersError;
+
+      const ids = members.map(m => m.id);
+      setFamilyMemberIds(ids.length > 0 ? ids : [userId]);
+    } catch (error) {
+      console.error("Erro ao buscar membros da família:", error);
+      setFamilyMemberIds([userId]);
+    }
+  };
+
   useEffect(() => {
-    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         
+        if (session?.user) {
+          await fetchFamilyMembers(session.user.id);
+        } else {
+          setFamilyMemberIds([]);
+        }
+
         if (event === 'SIGNED_IN') {
           navigate('/dashboard');
         }
       }
     );
 
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user) {
+        await fetchFamilyMembers(session.user.id);
+      }
       setLoading(false);
     });
 
@@ -46,14 +84,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         toast.error(error.message || "Erro ao fazer login");
-        // Não re-lançar o erro para evitar Unhandled Promise Rejection
       } else {
         toast.success("Login realizado com sucesso!");
       }
@@ -65,21 +98,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
       const redirectUrl = `${window.location.origin}/`;
-      
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: redirectUrl,
-          data: {
-            full_name: fullName,
-          }
+          data: { full_name: fullName }
         }
       });
 
       if (error) {
         toast.error(error.message || "Erro ao criar conta");
-        // Não re-lançar o erro para evitar Unhandled Promise Rejection
       } else {
         toast.success("Cadastro realizado com sucesso!");
       }
@@ -91,35 +120,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       if (user) { 
-        const { error } = await supabase.auth.signOut();
-        if (error) {
-          // Verifica se o erro é AuthSessionMissingError
-          if (error.message.includes("Auth session missing!")) {
-            console.warn("Supabase signOut warning: Sessão já ausente no servidor. Prosseguindo com logout local.");
-            toast.info("Sessão já encerrada no servidor. Desconectando localmente.");
-          } else {
-            console.error("Supabase signOut error:", error);
-            toast.error(error.message || "Erro ao fazer logout no servidor. Desconectando localmente.");
-          }
-        } else {
-          toast.success("Logout realizado com sucesso!");
-        }
-      } else {
-        toast.info("Você já está desconectado.");
+        await supabase.auth.signOut();
+        toast.success("Logout realizado com sucesso!");
       }
     } catch (error: any) {
-      console.error("Logout process error:", error);
-      toast.error(error.message || "Erro inesperado durante o logout.");
+      console.error("Logout error:", error);
     } finally {
-      // Sempre limpa o estado local e navega para a página de autenticação
       setSession(null);
       setUser(null);
+      setFamilyMemberIds([]);
       navigate('/auth');
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, familyMemberIds, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
