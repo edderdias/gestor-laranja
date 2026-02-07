@@ -399,7 +399,7 @@ export default function AccountsPayable() {
             payment_type_id: account.payment_type_id,
             card_id: account.card_id,
             purchase_date: account.purchase_date,
-            due_date: format(parseISO(account.due_date), "yyyy-MM-dd"),
+            due_date: account.due_date, // Usa a data da instância gerada (já é string yyyy-MM-dd)
             installments: account.installments,
             amount: account.amount,
             category_id: account.category_id,
@@ -978,7 +978,7 @@ export default function AccountsPayable() {
                         )}
                         <div>
                           <span className="font-medium">Vencimento:</span>{" "}
-                          {format(new Date(account.due_date), "dd/MM/yyyy")}
+                          {format(parseISO(account.due_date), "dd/MM/yyyy")}
                         </div>
                         {!account.is_fixed && (
                           <div>
@@ -1004,10 +1004,10 @@ export default function AccountsPayable() {
                             <span className="font-medium">Responsável:</span> {account.responsible_persons.name}
                           </div>
                         )}
-                        {account.paid && (
+                        {account.paid && account.paid_date && (
                           <div className="col-span-2 flex items-center gap-1 text-income">
                             <CheckCircle className="h-4 w-4" />
-                            <span className="font-medium">Pago em: {format(new Date(account.paid_date), "dd/MM/yyyy")}</span>
+                            <span className="font-medium">Pago em: {format(parseISO(account.paid_date), "dd/MM/yyyy")}</span>
                           </div>
                         )}
                       </div>

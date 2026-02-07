@@ -351,7 +351,7 @@ export default function AccountsReceivable() {
           .insert({
             description: account.description,
             income_type_id: account.income_type_id,
-            receive_date: format(parseISO(account.receive_date), "yyyy-MM-dd"), // Usa a data ajustada para o mês
+            receive_date: account.receive_date, // Usa a data da instância gerada (já é string yyyy-MM-dd)
             installments: account.installments,
             amount: account.amount,
             source_id: account.source_id,
@@ -859,7 +859,7 @@ export default function AccountsReceivable() {
                   </form>
                 </Form>
               </DialogContent>
-            </Dialog>
+            </Select>
           </div>
         </div>
       </div>
@@ -919,7 +919,7 @@ export default function AccountsReceivable() {
                         </div>
                         <div>
                           <span className="font-medium">Recebimento:</span>{" "}
-                          {format(new Date(account.receive_date), "dd/MM/yyyy")}
+                          {format(parseISO(account.receive_date), "dd/MM/yyyy")}
                         </div>
                         {!account.is_fixed && (
                           <div>
@@ -950,10 +950,10 @@ export default function AccountsReceivable() {
                             <span className="font-medium">Recebedor:</span> {account.responsible_persons.name}
                           </div>
                         )}
-                        {account.received && (
+                        {account.received && account.received_date && (
                           <div className="col-span-2 flex items-center gap-1 text-income">
                             <CheckCircle className="h-4 w-4" />
-                            <span className="font-medium">Recebido em: {format(new Date(account.received_date), "dd/MM/yyyy")}</span>
+                            <span className="font-medium">Recebido em: {format(parseISO(account.received_date), "dd/MM/yyyy")}</span>
                           </div>
                         )}
                       </div>
