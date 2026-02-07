@@ -44,7 +44,7 @@ type CreateFormData = z.infer<typeof createSchema>;
 type EditUserFormData = z.infer<typeof editUserSchema>;
 
 export default function UserManagement() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, session } = useAuth();
   const queryClient = useQueryClient();
   const [isInviteFormOpen, setIsInviteFormOpen] = useState(false);
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
@@ -76,8 +76,6 @@ export default function UserManagement() {
 
       if (profilesError) throw profilesError;
 
-      // Nota: listUsers requer service_role, aqui estamos apenas buscando os perfis.
-      // Em um cenário real, o e-mail viria de uma view ou campo no profile se permitido.
       return profilesData as Profile[];
     },
     enabled: !!currentUser?.id,
@@ -89,7 +87,7 @@ export default function UserManagement() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentUser?.access_token}`,
+          'Authorization': `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify(data),
       });
@@ -114,7 +112,7 @@ export default function UserManagement() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentUser?.access_token}`,
+          'Authorization': `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify(data),
       });
