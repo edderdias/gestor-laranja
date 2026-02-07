@@ -265,7 +265,7 @@ export default function AccountsReceivable() {
           responsible_person_id: account.responsible_person_id,
           received: true,
           received_date: formattedDate,
-          original_fixed_account_id: account.original_fixed_account_id,
+          original_fixed_account_id: account.original_fixed_account_id || account.id,
         });
         if (error) throw error;
       } else {
@@ -328,6 +328,7 @@ export default function AccountsReceivable() {
       queryClient.invalidateQueries({ queryKey: ["piggy_bank_entries"] });
       toast.success("Transferido para o cofrinho!");
       setIsTransferToPiggyBankFormOpen(false);
+      setTransferringAccount(null);
     },
     onError: (error: any) => toast.error("Erro ao transferir: " + error.message),
   });
@@ -393,6 +394,17 @@ export default function AccountsReceivable() {
     return options;
   }, []);
 
+  const handleTransferToPiggyBankClick = (account: AccountReceivableWithRelations) => {
+    setTransferringAccount(account);
+    transferForm.reset({
+      description: `Transferência de ${account.description}`,
+      amount: account.amount,
+      entry_date: new Date(),
+      bank_id: "",
+    });
+    setIsTransferToPiggyBankFormOpen(true);
+  };
+
   if (loadingAccounts) return <div className="p-8 text-center">Carregando contas...</div>;
 
   return (
@@ -441,24 +453,43 @@ export default function AccountsReceivable() {
         <div className="grid gap-4 md:grid-cols-2">
           {processedAccounts.length > 0 ? processedAccounts.map(account => (
             <Card key={account.id} className={cn("border-l-4", account.received ? "border-income" : "border-muted")}>
-              <CardContent className="pt-6 flex justify-between items-start">
-                <div className="space-y-1">
-                  <h3 className="font-semibold">{account.description}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {format(parseISO(account.receive_date), "dd/MM/yyyy")} - R$ {account.amount.toFixed(2)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Pagador: {account.payers?.name || "N/A"} | Recebedor: {account.responsible_persons?.name || "N/A"}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  {account.received ? (
-                    <Button variant="outline" size="sm" onClick={() => reverseReceiveMutation.mutate(account.id)}><RotateCcw className="h-4 w-4" /></Button>
-                  ) : (
-                    <Button variant="outline" size="sm" onClick={() => { setCurrentConfirmingAccount(account); setShowConfirmDateDialog(true); }}><CheckCircle className="h-4 w-4" /></Button>
-                  )}
-                  <Button variant="ghost" size="icon" onClick={() => handleEdit(account)} disabled={account.is_generated_fixed_instance}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(account.id)} disabled={account.is_generated_fixed_instance}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+              <CardContent className="pt-6">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-lg mb-2">{account.description}</h3>
+                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                      <div><span className="font-medium">Tipo:</span> {account.income_types?.name || "N/A"}</div>
+                      <div><span className="font-medium">Recebimento:</span> {format(parseISO(account.receive_date), "dd/MM/yyyy")}</div>
+                      {!account.is_fixed && <div><span className="font-medium">Parcelas:</span> {account.installments || 1}x</div>}
+                      <div><span className="font-medium">Valor da Parcela:</span> R$ {account.amount.toFixed(2)}</div>
+                      <div><span className="font-medium">Valor Total:</span> <span className="text-income font-semibold">R$ {(account.amount * (account.installments || 1)).toFixed(2)}</span></div>
+                      <div><span className="font-medium">Fonte:</span> {account.income_sources?.name || "N/A"}</div>
+                      <div><span className="font-medium">Pagador:</span> {account.payers?.name || "N/A"}</div>
+                      <div><span className="font-medium">Recebedor:</span> {account.responsible_persons?.name || "N/A"}</div>
+                      {account.received && account.received_date && (
+                        <div className="col-span-2 flex items-center gap-1 text-income">
+                          <CheckCircle className="h-4 w-4" />
+                          <span className="font-medium">Recebido em: {format(parseISO(account.received_date), "dd/MM/yyyy")}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 ml-4">
+                    {account.received ? (
+                      <Button variant="outline" size="sm" onClick={() => reverseReceiveMutation.mutate(account.id)} className="text-destructive border-destructive hover:bg-destructive/10">
+                        <RotateCcw className="h-4 w-4 mr-2" /> Estornar
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={() => { setCurrentConfirmingAccount(account); setShowConfirmDateDialog(true); }} className="text-income border-income hover:bg-income/10">
+                        <CheckCircle className="h-4 w-4 mr-2" /> Confirmar
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="icon" onClick={() => handleEdit(account)} disabled={account.is_generated_fixed_instance}><Pencil className="h-4 w-4" /></Button>
+                    {account.received && (
+                      <Button variant="ghost" size="icon" onClick={() => handleTransferToPiggyBankClick(account)}><PiggyBankIcon className="h-4 w-4 text-neutral" /></Button>
+                    )}
+                    <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(account.id)} disabled={account.is_generated_fixed_instance}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -471,6 +502,24 @@ export default function AccountsReceivable() {
           <DialogHeader><DialogTitle>Confirmar Recebimento</DialogTitle></DialogHeader>
           <div className="py-4 flex justify-center"><Calendar mode="single" selected={selectedReceivedDate} onSelect={setSelectedReceivedDate} locale={ptBR} /></div>
           <DialogFooter><Button onClick={() => currentConfirmingAccount && selectedReceivedDate && confirmReceiveMutation.mutate({ account: currentConfirmingAccount, receivedDate: selectedReceivedDate })}>Confirmar</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isTransferToPiggyBankFormOpen} onOpenChange={setIsTransferToPiggyBankFormOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Transferir para Cofrinho</DialogTitle>
+            <CardDescription>Adicione o valor ao seu cofrinho.</CardDescription>
+          </DialogHeader>
+          <Form {...transferForm}>
+            <form onSubmit={transferForm.handleSubmit(v => transferToPiggyBankMutation.mutate(v))} className="space-y-4">
+              <FormField control={transferForm.control} name="description" render={({ field }) => (<FormItem><FormLabel>Descrição</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={transferForm.control} name="amount" render={({ field }) => (<FormItem><FormLabel>Valor</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={transferForm.control} name="entry_date" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant="outline" className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP", { locale: ptBR }) : <span>Selecione</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} locale={ptBR} /></PopoverContent></Popover><FormMessage /></FormItem>)} />
+              <FormField control={transferForm.control} name="bank_id" render={({ field }) => (<FormItem><FormLabel>Banco</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{banks?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+              <DialogFooter><Button type="submit" disabled={transferToPiggyBankMutation.isPending}>Transferir</Button></DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>
