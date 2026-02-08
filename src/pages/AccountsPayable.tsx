@@ -44,7 +44,7 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 export default function AccountsPayable() {
-  const { user, familyMemberIds } = useAuth();
+  const { user, familyData } = useAuth();
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountPayableWithRelations | null>(null);
@@ -83,18 +83,15 @@ export default function AccountsPayable() {
   const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name === "cartao")?.id;
 
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
-    queryKey: ["accounts-payable", familyMemberIds],
+    queryKey: ["accounts-payable", familyData.id],
     queryFn: async () => {
-      if (familyMemberIds.length === 0) return [];
       const { data, error } = await supabase
         .from("accounts_payable")
         .select("*, expense_categories(name), credit_cards(name), payment_types(name), responsible_persons(name)")
-        .in("created_by", familyMemberIds)
         .order("due_date", { ascending: true });
       if (error) throw error;
       return data as AccountPayableWithRelations[];
     },
-    enabled: familyMemberIds.length > 0,
   });
 
   const { data: categories } = useQuery({
@@ -138,6 +135,7 @@ export default function AccountsPayable() {
         amount: parseFloat(values.amount),
         category_id: values.category_id,
         created_by: user.id,
+        family_id: familyData.id,
         is_fixed: values.is_fixed,
         responsible_person_id: values.responsible_person_id || null,
       };
@@ -174,6 +172,7 @@ export default function AccountsPayable() {
           amount: account.amount,
           category_id: account.category_id,
           created_by: user.id,
+          family_id: familyData.id,
           is_fixed: false,
           responsible_person_id: account.responsible_person_id,
           paid: true,
@@ -281,7 +280,7 @@ export default function AccountsPayable() {
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
-          <h1 className="text-2xl font-bold">Contas a Pagar (Família)</h1>
+          <h1 className="text-2xl font-bold">Contas a Pagar</h1>
           <div className="flex items-center gap-4">
             <Select value={selectedMonthYear} onValueChange={setSelectedMonthYear}>
               <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>

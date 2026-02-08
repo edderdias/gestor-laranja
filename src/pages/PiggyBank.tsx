@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PiggyBank as PiggyBankIcon, Plus, Trash2, CalendarIcon } from "lucide-react";
+import { PiggyBank as PiggyBankIcon, Plus, Trash2, CalendarIcon } from "lucide-center";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -31,7 +31,7 @@ const entrySchema = z.object({
 type EntryFormData = z.infer<typeof entrySchema>;
 
 export default function PiggyBank() {
-  const { user, familyMemberIds } = useAuth();
+  const { user, familyData } = useAuth();
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
 
@@ -47,18 +47,15 @@ export default function PiggyBank() {
   });
 
   const { data: entries, isLoading } = useQuery({
-    queryKey: ["piggy_bank_entries", familyMemberIds],
+    queryKey: ["piggy_bank_entries", familyData.id],
     queryFn: async () => {
-      if (familyMemberIds.length === 0) return [];
       const { data, error } = await supabase
         .from("piggy_bank_entries")
         .select("*, banks(name)")
-        .in("user_id", familyMemberIds)
         .order("entry_date", { ascending: false });
       if (error) throw error;
       return data;
     },
-    enabled: familyMemberIds.length > 0,
   });
 
   const { data: banks } = useQuery({
@@ -77,6 +74,7 @@ export default function PiggyBank() {
         ...values,
         entry_date: format(values.entry_date, "yyyy-MM-dd"),
         user_id: user.id,
+        family_id: familyData.id,
       });
       if (error) throw error;
     },

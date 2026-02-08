@@ -44,7 +44,7 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 export default function AccountsReceivable() {
-  const { user, familyMemberIds } = useAuth();
+  const { user, familyData } = useAuth();
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountReceivableWithRelations | null>(null);
@@ -52,8 +52,6 @@ export default function AccountsReceivable() {
   const [showConfirmDateDialog, setShowConfirmDateDialog] = useState(false);
   const [currentConfirmingAccount, setCurrentConfirmingAccount] = useState<AccountReceivableWithRelations | null>(null);
   const [selectedReceivedDate, setSelectedReceivedDate] = useState<Date | undefined>(new Date());
-
-  const effectiveIds = familyMemberIds.length > 0 ? familyMemberIds : (user?.id ? [user.id] : []);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -75,18 +73,15 @@ export default function AccountsReceivable() {
   const selectedPayerId = form.watch("payer_id");
 
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
-    queryKey: ["accounts-receivable", effectiveIds],
+    queryKey: ["accounts-receivable", familyData.id],
     queryFn: async () => {
-      if (effectiveIds.length === 0) return [];
       const { data, error } = await supabase
         .from("accounts_receivable")
         .select("*, income_sources(name), payers(name), income_types(name), responsible_persons(name)")
-        .in("created_by", effectiveIds)
         .order("receive_date", { ascending: true });
       if (error) throw error;
       return data as AccountReceivableWithRelations[];
     },
-    enabled: effectiveIds.length > 0,
   });
 
   const { data: sources } = useQuery({
@@ -159,6 +154,7 @@ export default function AccountsReceivable() {
         source_id: values.source_id,
         payer_id: finalPayerId || null,
         created_by: user.id,
+        family_id: familyData.id,
         is_fixed: values.is_fixed,
         responsible_person_id: values.responsible_person_id || null,
       };
@@ -195,6 +191,7 @@ export default function AccountsReceivable() {
           source_id: account.source_id,
           payer_id: account.payer_id,
           created_by: user.id,
+          family_id: familyData.id,
           is_fixed: false,
           responsible_person_id: account.responsible_person_id,
           received: true,
@@ -244,6 +241,7 @@ export default function AccountsReceivable() {
         type: "deposit",
         entry_date: format(new Date(), "yyyy-MM-dd"),
         user_id: user.id,
+        family_id: familyData.id,
         bank_id: firstBank.id
       });
       if (error) throw error;
@@ -369,7 +367,6 @@ export default function AccountsReceivable() {
           </div>
         </div>
 
-        {/* Resumo conforme Imagem 2 */}
         <div className="grid gap-6 md:grid-cols-2 mb-8">
           <Card>
             <CardHeader className="pb-2">
@@ -400,7 +397,6 @@ export default function AccountsReceivable() {
           </Card>
         </div>
 
-        {/* Cards de Lançamento conforme Imagem 2 */}
         <div className="grid gap-4 md:grid-cols-2">
           {loadingAccounts ? (
             <div className="col-span-2 text-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div></div>

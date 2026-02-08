@@ -12,54 +12,42 @@ import { useMemo } from "react";
 import { TrendingUp, TrendingDown, Wallet, CreditCard } from "lucide-react";
 
 export default function Dashboard() {
-  const { familyMemberIds, user } = useAuth();
+  const { familyData, user } = useAuth();
   const today = new Date();
-  
-  const effectiveIds = familyMemberIds.length > 0 ? familyMemberIds : (user?.id ? [user.id] : []);
 
   const { data: accountsPayable } = useQuery({
-    queryKey: ["dashboard-accounts-payable", effectiveIds],
+    queryKey: ["dashboard-accounts-payable", familyData.id],
     queryFn: async () => {
-      if (effectiveIds.length === 0) return [];
       const { data, error } = await supabase
         .from("accounts_payable")
-        .select("*, expense_categories(name), responsible_persons(name)")
-        .in("created_by", effectiveIds);
+        .select("*, expense_categories(name), responsible_persons(name)");
       if (error) throw error;
       return data;
     },
-    enabled: effectiveIds.length > 0,
   });
 
   const { data: accountsReceivable } = useQuery({
-    queryKey: ["dashboard-accounts-receivable", effectiveIds],
+    queryKey: ["dashboard-accounts-receivable", familyData.id],
     queryFn: async () => {
-      if (effectiveIds.length === 0) return [];
       const { data, error } = await supabase
         .from("accounts_receivable")
-        .select("*")
-        .in("created_by", effectiveIds);
+        .select("*");
       if (error) throw error;
       return data;
     },
-    enabled: effectiveIds.length > 0,
   });
 
   const { data: creditCards } = useQuery({
-    queryKey: ["dashboard-credit-cards", effectiveIds],
+    queryKey: ["dashboard-credit-cards", familyData.id],
     queryFn: async () => {
-      if (effectiveIds.length === 0) return [];
       const { data, error } = await supabase
         .from("credit_cards")
-        .select("*")
-        .in("created_by", effectiveIds);
+        .select("*");
       if (error) throw error;
       return data;
     },
-    enabled: effectiveIds.length > 0,
   });
 
-  // Cálculos para os cards
   const stats = useMemo(() => {
     const currentMonthIncome = accountsReceivable?.filter(a => isSameMonth(parseISO(a.receive_date), today)) || [];
     const currentMonthExpenses = accountsPayable?.filter(a => isSameMonth(parseISO(a.due_date), today)) || [];
@@ -71,7 +59,7 @@ export default function Dashboard() {
     const openExpenses = currentMonthExpenses.filter(a => !a.paid).reduce((sum, a) => sum + a.amount, 0);
 
     const cardExpenses = currentMonthExpenses
-      .filter(a => a.payment_type_id && a.card_id) // Simplificação: assume que se tem card_id é gasto de cartão
+      .filter(a => a.card_id)
       .reduce((sum, a) => sum + a.amount, 0);
 
     return {
@@ -140,7 +128,6 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-8">
-        {/* Cards Superiores conforme Imagem 1 */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
           <Card className="bg-green-50/50 border-green-100">
             <CardContent className="pt-6">

@@ -30,13 +30,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchFamilyData = useCallback(async (userId: string) => {
     if (!userId) return;
     try {
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile } = await supabase
         .from("profiles")
         .select("id, family_id")
         .eq("id", userId)
         .maybeSingle();
-
-      if (profileError) throw profileError;
 
       if (!profile?.family_id) {
         setFamilyMemberIds([userId]);
@@ -44,13 +42,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const { data: family, error: familyError } = await supabase
+      const { data: family } = await supabase
         .from("families")
         .select("*")
         .eq("id", profile.family_id)
         .maybeSingle();
-
-      if (familyError) throw familyError;
 
       if (family) {
         setFamilyData({
@@ -60,6 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           code: family.code
         });
 
+        // Tenta buscar membros. Se falhar por RLS, ao menos o próprio usuário é incluído.
         const { data: members } = await supabase
           .from("profiles")
           .select("id")
@@ -89,21 +86,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initialize = async () => {
       try {
         const { data: { session: initialSession } } = await supabase.auth.getSession();
-        
         if (!mounted) return;
 
         if (initialSession) {
           setSession(initialSession);
           setUser(initialSession.user);
-          // Carrega dados da família em segundo plano para não travar o loading inicial
           fetchFamilyData(initialSession.user.id);
-          
           if (location.pathname === '/auth' || location.pathname === '/') {
             navigate('/dashboard', { replace: true });
           }
         }
-      } catch (error) {
-        console.error("Erro na inicialização da auth:", error);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -113,7 +105,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       if (!mounted) return;
-
       const currentUser = currentSession?.user ?? null;
       setSession(currentSession);
       setUser(currentUser);
@@ -130,8 +121,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           navigate('/auth', { replace: true });
         }
       }
-      
-      // Garante que o loading seja falso após qualquer mudança de estado
       setLoading(false);
     });
 
@@ -139,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [fetchFamilyData]); // Removido navigate e location para evitar loops
+  }, [fetchFamilyData]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
