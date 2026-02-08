@@ -2,7 +2,6 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useLocation } from "react-router-dom";
-import { toast } from "sonner";
 
 interface AuthContextType {
   user: User | null;
@@ -30,11 +29,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchFamilyData = async (userId: string) => {
     if (!userId) return;
     try {
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("id, family_id")
         .eq("id", userId)
         .maybeSingle();
+
+      if (profileError) throw profileError;
 
       if (!profile?.family_id) {
         setFamilyMemberIds([userId]);
@@ -42,11 +43,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const { data: family } = await supabase
+      const { data: family, error: familyError } = await supabase
         .from("families")
         .select("*")
         .eq("id", profile.family_id)
         .maybeSingle();
+
+      if (familyError) throw familyError;
 
       if (family) {
         setFamilyData({
@@ -78,9 +81,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    let mounted = true;
+
     const initAuth = async () => {
       try {
         const { data: { session: initialSession } } = await supabase.auth.getSession();
+        if (!mounted) return;
+
         setSession(initialSession);
         const currentUser = initialSession?.user ?? null;
         setUser(currentUser);
@@ -92,9 +99,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch (e) {
-        console.error("Erro auth:", e);
+        console.error("Erro na inicialização da auth:", e);
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
 
@@ -102,6 +109,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
+        if (!mounted) return;
+
         setSession(currentSession);
         const currentUser = currentSession?.user ?? null;
         setUser(currentUser);
@@ -118,10 +127,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             navigate('/auth', { replace: true });
           }
         }
+        setLoading(false);
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -136,7 +149,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       options: { data: { full_name: fullName } }
     });
     if (error) throw error;
-    toast.success("Cadastro realizado! Verifique seu e-mail.");
   };
 
   const signOut = async () => {
