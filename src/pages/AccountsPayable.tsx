@@ -74,7 +74,6 @@ export default function AccountsPayable() {
   const isFixed = form.watch("is_fixed");
   const selectedPaymentTypeId = form.watch("payment_type_id");
 
-  // Efeito para carregar dados no formulário ao editar
   useEffect(() => {
     if (editingAccount) {
       form.reset({
@@ -175,6 +174,7 @@ export default function AccountsPayable() {
         created_by: user.id,
         family_id: familyData.id,
         is_fixed: values.is_fixed,
+        expense_type: values.is_fixed ? 'fixa' : 'variavel',
         responsible_person_id: values.responsible_person_id || null,
       };
 
@@ -212,6 +212,7 @@ export default function AccountsPayable() {
           created_by: user.id,
           family_id: familyData.id,
           is_fixed: false,
+          expense_type: account.expense_type,
           responsible_person_id: account.responsible_person_id,
           paid: true,
           paid_date: formattedDate,
@@ -364,43 +365,53 @@ export default function AccountsPayable() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 mb-8">
-          <Card><CardHeader><CardTitle>Total Pago</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-income">R$ {totalPaid.toFixed(2)}</div></CardContent></Card>
-          <Card><CardHeader><CardTitle>Total Pendente</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-destructive">R$ {totalPending.toFixed(2)}</div></CardContent></Card>
+          <Card><CardHeader className="pb-2"><CardTitle className="text-lg font-semibold">Total Pago</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-income">R$ {totalPaid.toFixed(2)}</div></CardContent></Card>
+          <Card><CardHeader className="pb-2"><CardTitle className="text-lg font-semibold">Total Pendente</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-destructive">R$ {totalPending.toFixed(2)}</div></CardContent></Card>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {loadingAccounts ? <p className="col-span-2 text-center py-12">Carregando contas...</p> : processedAccounts.length > 0 ? processedAccounts.map(account => (
-            <Card key={account.id} className={cn("border-l-4", account.paid ? "border-income" : "border-destructive")}>
+          {loadingAccounts ? (
+            <div className="col-span-2 text-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div></div>
+          ) : processedAccounts.length > 0 ? processedAccounts.map(account => (
+            <Card key={account.id} className={cn("border-l-4 hover:shadow-md transition-shadow", account.paid ? "border-income" : "border-destructive")}>
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h3 className="font-semibold text-lg mb-2">{account.description}</h3>
-                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                    <div><span className="font-medium">Tipo:</span> {account.payment_types?.name || "N/A"}</div>
-                      <div><span className="font-medium">Vencimento:</span> {format(parseISO(account.due_date), "dd/MM/yyyy")}</div>
-                      <div><span className="font--medium">Parcelas:</span> {account.current_installment}/{account.installments}</div>
-                      <div><span className="font-medium">Valor:</span> R$ {account.amount.toFixed(2)}</div>
-                      <div><span className="font-medium">Valor Total:</span> R$: {account.amount}</div>
-                      <div><span className="font-medium">Categoria:</span> {account.expense_categories?.name || "N/A"}</div>
-                      <div><span className="font-medium">Responsável:</span> {account.responsible_persons?.name || "N/A"}</div>
-                      {account.paid && account.paid_date && (
-                        <div className="col-span-2 text-income font-medium">Pago em: {format(parseISO(account.paid_date), "dd/MM/yyyy")}</div>
-                      )}
+                    <h3 className="font-bold text-lg mb-4">{account.description}</h3>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                      <div className="space-y-1">
+                        <p><span className="text-muted-foreground">Tipo:</span> {account.expense_type || "N/A"}</p>
+                        <p><span className="text-muted-foreground">Vencimento:</span> {format(parseISO(account.due_date), "dd/MM/yyyy")}</p>
+                        <p><span className="text-muted-foreground">Parcelas:</span> {account.current_installment}/{account.installments}</p>
+                        <p><span className="text-muted-foreground">Valor:</span> <span className="text-destructive font-bold">R$ {account.amount.toFixed(2)}</span></p>
+                      </div>
+                      <div className="space-y-1">
+                        <p><span className="text-muted-foreground">Valor Total:</span> <span className="text-destructive font-bold">R$ {(account.amount * (account.installments || 1)).toFixed(2)}</span></p>
+                        <p><span className="text-muted-foreground">Categoria:</span> {account.expense_categories?.name || "N/A"}</p>
+                        <p><span className="text-muted-foreground">Responsável:</span> {account.responsible_persons?.name || "N/A"}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex flex-col gap-2 ml-4">
-                    {account.paid ? (
-                      <Button variant="outline" size="sm" onClick={() => reversePaidMutation.mutate(account.id)} className="text-destructive border-destructive hover:bg-destructive/10"><RotateCcw className="h-4 w-4 mr-2" /> Estornar</Button>
-                    ) : (
-                      <Button variant="outline" size="sm" onClick={() => { setCurrentConfirmingAccount(account); setShowConfirmPaidDateDialog(true); }} className="text-income border-income hover:bg-income/10"><CheckCircle className="h-4 w-4 mr-2" /> Pagar</Button>
+                    {account.paid && account.paid_date && (
+                      <div className="mt-4 flex items-center gap-1 text-income font-medium text-sm">
+                        <CheckCircle className="h-4 w-4" /> Pago em: {format(parseISO(account.paid_date), "dd/MM/yyyy")}
+                      </div>
                     )}
-                    <Button variant="ghost" size="icon" onClick={() => { setEditingAccount(account); setIsFormOpen(true); }} disabled={account.is_generated_fixed_instance}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(account.id)} disabled={account.is_generated_fixed_instance}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                  </div>
+                  <div className="flex flex-col gap-3 ml-4">
+                    {account.paid ? (
+                      <Button variant="outline" size="sm" onClick={() => reversePaidMutation.mutate(account.id)} className="text-destructive border-destructive hover:bg-destructive/10 h-8"><RotateCcw className="h-4 w-4 mr-2" /> Estornar</Button>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={() => { setCurrentConfirmingAccount(account); setShowConfirmPaidDateDialog(true); }} className="text-income border-income hover:bg-income/10 h-8"><CheckCircle className="h-4 w-4 mr-2" /> Pagar</Button>
+                    )}
+                    <div className="flex justify-center gap-2 mt-2">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditingAccount(account); setIsFormOpen(true); }} disabled={account.is_generated_fixed_instance}><Pencil className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteMutation.mutate(account.id)} disabled={account.is_generated_fixed_instance}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
-          )) : <div className="col-span-2 text-center py-12 text-muted-foreground">Nenhuma conta encontrada para este mês.</div>}
+          )) : <div className="col-span-2 text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">Nenhuma conta encontrada para este mês.</div>}
         </div>
       </div>
 
