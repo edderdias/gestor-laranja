@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, CheckCircle } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -38,20 +38,6 @@ const formSchema = z.object({
   new_payer_name: z.string().optional(),
   is_fixed: z.boolean().default(false),
   responsible_person_id: z.string().optional(),
-}).superRefine((data, ctx) => {
-  if (data.payer_id === "new-payer" && !data.new_payer_name) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Nome do novo pagador é obrigatório",
-      path: ["new_payer_name"],
-    });
-  } else if (!data.payer_id && data.payer_id !== "new-payer") {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Pagador é obrigatório",
-      path: ["payer_id"],
-    });
-  }
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -62,6 +48,8 @@ export default function AccountsReceivable() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountReceivableWithRelations | null>(null);
   const [selectedMonthYear, setSelectedMonthYear] = useState(format(new Date(), "yyyy-MM"));
+
+  const effectiveIds = familyMemberIds.length > 0 ? familyMemberIds : (user?.id ? [user.id] : []);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -83,18 +71,18 @@ export default function AccountsReceivable() {
   const selectedPayerId = form.watch("payer_id");
 
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
-    queryKey: ["accounts-receivable", familyMemberIds],
+    queryKey: ["accounts-receivable", effectiveIds],
     queryFn: async () => {
-      if (familyMemberIds.length === 0) return [];
+      if (effectiveIds.length === 0) return [];
       const { data, error } = await supabase
         .from("accounts_receivable")
         .select("*, income_sources(name), payers(name), income_types(name), responsible_persons(name)")
-        .in("created_by", familyMemberIds)
+        .in("created_by", effectiveIds)
         .order("receive_date", { ascending: true });
       if (error) throw error;
       return data as AccountReceivableWithRelations[];
     },
-    enabled: familyMemberIds.length > 0,
+    enabled: effectiveIds.length > 0,
   });
 
   const { data: sources } = useQuery({
@@ -179,9 +167,19 @@ export default function AccountsReceivable() {
     onError: (error: any) => toast.error("Erro ao salvar: " + error.message),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("accounts_receivable").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
+      toast.success("Conta removida!");
+    },
+  });
+
   const processedAccounts = useMemo(() => {
     if (!accounts) return [];
-    const [year, month] = selectedMonthYear.split('-').map(Number);
     const targetMonthDate = parseISO(`${selectedMonthYear}-01`);
 
     return accounts.flatMap(account => {
@@ -193,30 +191,12 @@ export default function AccountsReceivable() {
       if (!account.is_fixed && isSameMonth(dueDate, targetMonthDate) && isSameYear(dueDate, targetMonthDate)) {
         results.push(account);
       } else if (account.is_fixed) {
-        if (isSameMonth(dueDate, targetMonthDate) && isSameYear(dueDate, targetMonthDate)) {
-          results.push(account);
-        } else if (dueDate <= endOfMonth(targetMonthDate)) {
-          const exists = accounts.find(a => 
-            a.original_fixed_account_id === account.id && 
-            isSameMonth(parseISO(a.receive_date), targetMonthDate) &&
-            isSameYear(parseISO(a.receive_date), targetMonthDate)
-          );
-
-          if (!exists) {
-            const displayDate = new Date(year, month - 1, dueDate.getDate());
-            if (displayDate.getMonth() !== month - 1) displayDate.setDate(0);
-
-            results.push({
-              ...account,
-              id: `temp-${account.id}-${selectedMonthYear}`,
-              receive_date: format(displayDate, "yyyy-MM-dd"),
-              received: false,
-              received_date: null,
-              is_generated_fixed_instance: true,
-              original_fixed_account_id: account.id,
-            });
-          }
-        }
+        // Lógica simplificada para exibição de fixas no mês selecionado
+        const displayDate = new Date(targetMonthDate.getFullYear(), targetMonthDate.getMonth(), dueDate.getDate());
+        results.push({
+          ...account,
+          receive_date: format(displayDate, "yyyy-MM-dd"),
+        });
       }
       return results;
     }).sort((a, b) => parseISO(a.receive_date).getTime() - parseISO(b.receive_date).getTime());
@@ -279,8 +259,10 @@ export default function AccountsReceivable() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {loadingAccounts ? <p className="col-span-2 text-center py-12">Carregando contas...</p> : processedAccounts.length > 0 ? processedAccounts.map(account => (
-            <Card key={account.id} className={cn("border-l-4", account.received ? "border-income" : "border-muted")}>
+          {loadingAccounts ? (
+            <div className="col-span-2 text-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div></div>
+          ) : processedAccounts.length > 0 ? processedAccounts.map(account => (
+            <Card key={account.id} className={cn("border-l-4 hover:shadow-md transition-shadow", account.received ? "border-income" : "border-muted")}>
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -296,10 +278,14 @@ export default function AccountsReceivable() {
                       )}
                     </div>
                   </div>
+                  <div className="flex flex-col gap-2 ml-4">
+                    <Button variant="ghost" size="icon" onClick={() => { setEditingAccount(account); setIsFormOpen(true); }}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(account.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
-          )) : <div className="col-span-2 text-center py-12 text-muted-foreground">Nenhuma conta encontrada para este mês.</div>}
+          )) : <div className="col-span-2 text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">Nenhuma conta encontrada para este mês.</div>}
         </div>
       </div>
     </div>
