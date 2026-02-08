@@ -28,6 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const location = useLocation();
 
   const fetchFamilyData = useCallback(async (userId: string) => {
+    console.log('Teste ---> ')
     if (!userId) return;
     try {
       const { data: profile } = await supabase
