@@ -30,7 +30,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchFamilyData = async (userId: string) => {
     if (!userId) return;
     try {
-      // 1. Buscar o perfil do usuário para ver se ele tem um family_id
       const { data: profile } = await supabase
         .from("profiles")
         .select("id, family_id")
@@ -38,13 +37,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (!profile?.family_id) {
-        // Se não tem família, ele vê apenas os próprios dados
         setFamilyMemberIds([userId]);
         setFamilyData({ id: null, name: null, ownerId: null, code: null });
         return;
       }
 
-      // 2. Buscar dados da família
       const { data: family } = await supabase
         .from("families")
         .select("*")
@@ -59,7 +56,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           code: family.code
         });
 
-        // 3. Buscar todos os membros dessa família
         const { data: members } = await supabase
           .from("profiles")
           .select("id")
@@ -90,7 +86,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(currentUser);
         
         if (currentUser) {
-          fetchFamilyData(currentUser.id);
+          await fetchFamilyData(currentUser.id);
+          if (location.pathname === '/auth' || location.pathname === '/') {
+            navigate('/dashboard', { replace: true });
+          }
         }
       } catch (e) {
         console.error("Erro auth:", e);
@@ -108,15 +107,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(currentUser);
         
         if (currentUser) {
-          fetchFamilyData(currentUser.id);
+          await fetchFamilyData(currentUser.id);
           if (location.pathname === '/auth') {
-            navigate('/dashboard');
+            navigate('/dashboard', { replace: true });
           }
         } else {
           setFamilyMemberIds([]);
           setFamilyData({ id: null, name: null, ownerId: null, code: null });
           if (location.pathname !== '/auth') {
-            navigate('/auth');
+            navigate('/auth', { replace: true });
           }
         }
       }
@@ -142,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    navigate('/auth', { replace: true });
   };
 
   return (
