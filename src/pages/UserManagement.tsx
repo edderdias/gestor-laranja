@@ -13,8 +13,9 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Pencil, Trash2, UserPlus, UserCheck, Users, Link as LinkIcon, Copy } from "lucide-react";
+import { Pencil, Trash2, UserPlus, UserCheck, Users, Link as LinkIcon, Copy, AlertTriangle } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 type Profile = Tables<'profiles'> & {
   email?: string;
@@ -61,6 +62,7 @@ export default function UserManagement() {
   const [isEditFormOpen, setIsEditFormOpen] = useState(false);
   const [isJoinFormOpen, setIsJoinFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
+  const [dbError, setDbError] = useState<string | null>(null);
 
   const inviteForm = useForm<InviteFormData>({
     resolver: zodResolver(inviteSchema),
@@ -95,7 +97,12 @@ export default function UserManagement() {
         .from("profiles")
         .select("id, full_name, is_family_member, invited_by_user_id");
 
-      if (profilesError) throw profilesError;
+      if (profilesError) {
+        if (profilesError.message.includes("family_code") || profilesError.message.includes("family_name")) {
+          setDbError("As colunas de família ainda não foram criadas no seu banco de dados Supabase.");
+        }
+        throw profilesError;
+      }
       return profilesData as Profile[];
     },
     enabled: !!currentUser?.id,
@@ -114,7 +121,6 @@ export default function UserManagement() {
         is_family_member: true 
       };
 
-      // Gera o código apenas se ainda não existir
       if (!familyData.code) {
         updateData.family_code = generateFamilyCode();
       }
@@ -129,9 +135,13 @@ export default function UserManagement() {
     onSuccess: () => {
       toast.success("Família registrada com sucesso!");
       refreshFamily();
+      setDbError(null);
     },
     onError: (error: any) => {
       console.error("Erro ao salvar família:", error);
+      if (error.message.includes("family_code") || error.message.includes("family_name")) {
+        setDbError("Erro: Colunas de família ausentes no banco de dados. Por favor, execute o SQL de migração no painel do Supabase.");
+      }
       toast.error(`Erro ao salvar família: ${error.message || "Erro desconhecido"}`);
     },
   });
@@ -262,6 +272,16 @@ export default function UserManagement() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
+        {dbError && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Configuração Necessária</AlertTitle>
+            <AlertDescription>
+              {dbError} Execute o comando SQL no painel do Supabase para habilitar as funções de família.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <Users className="h-8 w-8" /> Gerenciamento de Família
