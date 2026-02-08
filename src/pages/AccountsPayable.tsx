@@ -378,7 +378,7 @@ export default function AccountsPayable() {
                     <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
                       <div><span className="font-medium">Vencimento:</span> {format(parseISO(account.due_date), "dd/MM/yyyy")}</div>
                       <div><span className="font-medium">Valor:</span> R$ {account.amount.toFixed(2)}</div>
-                      <div><span className="font-medium">Tipo:</span> {account.payment_types?.name || "N/A"}</div>
+                      <div><span className="font-medium">Tipo 1:</span> {account.payment_types?.name || "N/A"}</div>
                       <div><span className="font-medium">Categoria:</span> {account.expense_categories?.name || "N/A"}</div>
                       <div><span className="font-medium">Responsável:</span> {account.responsible_persons?.name || "N/A"}</div>
                       {account.paid && account.paid_date && (
