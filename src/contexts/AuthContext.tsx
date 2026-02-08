@@ -9,7 +9,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   familyMemberIds: string[];
-  familyData: { name: string | null; rootId: string | null; code: string | null };
+  familyData: { id: string | null; name: string | null; ownerId: string | null; code: string | null };
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -23,68 +23,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [familyMemberIds, setFamilyMemberIds] = useState<string[]>([]);
-  const [familyData, setFamilyData] = useState<{ name: string | null; rootId: string | null; code: string | null }>({ name: null, rootId: null, code: null });
+  const [familyData, setFamilyData] = useState<{ id: string | null; name: string | null; ownerId: string | null; code: string | null }>({ id: null, name: null, ownerId: null, code: null });
   const navigate = useNavigate();
   const location = useLocation();
 
-  const fetchFamilyMembers = async (userId: string) => {
-    console.error('Passei ---> ' + userId)
+  const fetchFamilyData = async (userId: string) => {
     if (!userId) return;
     try {
+      // 1. Buscar o perfil do usuário para ver se ele tem um family_id
       const { data: profile } = await supabase
         .from("profiles")
-        .select("id, invited_by_user_id, is_family_member")
+        .select("id, family_id")
         .eq("id", userId)
         .maybeSingle();
 
-      if (!profile) {
+      if (!profile?.family_id) {
+        // Se não tem família, ele vê apenas os próprios dados
         setFamilyMemberIds([userId]);
-        setFamilyData({ name: null, rootId: userId, code: null });
+        setFamilyData({ id: null, name: null, ownerId: null, code: null });
         return;
       }
 
-      const rootId = profile.invited_by_user_id || profile.id;
-      
-      const { data: rootProfile } = await supabase
-        .from("profiles")
-        .select("family_name, family_code")
-        .eq("id", rootId)
+      // 2. Buscar dados da família
+      const { data: family } = await supabase
+        .from("families")
+        .select("*")
+        .eq("id", profile.family_id)
         .maybeSingle();
 
-      setFamilyData({ 
-        name: rootProfile?.family_name || null, 
-        rootId, 
-        code: rootProfile?.family_code || null 
-      });
+      if (family) {
+        setFamilyData({
+          id: family.id,
+          name: family.name,
+          ownerId: family.owner_id,
+          code: family.code
+        });
 
-      if (!profile.is_family_member && profile.invited_by_user_id) {
+        // 3. Buscar todos os membros dessa família
+        const { data: members } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("family_id", family.id);
+
+        if (members) {
+          setFamilyMemberIds(members.map(m => m.id));
+        }
+      } else {
         setFamilyMemberIds([userId]);
-        return;
       }
-
-      const { data: members } = await supabase
-        .from("profiles")
-        .select("id, is_family_member")
-        .or(`id.eq.${rootId},invited_by_user_id.eq.${rootId}`);
-
-      if (!members) {
-        setFamilyMemberIds([userId]);
-        return;
-      }
-
-      const ids = members
-        .filter(m => m.id === rootId || m.id === userId || m.is_family_member)
-        .map(m => m.id);
-
-      setFamilyMemberIds(ids.length > 0 ? ids : [userId]);
     } catch (error) {
-      console.error("Erro ao buscar família:", error);
+      console.error("Erro ao buscar dados da família:", error);
       setFamilyMemberIds([userId]);
     }
   };
 
   const refreshFamily = async () => {
-    if (user) await fetchFamilyMembers(user.id);
+    if (user) await fetchFamilyData(user.id);
   };
 
   useEffect(() => {
@@ -96,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(currentUser);
         
         if (currentUser) {
-          fetchFamilyMembers(currentUser.id);
+          fetchFamilyData(currentUser.id);
         }
       } catch (e) {
         console.error("Erro auth:", e);
@@ -114,13 +108,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(currentUser);
         
         if (currentUser) {
-          fetchFamilyMembers(currentUser.id);
+          fetchFamilyData(currentUser.id);
           if (location.pathname === '/auth') {
             navigate('/dashboard');
           }
         } else {
           setFamilyMemberIds([]);
-          setFamilyData({ name: null, rootId: null, code: null });
+          setFamilyData({ id: null, name: null, ownerId: null, code: null });
           if (location.pathname !== '/auth') {
             navigate('/auth');
           }
