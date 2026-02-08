@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { useState, useMemo, useRef } from "react";
-import { format, subMonths, addMonths, isSameMonth, parseISO } from "date-fns";
+import { format, subMonths, addMonths, isSameMonth, parseISO, endOfMonth, isSameYear, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
@@ -41,8 +41,8 @@ export default function CreditCards() {
     enabled: !!user?.id,
   });
 
-  const { data: transactions } = useQuery({
-    queryKey: ["credit_card_transactions_all", familyData.id, selectedMonthYear],
+  const { data: rawTransactions } = useQuery({
+    queryKey: ["credit_card_transactions_raw", familyData.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("accounts_payable")
@@ -53,6 +53,47 @@ export default function CreditCards() {
     },
     enabled: !!user?.id,
   });
+
+  // Lógica de projeção idêntica à da página de Contas a Pagar
+  const processedTransactions = useMemo(() => {
+    if (!rawTransactions) return [];
+    const targetMonthDate = parseISO(`${selectedMonthYear}-01`);
+
+    return rawTransactions.flatMap(account => {
+      const dueDate = parseISO(account.due_date);
+      if (!isValid(dueDate)) return [];
+
+      const results: any[] = [];
+
+      // Se não for fixa, só aparece no mês do vencimento
+      if (!account.is_fixed && isSameMonth(dueDate, targetMonthDate) && isSameYear(dueDate, targetMonthDate)) {
+        results.push(account);
+      } 
+      // Se for fixa, projetamos para o mês selecionado
+      else if (account.is_fixed) {
+        if (isSameMonth(dueDate, targetMonthDate) && isSameYear(dueDate, targetMonthDate)) {
+          results.push(account);
+        } else if (dueDate <= endOfMonth(targetMonthDate)) {
+          // Verifica se já existe uma instância paga/específica para este mês
+          const exists = rawTransactions.find(a => 
+            a.original_fixed_account_id === account.id && 
+            isSameMonth(parseISO(a.due_date), targetMonthDate) &&
+            isSameYear(parseISO(a.due_date), targetMonthDate)
+          );
+
+          if (!exists) {
+            results.push({
+              ...account,
+              id: `temp-${account.id}-${selectedMonthYear}`,
+              is_generated_fixed_instance: true,
+              original_fixed_account_id: account.id,
+            });
+          }
+        }
+      }
+      return results;
+    });
+  }, [rawTransactions, selectedMonthYear]);
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -76,12 +117,11 @@ export default function CreditCards() {
   }, []);
 
   const cardStats = useMemo(() => {
-    if (!cards || !transactions) return {};
+    if (!cards || !processedTransactions) return {};
     const stats: Record<string, { used: number; pending: boolean; transactions: any[] }> = {};
-    const targetDate = parseISO(`${selectedMonthYear}-01`);
 
     cards.forEach(card => {
-      const cardTransactions = transactions.filter(t => t.card_id === card.id && isSameMonth(parseISO(t.due_date), targetDate));
+      const cardTransactions = processedTransactions.filter(t => t.card_id === card.id);
       const used = cardTransactions.reduce((sum, t) => sum + t.amount, 0);
       const hasPending = cardTransactions.some(t => !t.paid);
       
@@ -92,22 +132,19 @@ export default function CreditCards() {
       };
     });
     return stats;
-  }, [cards, transactions, selectedMonthYear]);
+  }, [cards, processedTransactions]);
 
   const responsibleStats = useMemo(() => {
-    if (!transactions) return [];
-    const targetDate = parseISO(`${selectedMonthYear}-01`);
+    if (!processedTransactions) return [];
     const totals: Record<string, number> = {};
 
-    transactions
-      .filter(t => isSameMonth(parseISO(t.due_date), targetDate))
-      .forEach(t => {
-        const name = t.responsible_persons?.name || "Não Atribuído";
-        totals[name] = (totals[name] || 0) + t.amount;
-      });
+    processedTransactions.forEach(t => {
+      const name = t.responsible_persons?.name || "Não Atribuído";
+      totals[name] = (totals[name] || 0) + t.amount;
+    });
 
     return Object.entries(totals).sort((a, b) => b[1] - a[1]);
-  }, [transactions, selectedMonthYear]);
+  }, [processedTransactions]);
 
   const openPrintDialog = (card: any) => {
     setSelectedCardForPrint(card);
