@@ -3,7 +3,7 @@ import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Tables } from "@/integrations/supabase/types";
 
-type CreditCardTransactionWithGeneratedFlag = Tables<'accounts_payable'> & {
+type CreditCardTransactionWithGeneratedFlag = Tables<'credit_card_transactions'> & {
   is_generated_fixed_instance?: boolean;
   expense_categories?: { name: string } | null;
   responsible_persons?: { name: string } | null;
@@ -64,7 +64,7 @@ export const PrintStatementComponent = React.forwardRef<HTMLDivElement, PrintSta
               transactions.map((transaction) => (
                 <tr key={transaction.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="py-3 px-4 text-sm text-slate-600 whitespace-nowrap">
-                    {formatDate(transaction.purchase_date || transaction.due_date)}
+                    {formatDate(transaction.purchase_date)}
                   </td>
                   <td className="py-3 px-4 text-sm font-medium text-slate-800">
                     {transaction.description}

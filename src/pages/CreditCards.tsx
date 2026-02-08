@@ -23,7 +23,7 @@ import { z } from "zod";
 const purchaseSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   amount: z.string().min(1, "Valor é obrigatório"),
-  due_date: z.string().min(1, "Vencimento é obrigatório"),
+  purchase_date: z.string().min(1, "Data da compra é obrigatória"),
   category_id: z.string().min(1, "Categoria é obrigatória"),
   responsible_person_id: z.string().min(1, "Responsável é obrigatório"),
   installments: z.string().default("1"),
@@ -46,7 +46,7 @@ export default function CreditCards() {
     defaultValues: {
       description: "",
       amount: "",
-      due_date: format(new Date(), "yyyy-MM-dd"),
+      purchase_date: format(new Date(), "yyyy-MM-dd"),
       category_id: "",
       responsible_person_id: "",
       installments: "1",
@@ -94,9 +94,8 @@ export default function CreditCards() {
     queryKey: ["credit_card_transactions_raw", familyData.id],
     queryFn: async () => {
       let query = supabase
-        .from("accounts_payable")
-        .select("*, responsible_persons(name), expense_categories(name)")
-        .not("card_id", "is", null);
+        .from("credit_card_transactions")
+        .select("*, responsible_persons(name), expense_categories(name)");
       
       if (familyData.id) {
         query = query.eq("family_id", familyData.id);
@@ -116,56 +115,55 @@ export default function CreditCards() {
     const [year, month] = selectedMonthYear.split('-').map(Number);
     const targetMonthDate = parseISO(`${selectedMonthYear}-01`);
 
-    return rawTransactions.flatMap(account => {
-      const dueDate = parseISO(account.due_date);
-      if (!isValid(dueDate)) return [];
+    return rawTransactions.flatMap(transaction => {
+      const purchaseDate = parseISO(transaction.purchase_date);
+      if (!isValid(purchaseDate)) return [];
 
       const results: any[] = [];
 
       // 1. Transações normais (não fixas, 1 parcela)
-      if (!account.is_fixed && (account.installments || 1) === 1) {
-        if (isSameMonth(dueDate, targetMonthDate) && isSameYear(dueDate, targetMonthDate)) {
-          results.push(account);
+      if (!transaction.is_fixed && (transaction.installments || 1) === 1) {
+        if (isSameMonth(purchaseDate, targetMonthDate) && isSameYear(purchaseDate, targetMonthDate)) {
+          results.push(transaction);
         }
       } 
       // 2. Transações fixas
-      else if (account.is_fixed) {
-        if (isSameMonth(dueDate, targetMonthDate) && isSameYear(dueDate, targetMonthDate)) {
-          results.push(account);
-        } else if (dueDate <= endOfMonth(targetMonthDate)) {
+      else if (transaction.is_fixed) {
+        if (isSameMonth(purchaseDate, targetMonthDate) && isSameYear(purchaseDate, targetMonthDate)) {
+          results.push(transaction);
+        } else if (purchaseDate <= endOfMonth(targetMonthDate)) {
           const exists = rawTransactions.find(a => 
-            a.original_fixed_account_id === account.id && 
-            isSameMonth(parseISO(a.due_date), targetMonthDate) &&
-            isSameYear(parseISO(a.due_date), targetMonthDate)
+            a.original_fixed_transaction_id === transaction.id && 
+            isSameMonth(parseISO(a.purchase_date), targetMonthDate) &&
+            isSameYear(parseISO(a.purchase_date), targetMonthDate)
           );
 
           if (!exists) {
-            const displayDate = new Date(year, month - 1, dueDate.getDate());
+            const displayDate = new Date(year, month - 1, purchaseDate.getDate());
             if (displayDate.getMonth() !== month - 1) displayDate.setDate(0);
             const formattedDisplayDate = format(displayDate, "yyyy-MM-dd");
 
             results.push({
-              ...account,
-              id: `temp-fixed-${account.id}-${selectedMonthYear}`,
-              due_date: formattedDisplayDate,
-              purchase_date: account.purchase_date || formattedDisplayDate,
+              ...transaction,
+              id: `temp-fixed-${transaction.id}-${selectedMonthYear}`,
+              purchase_date: formattedDisplayDate,
               is_generated_fixed_instance: true,
-              original_fixed_account_id: account.id,
+              original_fixed_transaction_id: transaction.id,
             });
           }
         }
       }
       // 3. Transações parceladas
-      else if ((account.installments || 1) > 1) {
-        const totalInstallments = account.installments || 1;
+      else if ((transaction.installments || 1) > 1) {
+        const totalInstallments = transaction.installments || 1;
         
         for (let i = 0; i < totalInstallments; i++) {
-          const installmentDate = addMonths(dueDate, i);
+          const installmentDate = addMonths(purchaseDate, i);
           if (isSameMonth(installmentDate, targetMonthDate) && isSameYear(installmentDate, targetMonthDate)) {
             results.push({
-              ...account,
-              id: `temp-inst-${account.id}-${i}-${selectedMonthYear}`,
-              due_date: format(installmentDate, "yyyy-MM-dd"),
+              ...transaction,
+              id: `temp-inst-${transaction.id}-${i}-${selectedMonthYear}`,
+              purchase_date: format(installmentDate, "yyyy-MM-dd"),
               current_installment: i + 1,
               is_generated_installment_instance: true,
             });
@@ -182,25 +180,17 @@ export default function CreditCards() {
     mutationFn: async (values: PurchaseFormData) => {
       if (!user?.id || !selectedCard) throw new Error("Não autenticado ou cartão não selecionado");
       
-      const { data: paymentTypes } = await supabase.from("payment_types").select("id").ilike("name", "%cartao%").limit(1);
-      const cardPaymentTypeId = paymentTypes?.[0]?.id;
-
-      if (!cardPaymentTypeId) throw new Error("Tipo de pagamento 'Cartão' não encontrado.");
-
-      const { error } = await supabase.from("accounts_payable").insert({
+      const { error } = await supabase.from("credit_card_transactions").insert({
         description: values.description,
         amount: parseFloat(values.amount),
-        due_date: values.due_date,
-        purchase_date: values.due_date,
+        purchase_date: values.purchase_date,
         category_id: values.category_id,
         responsible_person_id: values.responsible_person_id,
         card_id: selectedCard.id,
-        payment_type_id: cardPaymentTypeId,
         installments: values.is_fixed ? 1 : parseInt(values.installments),
         is_fixed: values.is_fixed,
         created_by: user.id,
         family_id: familyData.id,
-        expense_type: values.is_fixed ? 'fixa' : 'variavel',
       });
 
       if (error) throw error;
@@ -237,16 +227,14 @@ export default function CreditCards() {
 
   const cardStats = useMemo(() => {
     if (!cards || !processedTransactions) return {};
-    const stats: Record<string, { used: number; pending: boolean; transactions: any[] }> = {};
+    const stats: Record<string, { used: number; transactions: any[] }> = {};
 
     cards.forEach(card => {
       const cardTransactions = processedTransactions.filter(t => t.card_id === card.id);
       const used = cardTransactions.reduce((sum, t) => sum + t.amount, 0);
-      const hasPending = cardTransactions.some(t => !t.paid);
       
       stats[card.id] = { 
         used, 
-        pending: hasPending && cardTransactions.length > 0,
         transactions: cardTransactions
       };
     });
@@ -296,7 +284,7 @@ export default function CreditCards() {
         ) : cards && cards.length > 0 ? (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-12">
             {cards.map(card => {
-              const stats = cardStats[card.id] || { used: 0, pending: false, transactions: [] };
+              const stats = cardStats[card.id] || { used: 0, transactions: [] };
               const limit = card.credit_limit || 0;
               const available = limit - stats.used;
               const usagePercent = limit > 0 ? (stats.used / limit) * 100 : 0;
@@ -352,8 +340,8 @@ export default function CreditCards() {
                     <div className="flex items-center justify-between pt-2">
                       <span className="text-sm font-bold text-slate-700">Fatura ({monthLabel}):</span>
                       {stats.transactions.length > 0 ? (
-                        <Badge variant={stats.pending ? "destructive" : "success"} className="rounded-full px-4">
-                          {stats.pending ? "Pendente" : "Pago"}
+                        <Badge variant="outline" className="rounded-full px-4 border-slate-200 text-slate-600">
+                          {stats.transactions.length} Lançamentos
                         </Badge>
                       ) : (
                         <Badge variant="secondary" className="rounded-full px-4 bg-slate-100 text-slate-500">
@@ -414,7 +402,7 @@ export default function CreditCards() {
               <FormField control={purchaseForm.control} name="description" render={({ field }) => (<FormItem><FormLabel>Descrição</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
               <div className="grid grid-cols-2 gap-4">
                 <FormField control={purchaseForm.control} name="amount" render={({ field }) => (<FormItem><FormLabel>Valor</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField control={purchaseForm.control} name="due_date" render={({ field }) => (<FormItem><FormLabel>Vencimento</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={purchaseForm.control} name="purchase_date" render={({ field }) => (<FormItem><FormLabel>Data da Compra</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>)} />
               </div>
               <FormField control={purchaseForm.control} name="category_id" render={({ field }) => (<FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{categories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
               <FormField control={purchaseForm.control} name="responsible_person_id" render={({ field }) => (<FormItem><FormLabel>Responsável</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{responsiblePersons?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
