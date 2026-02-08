@@ -27,14 +27,19 @@ serve(async (req) => {
     const { data: { user: inviterUser }, error: inviterError } = await supabaseAdmin.auth.getUser(token);
 
     if (inviterError || !inviterUser) {
-      console.error("[create-user] Error getting inviter user:", inviterError);
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Cria o usuário diretamente com senha e confirmação de e-mail automática
+    // Buscar o family_id do criador
+    const { data: inviterProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('family_id')
+      .eq('id', inviterUser.id)
+      .single();
+
     const { data: newUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -42,38 +47,19 @@ serve(async (req) => {
       user_metadata: { full_name: fullName }
     });
 
-    if (authError) {
-      console.error("[create-user] Error creating user:", authError);
-      return new Response(JSON.stringify({ error: authError.message }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    if (authError) throw authError;
 
-    if (!newUser.user) {
-      return new Response(JSON.stringify({ error: 'User not created' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Atualiza o perfil do usuário recém-criado
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .update({
         invited_by_user_id: inviterUser.id,
         is_family_member: isFamilyMember,
         full_name: fullName,
+        family_id: inviterProfile?.family_id // Propaga o ID da família
       })
       .eq('id', newUser.user.id);
 
-    if (profileError) {
-      console.error("[create-user] Error updating profile:", profileError);
-      return new Response(JSON.stringify({ error: 'Failed to update user profile' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    if (profileError) throw profileError;
 
     return new Response(JSON.stringify({ message: 'User created successfully', user: newUser.user }), {
       status: 200,
@@ -81,7 +67,6 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error("[create-user] Unhandled error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
