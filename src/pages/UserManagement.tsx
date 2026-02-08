@@ -114,7 +114,6 @@ export default function UserManagement() {
         is_family_member: true 
       };
 
-      // Gera o código apenas se ainda não existir
       if (!familyData.code) {
         updateData.family_code = generateFamilyCode();
       }
@@ -129,7 +128,7 @@ export default function UserManagement() {
       toast.success("Família registrada com sucesso!");
       refreshFamily();
     },
-    onError: (error: any) => toast.error("Erro ao salvar família. Verifique se as colunas foram criadas no banco."),
+    onError: (error: any) => toast.error("Erro ao salvar família."),
   });
 
   const joinFamilyMutation = useMutation({
@@ -138,7 +137,6 @@ export default function UserManagement() {
       
       const cleanCode = data.familyCode.trim().toUpperCase();
 
-      // Busca o dono da família pelo código
       const { data: headProfile, error: searchError } = await supabase
         .from("profiles")
         .select("id")
@@ -303,7 +301,7 @@ export default function UserManagement() {
                       <FormItem><FormLabel>Nome Completo</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={createForm.control} name="email" render={({ field }) => (
-                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} type="email" /></FormControl><FormMessage /></FormMessage>
+                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} type="email" /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={createForm.control} name="password" render={({ field }) => (
                       <FormItem><FormLabel>Senha</FormLabel><FormControl><Input {...field} type="password" /></FormControl><FormMessage /></FormItem>
@@ -342,7 +340,7 @@ export default function UserManagement() {
                       <FormItem><FormLabel>Nome Completo</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={inviteForm.control} name="email" render={({ field }) => (
-                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} type="email" /></FormControl><FormMessage /></FormMessage>
+                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} type="email" /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={inviteForm.control} name="isFamilyMember" render={({ field }) => (
                       <FormItem className="flex items-center justify-between rounded-lg border p-3">
