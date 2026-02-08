@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -23,13 +23,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [familyMemberIds, setFamilyMemberIds] = useState<string[]>([]);
   const [familyData, setFamilyData] = useState<{ id: string | null; name: string | null; ownerId: string | null; code: string | null }>({ id: null, name: null, ownerId: null, code: null });
+  
   const navigate = useNavigate();
   const location = useLocation();
 
-  const fetchFamilyData = async (userId: string) => {
+  const fetchFamilyData = useCallback(async (userId: string) => {
     if (!userId) return;
     try {
-      // Busca o perfil do usuário
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("id, family_id")
@@ -38,14 +38,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (profileError) throw profileError;
 
-      // Se não tiver família, define como conta individual
       if (!profile?.family_id) {
         setFamilyMemberIds([userId]);
         setFamilyData({ id: null, name: null, ownerId: null, code: null });
         return;
       }
 
-      // Busca os dados da família
       const { data: family, error: familyError } = await supabase
         .from("families")
         .select("*")
@@ -62,59 +60,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           code: family.code
         });
 
-        // Busca todos os membros da família
         const { data: members } = await supabase
           .from("profiles")
           .select("id")
           .eq("family_id", family.id);
 
-        if (members) {
+        if (members && members.length > 0) {
           setFamilyMemberIds(members.map(m => m.id));
+        } else {
+          setFamilyMemberIds([userId]);
         }
       } else {
         setFamilyMemberIds([userId]);
       }
     } catch (error) {
       console.error("Erro ao buscar dados da família:", error);
-      // Em caso de erro, garante que o usuário consiga ver ao menos seus próprios dados
       setFamilyMemberIds([userId]);
     }
-  };
+  }, []);
 
-  const refreshFamily = async () => {
+  const refreshFamily = useCallback(async () => {
     if (user) await fetchFamilyData(user.id);
-  };
+  }, [user, fetchFamilyData]);
 
   useEffect(() => {
     let mounted = true;
 
     const initialize = async () => {
-      try {
-        // 1. Verifica sessão inicial
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
-        
-        if (!mounted) return;
+      const { data: { session: initialSession } } = await supabase.auth.getSession();
+      
+      if (!mounted) return;
 
-        if (initialSession) {
-          setSession(initialSession);
-          setUser(initialSession.user);
-          await fetchFamilyData(initialSession.user.id);
-          
-          // Redireciona se estiver na tela de login
-          if (location.pathname === '/auth' || location.pathname === '/') {
-            navigate('/dashboard', { replace: true });
-          }
+      if (initialSession) {
+        setSession(initialSession);
+        setUser(initialSession.user);
+        await fetchFamilyData(initialSession.user.id);
+        
+        if (location.pathname === '/auth' || location.pathname === '/') {
+          navigate('/dashboard', { replace: true });
         }
-      } catch (error) {
-        console.error("Erro na inicialização:", error);
-      } finally {
-        if (mounted) setLoading(false);
       }
+      setLoading(false);
     };
 
     initialize();
 
-    // 2. Escuta mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       if (!mounted) return;
 
@@ -134,7 +124,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           navigate('/auth', { replace: true });
         }
       }
-      
       setLoading(false);
     });
 
@@ -142,7 +131,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [navigate, location.pathname]);
+    // Removido location.pathname e navigate das dependências para evitar loops
+  }, [fetchFamilyData]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -161,7 +151,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     setLoading(true);
     await supabase.auth.signOut();
-    navigate('/auth', { replace: true });
   };
 
   return (
