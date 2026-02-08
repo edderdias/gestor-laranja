@@ -2,17 +2,18 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { parseISO, isSameMonth, format, subMonths, startOfMonth, endOfMonth } from "date-fns";
+import { parseISO, isSameMonth, format, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { MonthlyExpensesChart } from "@/components/charts/MonthlyExpensesChart";
 import { CategoryExpensesChart } from "@/components/charts/CategoryExpensesChart";
+import { MonthlyIncomeChart } from "@/components/charts/MonthlyIncomeChart";
+import { ResponsiblePersonExpensesChart } from "@/components/charts/ResponsiblePersonExpensesChart";
 import { useMemo } from "react";
 
 export default function Dashboard() {
   const { familyMemberIds, user } = useAuth();
   const today = new Date();
   
-  // Garante que sempre temos ao menos o ID do usuário atual para a busca inicial
   const effectiveIds = familyMemberIds.length > 0 ? familyMemberIds : (user?.id ? [user.id] : []);
 
   const { data: accountsPayable, isLoading: loadingPayable } = useQuery({
@@ -21,7 +22,7 @@ export default function Dashboard() {
       if (effectiveIds.length === 0) return [];
       const { data, error } = await supabase
         .from("accounts_payable")
-        .select("*, expense_categories(name)")
+        .select("*, expense_categories(name), responsible_persons(name)")
         .in("created_by", effectiveIds);
       if (error) throw error;
       return data;
@@ -53,22 +54,29 @@ export default function Dashboard() {
       .reduce((sum, a) => sum + a.amount, 0) || 0
   , [accountsPayable, today]);
 
-  // Dados para o gráfico de categorias
   const categoryData = useMemo(() => {
     if (!accountsPayable) return [];
     const currentMonthExpenses = accountsPayable.filter(a => isSameMonth(parseISO(a.due_date), today));
     const categories: Record<string, number> = {};
-    
     currentMonthExpenses.forEach(exp => {
       const catName = (exp.expense_categories as any)?.name || "Outros";
       categories[catName] = (categories[catName] || 0) + exp.amount;
     });
-
     return Object.entries(categories).map(([name, value]) => ({ name, value }));
   }, [accountsPayable, today]);
 
-  // Dados para o gráfico mensal (últimos 6 meses)
-  const monthlyData = useMemo(() => {
+  const responsibleData = useMemo(() => {
+    if (!accountsPayable) return [];
+    const currentMonthExpenses = accountsPayable.filter(a => isSameMonth(parseISO(a.due_date), today));
+    const persons: Record<string, number> = {};
+    currentMonthExpenses.forEach(exp => {
+      const personName = (exp.responsible_persons as any)?.name || "Não Atribuído";
+      persons[personName] = (persons[personName] || 0) + exp.amount;
+    });
+    return Object.entries(persons).map(([name, value]) => ({ name, value }));
+  }, [accountsPayable, today]);
+
+  const monthlyExpenseData = useMemo(() => {
     if (!accountsPayable) return [];
     const months = [];
     for (let i = 5; i >= 0; i--) {
@@ -81,6 +89,20 @@ export default function Dashboard() {
     }
     return months;
   }, [accountsPayable, today]);
+
+  const monthlyIncomeData = useMemo(() => {
+    if (!accountsReceivable) return [];
+    const months = [];
+    for (let i = 5; i >= 0; i--) {
+      const monthDate = subMonths(today, i);
+      const monthLabel = format(monthDate, "MMM", { locale: ptBR });
+      const total = accountsReceivable
+        .filter(a => isSameMonth(parseISO(a.receive_date), monthDate))
+        .reduce((sum, a) => sum + a.amount, 0);
+      months.push({ month: monthLabel, total });
+    }
+    return months;
+  }, [accountsReceivable, today]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -112,9 +134,13 @@ export default function Dashboard() {
           </Card>
         </div>
 
+        <div className="grid gap-6 lg:grid-cols-2 mb-6">
+          <MonthlyExpensesChart data={monthlyExpenseData} />
+          <MonthlyIncomeChart data={monthlyIncomeData} />
+        </div>
         <div className="grid gap-6 lg:grid-cols-2">
-          <MonthlyExpensesChart data={monthlyData} />
           <CategoryExpensesChart data={categoryData} />
+          <ResponsiblePersonExpensesChart data={responsibleData} />
         </div>
       </main>
     </div>

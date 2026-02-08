@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2, CheckCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, CheckCircle, RotateCcw, PiggyBank as PiggyIcon } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,13 +10,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { Calendar } from "@/components/ui/calendar";
 import { Tables } from "@/integrations/supabase/types";
 
 type AccountReceivableWithRelations = Tables<'accounts_receivable'> & {
@@ -48,6 +49,9 @@ export default function AccountsReceivable() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountReceivableWithRelations | null>(null);
   const [selectedMonthYear, setSelectedMonthYear] = useState(format(new Date(), "yyyy-MM"));
+  const [showConfirmDateDialog, setShowConfirmDateDialog] = useState(false);
+  const [currentConfirmingAccount, setCurrentConfirmingAccount] = useState<AccountReceivableWithRelations | null>(null);
+  const [selectedReceivedDate, setSelectedReceivedDate] = useState<Date | undefined>(new Date());
 
   const effectiveIds = familyMemberIds.length > 0 ? familyMemberIds : (user?.id ? [user.id] : []);
 
@@ -121,6 +125,15 @@ export default function AccountsReceivable() {
     },
   });
 
+  const { data: banks } = useQuery({
+    queryKey: ["banks"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("banks").select("*").order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
       if (!user?.id) throw new Error("Usuário não autenticado.");
@@ -167,6 +180,81 @@ export default function AccountsReceivable() {
     onError: (error: any) => toast.error("Erro ao salvar: " + error.message),
   });
 
+  const confirmReceivedMutation = useMutation({
+    mutationFn: async ({ account, receivedDate }: { account: AccountReceivableWithRelations; receivedDate: Date }) => {
+      if (!user?.id) throw new Error("Não autenticado");
+      const formattedDate = format(receivedDate, "yyyy-MM-dd");
+
+      if (account.is_generated_fixed_instance) {
+        const { error } = await supabase.from("accounts_receivable").insert({
+          description: account.description,
+          income_type_id: account.income_type_id,
+          receive_date: account.receive_date,
+          installments: account.installments,
+          amount: account.amount,
+          source_id: account.source_id,
+          payer_id: account.payer_id,
+          created_by: user.id,
+          is_fixed: false,
+          responsible_person_id: account.responsible_person_id,
+          received: true,
+          received_date: formattedDate,
+          original_fixed_account_id: account.original_fixed_account_id || account.id,
+        });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("accounts_receivable").update({ 
+          received: true, 
+          received_date: formattedDate 
+        }).eq("id", account.id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
+      toast.success("Recebimento confirmado!");
+      setShowConfirmDateDialog(false);
+    },
+  });
+
+  const reverseReceivedMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("accounts_receivable").update({ 
+        received: false, 
+        received_date: null 
+      }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accounts-receivable"] });
+      toast.success("Recebimento estornado!");
+    },
+  });
+
+  const transferToPiggyBankMutation = useMutation({
+    mutationFn: async (account: AccountReceivableWithRelations) => {
+      if (!user?.id) throw new Error("Não autenticado");
+      
+      const firstBank = banks?.[0];
+      if (!firstBank) throw new Error("Cadastre um banco nas configurações primeiro.");
+
+      const { error } = await supabase.from("piggy_bank_entries").insert({
+        description: `Transferência: ${account.description}`,
+        amount: account.amount,
+        type: "deposit",
+        entry_date: format(new Date(), "yyyy-MM-dd"),
+        user_id: user.id,
+        bank_id: firstBank.id
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["piggy_bank_entries"] });
+      toast.success("Valor transferido para o cofrinho!");
+    },
+    onError: (error: any) => toast.error(error.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("accounts_receivable").delete().eq("id", id);
@@ -180,6 +268,7 @@ export default function AccountsReceivable() {
 
   const processedAccounts = useMemo(() => {
     if (!accounts) return [];
+    const [year, month] = selectedMonthYear.split('-').map(Number);
     const targetMonthDate = parseISO(`${selectedMonthYear}-01`);
 
     return accounts.flatMap(account => {
@@ -191,12 +280,30 @@ export default function AccountsReceivable() {
       if (!account.is_fixed && isSameMonth(dueDate, targetMonthDate) && isSameYear(dueDate, targetMonthDate)) {
         results.push(account);
       } else if (account.is_fixed) {
-        // Lógica simplificada para exibição de fixas no mês selecionado
-        const displayDate = new Date(targetMonthDate.getFullYear(), targetMonthDate.getMonth(), dueDate.getDate());
-        results.push({
-          ...account,
-          receive_date: format(displayDate, "yyyy-MM-dd"),
-        });
+        if (isSameMonth(dueDate, targetMonthDate) && isSameYear(dueDate, targetMonthDate)) {
+          results.push(account);
+        } else if (dueDate <= endOfMonth(targetMonthDate)) {
+          const exists = accounts.find(a => 
+            a.original_fixed_account_id === account.id && 
+            isSameMonth(parseISO(a.receive_date), targetMonthDate) &&
+            isSameYear(parseISO(a.receive_date), targetMonthDate)
+          );
+
+          if (!exists) {
+            const displayDate = new Date(year, month - 1, dueDate.getDate());
+            if (displayDate.getMonth() !== month - 1) displayDate.setDate(0);
+
+            results.push({
+              ...account,
+              id: `temp-${account.id}-${selectedMonthYear}`,
+              receive_date: format(displayDate, "yyyy-MM-dd"),
+              received: false,
+              received_date: null,
+              is_generated_fixed_instance: true,
+              original_fixed_account_id: account.id,
+            });
+          }
+        }
       }
       return results;
     }).sort((a, b) => parseISO(a.receive_date).getTime() - parseISO(b.receive_date).getTime());
@@ -262,7 +369,7 @@ export default function AccountsReceivable() {
           {loadingAccounts ? (
             <div className="col-span-2 text-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div></div>
           ) : processedAccounts.length > 0 ? processedAccounts.map(account => (
-            <Card key={account.id} className={cn("border-l-4 hover:shadow-md transition-shadow", account.received ? "border-income" : "border-muted")}>
+            <Card key={account.id} className={cn("border-l-4 hover:shadow-md transition-shadow", account.received ? "border-income" : "border-destructive")}>
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -273,14 +380,21 @@ export default function AccountsReceivable() {
                       <div><span className="font-medium">Fonte:</span> {account.income_sources?.name || "N/A"}</div>
                       <div><span className="font-medium">Pagador:</span> {account.payers?.name || "N/A"}</div>
                       <div><span className="font-medium">Recebedor:</span> {account.responsible_persons?.name || "N/A"}</div>
+                      <div><span className="font-medium">Parcela:</span> {account.is_fixed ? "Fixo" : `${account.current_installment || 1}/${account.installments || 1}`}</div>
                       {account.received && account.received_date && (
                         <div className="col-span-2 text-income font-medium">Recebido em: {format(parseISO(account.received_date), "dd/MM/yyyy")}</div>
                       )}
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 ml-4">
-                    <Button variant="ghost" size="icon" onClick={() => { setEditingAccount(account); setIsFormOpen(true); }}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(account.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                    {account.received ? (
+                      <Button variant="outline" size="sm" onClick={() => reverseReceivedMutation.mutate(account.id)} className="text-destructive border-destructive hover:bg-destructive/10"><RotateCcw className="h-4 w-4 mr-2" /> Estornar</Button>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={() => { setCurrentConfirmingAccount(account); setShowConfirmDateDialog(true); }} className="text-income border-income hover:bg-income/10"><CheckCircle className="h-4 w-4 mr-2" /> Receber</Button>
+                    )}
+                    <Button variant="outline" size="sm" onClick={() => transferToPiggyBankMutation.mutate(account)} className="text-primary border-primary hover:bg-primary/10"><PiggyIcon className="h-4 w-4 mr-2" /> Cofrinho</Button>
+                    <Button variant="ghost" size="icon" onClick={() => { setEditingAccount(account); setIsFormOpen(true); }} disabled={account.is_generated_fixed_instance}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(account.id)} disabled={account.is_generated_fixed_instance}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                   </div>
                 </div>
               </CardContent>
@@ -288,6 +402,14 @@ export default function AccountsReceivable() {
           )) : <div className="col-span-2 text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">Nenhuma conta encontrada para este mês.</div>}
         </div>
       </div>
+
+      <Dialog open={showConfirmDateDialog} onOpenChange={setShowConfirmDateDialog}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Confirmar Recebimento</DialogTitle></DialogHeader>
+          <div className="py-4 flex justify-center"><Calendar mode="single" selected={selectedReceivedDate} onSelect={setSelectedReceivedDate} locale={ptBR} /></div>
+          <DialogFooter><Button onClick={() => currentConfirmingAccount && selectedReceivedDate && confirmReceivedMutation.mutate({ account: currentConfirmingAccount, receivedDate: selectedReceivedDate })}>Confirmar</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
