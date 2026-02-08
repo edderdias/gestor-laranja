@@ -380,7 +380,7 @@ export default function AccountsPayable() {
                       <div><span className="font-medium">Vencimento:</span> {format(parseISO(account.due_date), "dd/MM/yyyy")}</div>
                       <div><span className="font--medium">Parcelas:</span> {account.current_installment}/{account.installments}</div>
                       <div><span className="font-medium">Valor:</span> R$ {account.amount.toFixed(2)}</div>
-                      <div><span className="font-medium">Valor Total</span></div>
+                      <div><span className="font-medium">Valor Total:</span> R$: {account.amount}</div>
                       <div><span className="font-medium">Categoria:</span> {account.expense_categories?.name || "N/A"}</div>
                       <div><span className="font-medium">Responsável:</span> {account.responsible_persons?.name || "N/A"}</div>
                       {account.paid && account.paid_date && (
