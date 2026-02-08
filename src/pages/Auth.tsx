@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { toast } from "sonner";
 
 export default function Auth() {
   const { signIn, signUp } = useAuth();
@@ -21,12 +22,14 @@ export default function Auth() {
     try {
       if (mode === "signin") {
         await signIn(email, password);
+        toast.success("Login realizado com sucesso!");
       } else {
         const fullName = formData.get("fullName") as string;
         await signUp(email, password, fullName);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Auth error:", error);
+      toast.error(error.message || "Erro na autenticação. Verifique seus dados.");
     } finally {
       setIsLoading(false);
     }

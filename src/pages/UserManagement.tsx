@@ -267,6 +267,16 @@ export default function UserManagement() {
     }
   };
 
+  const handleOpenCreateForm = () => {
+    createForm.reset({
+      email: "",
+      password: "",
+      fullName: "",
+      isFamilyMember: false
+    });
+    setIsCreateFormOpen(true);
+  };
+
   const isRoot = currentUser?.id === familyData.rootId;
 
   return (
@@ -311,7 +321,7 @@ export default function UserManagement() {
 
             <Dialog open={isCreateFormOpen} onOpenChange={setIsCreateFormOpen}>
               <DialogTrigger asChild>
-                <Button variant="default">
+                <Button variant="default" onClick={handleOpenCreateForm}>
                   <UserCheck className="mr-2 h-4 w-4" /> Cadastrar Usuário
                 </Button>
               </DialogTrigger>
@@ -350,7 +360,7 @@ export default function UserManagement() {
 
             <Dialog open={isInviteFormOpen} onOpenChange={setIsInviteFormOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline">
+                <Button variant="outline" onClick={() => inviteForm.reset()}>
                   <UserPlus className="mr-2 h-4 w-4" /> Convidar
                 </Button>
               </DialogTrigger>
