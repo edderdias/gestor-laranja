@@ -28,6 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const location = useLocation();
 
   const fetchFamilyMembers = async (userId: string) => {
+    console.error('Passei ---> ' + userId)
     if (!userId) return;
     try {
       const { data: profile } = await supabase
