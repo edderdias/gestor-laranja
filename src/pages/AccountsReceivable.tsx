@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Plus, Pencil, Trash2, CheckCircle, RotateCcw, PiggyBank as PiggyIcon } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -32,16 +32,29 @@ const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   income_type_id: z.string().min(1, "Tipo de recebimento é obrigatório"),
   receive_date: z.string().min(1, "Data do recebimento é obrigatória"),
-  installments: z.string().optional(),
+  installments: z.string().optional().nullable(),
   amount: z.string().min(1, "Valor é obrigatório"),
   source_id: z.string().min(1, "Fonte de receita é obrigatória"),
-  payer_id: z.string().optional(),
-  new_payer_name: z.string().optional(),
+  payer_id: z.string().optional().nullable(),
+  new_payer_name: z.string().optional().nullable(),
   is_fixed: z.boolean().default(false),
-  responsible_person_id: z.string().optional(),
+  responsible_person_id: z.string().optional().nullable(),
 });
 
 type FormData = z.infer<typeof formSchema>;
+
+const defaultFormValues = {
+  description: "",
+  income_type_id: "",
+  receive_date: format(new Date(), "yyyy-MM-dd"),
+  installments: "1",
+  amount: "",
+  source_id: "",
+  payer_id: "",
+  new_payer_name: "",
+  is_fixed: false,
+  responsible_person_id: null,
+};
 
 export default function AccountsReceivable() {
   const { user, familyData } = useAuth();
@@ -55,33 +68,50 @@ export default function AccountsReceivable() {
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      description: "",
-      income_type_id: "",
-      receive_date: format(new Date(), "yyyy-MM-dd"),
-      installments: "1",
-      amount: "",
-      source_id: "",
-      payer_id: "",
-      new_payer_name: "",
-      is_fixed: false,
-      responsible_person_id: undefined,
-    },
+    defaultValues: defaultFormValues,
   });
 
   const isFixed = form.watch("is_fixed");
   const selectedPayerId = form.watch("payer_id");
 
+  // Efeito para carregar dados no formulário ao editar
+  useEffect(() => {
+    if (editingAccount) {
+      form.reset({
+        description: editingAccount.description,
+        income_type_id: editingAccount.income_type_id,
+        receive_date: editingAccount.receive_date,
+        installments: editingAccount.installments?.toString() || "1",
+        amount: editingAccount.amount.toString(),
+        source_id: editingAccount.source_id,
+        payer_id: editingAccount.payer_id,
+        new_payer_name: "",
+        is_fixed: editingAccount.is_fixed || false,
+        responsible_person_id: editingAccount.responsible_person_id,
+      });
+    } else {
+      form.reset(defaultFormValues);
+    }
+  }, [editingAccount, form]);
+
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
     queryKey: ["accounts-receivable", familyData.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("accounts_receivable")
-        .select("*, income_sources(name), payers(name), income_types(name), responsible_persons(name)")
-        .order("receive_date", { ascending: true });
+        .select("*, income_sources(name), payers(name), income_types(name), responsible_persons(name)");
+      
+      if (familyData.id) {
+        query = query.eq("family_id", familyData.id);
+      } else {
+        query = query.eq("created_by", user?.id);
+      }
+
+      const { data, error } = await query.order("receive_date", { ascending: true });
       if (error) throw error;
       return data as AccountReceivableWithRelations[];
     },
+    enabled: !!user?.id,
   });
 
   const { data: sources } = useQuery({
@@ -339,25 +369,32 @@ export default function AccountsReceivable() {
               <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
               <SelectContent>{monthOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
             </Select>
-            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-              <DialogTrigger asChild><Button onClick={() => setEditingAccount(null)}><Plus className="mr-2 h-4 w-4" /> Nova Conta</Button></DialogTrigger>
+            <Dialog open={isFormOpen} onOpenChange={(open) => {
+              setIsFormOpen(open);
+              if (!open) setEditingAccount(null);
+            }}>
+              <DialogTrigger asChild>
+                <Button onClick={() => { setEditingAccount(null); form.reset(defaultFormValues); }}>
+                  <Plus className="mr-2 h-4 w-4" /> Nova Conta
+                </Button>
+              </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader><DialogTitle>{editingAccount ? "Editar Conta" : "Nova Conta a Receber"}</DialogTitle></DialogHeader>
                 <Form {...form}>
                   <form onSubmit={form.handleSubmit(v => saveMutation.mutate(v))} className="space-y-4">
-                    <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Descrição</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Descrição</FormLabel><FormControl><Input {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>)} />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField control={form.control} name="income_type_id" render={({ field }) => (<FormItem><FormLabel>Tipo</FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{incomeTypes?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
                       <FormField control={form.control} name="is_fixed" render={({ field }) => (<FormItem className="flex items-center justify-between border p-3 rounded-lg"><FormLabel>Conta Fixa</FormLabel><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)} />
                     </div>
-                    <FormField control={form.control} name="receive_date" render={({ field }) => (<FormItem><FormLabel>Data</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={form.control} name="receive_date" render={({ field }) => (<FormItem><FormLabel>Data</FormLabel><FormControl><Input type="date" {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>)} />
                     <div className="grid grid-cols-2 gap-4">
-                      {!isFixed && <FormField control={form.control} name="installments" render={({ field }) => (<FormItem><FormLabel>Parcelas</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />}
-                      <FormField control={form.control} name="amount" render={({ field }) => (<FormItem className={cn(isFixed && "col-span-2")}><FormLabel>Valor</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                      {!isFixed && <FormField control={form.control} name="installments" render={({ field }) => (<FormItem><FormLabel>Parcelas</FormLabel><FormControl><Input type="number" {...field} value={field.value || "1"} /></FormControl><FormMessage /></FormItem>)} />}
+                      <FormField control={form.control} name="amount" render={({ field }) => (<FormItem className={cn(isFixed && "col-span-2")}><FormLabel>Valor</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>)} />
                     </div>
                     <FormField control={form.control} name="source_id" render={({ field }) => (<FormItem><FormLabel>Fonte</FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{sources?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
                     <FormField control={form.control} name="payer_id" render={({ field }) => (<FormItem><FormLabel>Pagador</FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{payers?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}<SelectItem value="new-payer">+ Novo Pagador</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
-                    {selectedPayerId === "new-payer" && <FormField control={form.control} name="new_payer_name" render={({ field }) => (<FormItem><FormLabel>Nome do Novo Pagador</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />}
+                    {selectedPayerId === "new-payer" && <FormField control={form.control} name="new_payer_name" render={({ field }) => (<FormItem><FormLabel>Nome do Novo Pagador</FormLabel><FormControl><Input {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>)} />}
                     <FormField control={form.control} name="responsible_person_id" render={({ field }) => (<FormItem><FormLabel>Recebedor</FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{responsiblePersons?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
                     <DialogFooter><Button type="submit" disabled={saveMutation.isPending}>Salvar</Button></DialogFooter>
                   </form>

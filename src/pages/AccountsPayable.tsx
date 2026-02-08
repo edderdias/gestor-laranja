@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Plus, Pencil, Trash2, CheckCircle, RotateCcw } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -31,17 +31,30 @@ type AccountPayableWithRelations = Tables<'accounts_payable'> & {
 const formSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   payment_type_id: z.string().min(1, "Tipo de pagamento é obrigatório"),
-  card_id: z.string().optional(),
-  purchase_date: z.string().optional(),
+  card_id: z.string().optional().nullable(),
+  purchase_date: z.string().optional().nullable(),
   due_date: z.string().min(1, "Data de vencimento é obrigatória"),
-  installments: z.string().optional(),
+  installments: z.string().optional().nullable(),
   amount: z.string().min(1, "Valor é obrigatório"),
   category_id: z.string().min(1, "Categoria é obrigatória"),
   is_fixed: z.boolean().default(false),
-  responsible_person_id: z.string().optional(),
+  responsible_person_id: z.string().optional().nullable(),
 });
 
 type FormData = z.infer<typeof formSchema>;
+
+const defaultFormValues = {
+  description: "",
+  payment_type_id: "",
+  card_id: null,
+  purchase_date: format(new Date(), "yyyy-MM-dd"),
+  due_date: format(new Date(), "yyyy-MM-dd"),
+  installments: "1",
+  amount: "",
+  category_id: "",
+  is_fixed: false,
+  responsible_person_id: null,
+};
 
 export default function AccountsPayable() {
   const { user, familyData } = useAuth();
@@ -55,21 +68,31 @@ export default function AccountsPayable() {
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      description: "",
-      payment_type_id: "",
-      purchase_date: format(new Date(), "yyyy-MM-dd"),
-      due_date: format(new Date(), "yyyy-MM-dd"),
-      installments: "1",
-      amount: "",
-      category_id: "",
-      is_fixed: false,
-      responsible_person_id: undefined,
-    },
+    defaultValues: defaultFormValues,
   });
 
   const isFixed = form.watch("is_fixed");
   const selectedPaymentTypeId = form.watch("payment_type_id");
+
+  // Efeito para carregar dados no formulário ao editar
+  useEffect(() => {
+    if (editingAccount) {
+      form.reset({
+        description: editingAccount.description,
+        payment_type_id: editingAccount.payment_type_id,
+        card_id: editingAccount.card_id,
+        purchase_date: editingAccount.purchase_date,
+        due_date: editingAccount.due_date,
+        installments: editingAccount.installments?.toString() || "1",
+        amount: editingAccount.amount.toString(),
+        category_id: editingAccount.category_id,
+        is_fixed: editingAccount.is_fixed || false,
+        responsible_person_id: editingAccount.responsible_person_id,
+      });
+    } else {
+      form.reset(defaultFormValues);
+    }
+  }, [editingAccount, form]);
 
   const { data: paymentTypes } = useQuery({
     queryKey: ["payment-types"],
@@ -80,18 +103,26 @@ export default function AccountsPayable() {
     },
   });
 
-  const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name === "cartao")?.id;
+  const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name.toLowerCase().includes("cartao"))?.id;
 
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
     queryKey: ["accounts-payable", familyData.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("accounts_payable")
-        .select("*, expense_categories(name), credit_cards(name), payment_types(name), responsible_persons(name)")
-        .order("due_date", { ascending: true });
+        .select("*, expense_categories(name), credit_cards(name), payment_types(name), responsible_persons(name)");
+      
+      if (familyData.id) {
+        query = query.eq("family_id", familyData.id);
+      } else {
+        query = query.eq("created_by", user?.id);
+      }
+
+      const { data, error } = await query.order("due_date", { ascending: true });
       if (error) throw error;
       return data as AccountPayableWithRelations[];
     },
+    enabled: !!user?.id,
   });
 
   const { data: categories } = useQuery({
@@ -104,12 +135,19 @@ export default function AccountsPayable() {
   });
 
   const { data: creditCards } = useQuery({
-    queryKey: ["credit_cards"],
+    queryKey: ["credit_cards", familyData.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("credit_cards").select("*").order("name");
+      let query = supabase.from("credit_cards").select("*");
+      if (familyData.id) {
+        query = query.eq("family_id", familyData.id);
+      } else {
+        query = query.eq("created_by", user?.id);
+      }
+      const { data, error } = await query.order("name");
       if (error) throw error;
       return data;
     },
+    enabled: !!user?.id,
   });
 
   const { data: responsiblePersons } = useQuery({
@@ -286,13 +324,20 @@ export default function AccountsPayable() {
               <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
               <SelectContent>{monthOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
             </Select>
-            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-              <DialogTrigger asChild><Button onClick={() => setEditingAccount(null)}><Plus className="mr-2 h-4 w-4" /> Nova Conta</Button></DialogTrigger>
+            <Dialog open={isFormOpen} onOpenChange={(open) => {
+              setIsFormOpen(open);
+              if (!open) setEditingAccount(null);
+            }}>
+              <DialogTrigger asChild>
+                <Button onClick={() => { setEditingAccount(null); form.reset(defaultFormValues); }}>
+                  <Plus className="mr-2 h-4 w-4" /> Nova Conta
+                </Button>
+              </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader><DialogTitle>{editingAccount ? "Editar Conta" : "Nova Conta a Pagar"}</DialogTitle></DialogHeader>
                 <Form {...form}>
                   <form onSubmit={form.handleSubmit(v => saveMutation.mutate(v))} className="space-y-4">
-                    <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Descrição</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Descrição</FormLabel><FormControl><Input {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>)} />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField control={form.control} name="payment_type_id" render={({ field }) => (<FormItem><FormLabel>Tipo de Pagamento</FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{paymentTypes?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
                       <FormField control={form.control} name="is_fixed" render={({ field }) => (<FormItem className="flex items-center justify-between border p-3 rounded-lg"><FormLabel>Conta Fixa</FormLabel><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)} />
@@ -301,12 +346,12 @@ export default function AccountsPayable() {
                       <FormField control={form.control} name="card_id" render={({ field }) => (<FormItem><FormLabel>Cartão</FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione o cartão" /></SelectTrigger></FormControl><SelectContent>{creditCards?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
                     )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField control={form.control} name="purchase_date" render={({ field }) => (<FormItem><FormLabel>Data da Compra</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                      <FormField control={form.control} name="due_date" render={({ field }) => (<FormItem><FormLabel>Vencimento</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                      <FormField control={form.control} name="purchase_date" render={({ field }) => (<FormItem><FormLabel>Data da Compra</FormLabel><FormControl><Input type="date" {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>)} />
+                      <FormField control={form.control} name="due_date" render={({ field }) => (<FormItem><FormLabel>Vencimento</FormLabel><FormControl><Input type="date" {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>)} />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      {!isFixed && <FormField control={form.control} name="installments" render={({ field }) => (<FormItem><FormLabel>Parcelas</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />}
-                      <FormField control={form.control} name="amount" render={({ field }) => (<FormItem className={cn(isFixed && "col-span-2")}><FormLabel>Valor</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                      {!isFixed && <FormField control={form.control} name="installments" render={({ field }) => (<FormItem><FormLabel>Parcelas</FormLabel><FormControl><Input type="number" {...field} value={field.value || "1"} /></FormControl><FormMessage /></FormItem>)} />}
+                      <FormField control={form.control} name="amount" render={({ field }) => (<FormItem className={cn(isFixed && "col-span-2")}><FormLabel>Valor</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>)} />
                     </div>
                     <FormField control={form.control} name="category_id" render={({ field }) => (<FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{categories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
                     <FormField control={form.control} name="responsible_person_id" render={({ field }) => (<FormItem><FormLabel>Responsável</FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{responsiblePersons?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
