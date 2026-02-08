@@ -113,6 +113,7 @@ export default function CreditCards() {
 
   const processedTransactions = useMemo(() => {
     if (!rawTransactions) return [];
+    const [year, month] = selectedMonthYear.split('-').map(Number);
     const targetMonthDate = parseISO(`${selectedMonthYear}-01`);
 
     return rawTransactions.flatMap(account => {
@@ -135,9 +136,15 @@ export default function CreditCards() {
           );
 
           if (!exists) {
+            const displayDate = new Date(year, month - 1, dueDate.getDate());
+            if (displayDate.getMonth() !== month - 1) displayDate.setDate(0);
+            const formattedDisplayDate = format(displayDate, "yyyy-MM-dd");
+
             results.push({
               ...account,
               id: `temp-${account.id}-${selectedMonthYear}`,
+              due_date: formattedDisplayDate,
+              purchase_date: account.purchase_date || formattedDisplayDate,
               is_generated_fixed_instance: true,
               original_fixed_account_id: account.id,
             });
@@ -161,6 +168,7 @@ export default function CreditCards() {
         description: values.description,
         amount: parseFloat(values.amount),
         due_date: values.due_date,
+        purchase_date: values.due_date, // Usando a mesma data para compra por padrão
         category_id: values.category_id,
         responsible_person_id: values.responsible_person_id,
         card_id: selectedCard.id,

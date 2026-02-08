@@ -1,12 +1,12 @@
 import React from 'react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Tables } from "@/integrations/supabase/types";
 
-type CreditCardTransactionWithGeneratedFlag = Tables<'credit_card_transactions'> & {
+type CreditCardTransactionWithGeneratedFlag = Tables<'accounts_payable'> & {
   is_generated_fixed_instance?: boolean;
-  expense_categories?: Tables<'expense_categories'>;
-  responsible_persons?: Tables<'responsible_persons'>;
+  expense_categories?: { name: string } | null;
+  responsible_persons?: { name: string } | null;
 };
 
 interface PrintStatementProps {
@@ -24,12 +24,10 @@ export const PrintStatementComponent = React.forwardRef<HTMLDivElement, PrintSta
 }, ref) => {
   const formattedMonthYear = format(parseISO(`${monthYear}-01`), "MMMM yyyy", { locale: ptBR });
 
-  // Calculate total amount for the general statement
   const totalGeneralAmount = transactions.reduce((sum, transaction) => {
     return sum + transaction.amount;
   }, 0);
 
-  // Group transactions by responsible person for 'byResponsiblePerson' print type
   const groupedTransactions = React.useMemo(() => {
     if (printType !== 'byResponsiblePerson') return {};
     return transactions.reduce((acc, transaction) => {
@@ -42,8 +40,14 @@ export const PrintStatementComponent = React.forwardRef<HTMLDivElement, PrintSta
     }, {} as Record<string, CreditCardTransactionWithGeneratedFlag[]>);
   }, [transactions, printType]);
 
+  const formatDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "N/A";
+    const date = parseISO(dateStr);
+    return isValid(date) ? format(date, "dd/MM/yyyy") : "N/A";
+  };
+
   return (
-    <div ref={ref} className="p-6 print-only"> {/* 'print-only' class will control visibility via CSS */}
+    <div ref={ref} className="p-6 print-only">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Extrato do Cartão: {cardName}</h1>
         <h2 className="text-xl font-semibold">Total Geral: R$ {totalGeneralAmount.toFixed(2)}</h2>
@@ -65,20 +69,19 @@ export const PrintStatementComponent = React.forwardRef<HTMLDivElement, PrintSta
           <tbody>
             {transactions.map((transaction) => (
               <tr key={transaction.id} className="border-b border-gray-200 last:border-b-0">
-                <td className="py-2">{format(new Date(transaction.purchase_date), "dd/MM/yyyy")}</td>
+                <td className="py-2">{formatDate(transaction.purchase_date || transaction.due_date)}</td>
                 <td className="py-2">{transaction.description}</td>
-                <td className="py-2">{(transaction.expense_categories as Tables<'expense_categories'>)?.name || "N/A"}</td>
-                <td className="py-2">{(transaction.responsible_persons as Tables<'responsible_persons'>)?.name || "N/A"}</td>
+                <td className="py-2">{transaction.expense_categories?.name || "N/A"}</td>
+                <td className="py-2">{transaction.responsible_persons?.name || "N/A"}</td>
                 <td className="py-2 text-right">R$ {transaction.amount.toFixed(2)}</td>
                 <td className="py-2 text-right">
-                  {transaction.is_fixed ? "Fixo" : `${transaction.current_installment}/${transaction.installments}`}
+                  {transaction.is_fixed ? "Fixo" : `${transaction.current_installment || 1}/${transaction.installments || 1}`}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       ) : (
-        // printType === 'byResponsiblePerson'
         <div>
           {Object.entries(groupedTransactions).map(([personName, personTransactions]) => (
             <div key={personName} className="mb-8">
@@ -96,12 +99,12 @@ export const PrintStatementComponent = React.forwardRef<HTMLDivElement, PrintSta
                 <tbody>
                   {personTransactions.map((transaction) => (
                     <tr key={transaction.id} className="border-b border-gray-200 last:border-b-0">
-                      <td className="py-2">{format(new Date(transaction.purchase_date), "dd/MM/yyyy")}</td>
+                      <td className="py-2">{formatDate(transaction.purchase_date || transaction.due_date)}</td>
                       <td className="py-2">{transaction.description}</td>
-                      <td className="py-2">{(transaction.expense_categories as Tables<'expense_categories'>)?.name || "N/A"}</td>
+                      <td className="py-2">{transaction.expense_categories?.name || "N/A"}</td>
                       <td className="py-2 text-right">R$ {transaction.amount.toFixed(2)}</td>
                       <td className="py-2 text-right">
-                        {transaction.is_fixed ? "Fixo" : `${transaction.current_installment}/${transaction.installments}`}
+                        {transaction.is_fixed ? "Fixo" : `${transaction.current_installment || 1}/${transaction.installments || 1}`}
                       </td>
                     </tr>
                   ))}
