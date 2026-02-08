@@ -168,7 +168,7 @@ export default function CreditCards() {
         description: values.description,
         amount: parseFloat(values.amount),
         due_date: values.due_date,
-        purchase_date: values.due_date, // Usando a mesma data para compra por padrão
+        purchase_date: values.due_date,
         category_id: values.category_id,
         responsible_person_id: values.responsible_person_id,
         card_id: selectedCard.id,
@@ -412,22 +412,25 @@ export default function CreditCards() {
 
       {/* Dialog de Extrato para Impressão */}
       <Dialog open={isPrintDialogOpen} onOpenChange={setIsPrintDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Extrato do Cartão</DialogTitle>
-          </DialogHeader>
-          <div className="p-4 bg-white border rounded-md">
-            <PrintStatementComponent 
-              ref={printRef}
-              cardName={selectedCard?.name || ""}
-              monthYear={selectedMonthYear}
-              transactions={cardStats[selectedCard?.id]?.transactions || []}
-              printType="general"
-            />
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto p-0 border-none bg-slate-100">
+          <div className="sticky top-0 z-10 flex justify-between items-center p-4 bg-white border-b shadow-sm">
+            <h2 className="font-bold text-slate-700">Visualização do Extrato</h2>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setIsPrintDialogOpen(false)}>Fechar</Button>
+              <Button size="sm" onClick={handlePrint} className="bg-red-600 hover:bg-red-700">
+                <FileText className="mr-2 h-4 w-4" /> Imprimir / PDF
+              </Button>
+            </div>
           </div>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setIsPrintDialogOpen(false)}>Fechar</Button>
-            <Button onClick={handlePrint}>Imprimir PDF</Button>
+          <div className="p-8 flex justify-center">
+            <div className="shadow-2xl border border-slate-200 rounded-sm overflow-hidden">
+              <PrintStatementComponent 
+                ref={printRef}
+                cardName={selectedCard?.name || ""}
+                monthYear={selectedMonthYear}
+                transactions={cardStats[selectedCard?.id]?.transactions || []}
+              />
+            </div>
           </div>
         </DialogContent>
       </Dialog>
