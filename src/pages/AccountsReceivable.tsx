@@ -310,7 +310,16 @@ export default function AccountsReceivable() {
   }, [accounts, selectedMonthYear]);
 
   const totalReceived = processedAccounts.filter(a => a.received).reduce((sum, a) => sum + a.amount, 0);
-  const totalPending = processedAccounts.filter(a => !a.received).reduce((sum, a) => sum + a.amount, 0);
+  const totalForecast = processedAccounts.reduce((sum, a) => sum + a.amount, 0);
+
+  const receivedByPerson = useMemo(() => {
+    const totals: Record<string, number> = {};
+    processedAccounts.filter(a => a.received).forEach(a => {
+      const name = a.responsible_persons?.name || "Não Atribuído";
+      totals[name] = (totals[name] || 0) + a.amount;
+    });
+    return Object.entries(totals);
+  }, [processedAccounts]);
 
   const monthOptions = useMemo(() => {
     const options = [];
@@ -360,11 +369,38 @@ export default function AccountsReceivable() {
           </div>
         </div>
 
+        {/* Resumo conforme Imagem 2 */}
         <div className="grid gap-6 md:grid-cols-2 mb-8">
-          <Card><CardHeader><CardTitle>Total Recebido</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-income">R$ {totalReceived.toFixed(2)}</div></CardContent></Card>
-          <Card><CardHeader><CardTitle>Previsão Pendente</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-muted-foreground">R$ {totalPending.toFixed(2)}</div></CardContent></Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-lg font-semibold">Resumo Total</CardTitle>
+                <span className="text-xs text-muted-foreground">Previsão do Mês: <span className="text-income font-bold">R$ {totalForecast.toFixed(2)}</span></span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-income">Total Recebido: R$ {totalReceived.toFixed(2)}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-semibold">Recebido por Recebedor</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-1">
+                {receivedByPerson.map(([name, amount]) => (
+                  <div key={name} className="flex justify-between text-sm">
+                    <span>{name}:</span>
+                    <span className="text-income font-medium">R$ {amount.toFixed(2)}</span>
+                  </div>
+                ))}
+                {receivedByPerson.length === 0 && <p className="text-sm text-muted-foreground">Nenhum recebimento este mês.</p>}
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
+        {/* Cards de Lançamento conforme Imagem 2 */}
         <div className="grid gap-4 md:grid-cols-2">
           {loadingAccounts ? (
             <div className="col-span-2 text-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div></div>
@@ -373,28 +409,37 @@ export default function AccountsReceivable() {
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h3 className="font-semibold text-lg mb-2">{account.description}</h3>
-                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                      <div><span className="font-medium">Data:</span> {format(parseISO(account.receive_date), "dd/MM/yyyy")}</div>
-                      <div><span className="font-medium">Valor:</span> R$ {account.amount.toFixed(2)}</div>
-                      <div><span className="font-medium">Fonte:</span> {account.income_sources?.name || "N/A"}</div>
-                      <div><span className="font-medium">Pagador:</span> {account.payers?.name || "N/A"}</div>
-                      <div><span className="font-medium">Recebedor:</span> {account.responsible_persons?.name || "N/A"}</div>
-                      <div><span className="font-medium">Parcela:</span> {account.is_fixed ? "Fixo" : `${account.current_installment || 1}/${account.installments || 1}`}</div>
-                      {account.received && account.received_date && (
-                        <div className="col-span-2 text-income font-medium">Recebido em: {format(parseISO(account.received_date), "dd/MM/yyyy")}</div>
-                      )}
+                    <h3 className="font-bold text-lg mb-4">{account.description}</h3>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                      <div className="space-y-1">
+                        <p><span className="text-muted-foreground">Tipo:</span> {account.income_types?.name || "N/A"}</p>
+                        <p><span className="text-muted-foreground">Valor da Parcela:</span> <span className="text-income font-bold">R$ {account.amount.toFixed(2)}</span></p>
+                        <p><span className="text-muted-foreground">Fonte:</span> {account.income_sources?.name || "N/A"}</p>
+                        <p><span className="text-muted-foreground">Recebedor:</span> {account.responsible_persons?.name || "N/A"}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p><span className="text-muted-foreground">Recebimento:</span> {format(parseISO(account.receive_date), "dd/MM/yyyy")}</p>
+                        <p><span className="text-muted-foreground">Valor Total:</span> <span className="text-income font-bold">R$ {account.amount.toFixed(2)}</span></p>
+                        <p><span className="text-muted-foreground">Pagador:</span> {account.payers?.name || "N/A"}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex flex-col gap-2 ml-4">
-                    {account.received ? (
-                      <Button variant="outline" size="sm" onClick={() => reverseReceivedMutation.mutate(account.id)} className="text-destructive border-destructive hover:bg-destructive/10"><RotateCcw className="h-4 w-4 mr-2" /> Estornar</Button>
-                    ) : (
-                      <Button variant="outline" size="sm" onClick={() => { setCurrentConfirmingAccount(account); setShowConfirmDateDialog(true); }} className="text-income border-income hover:bg-income/10"><CheckCircle className="h-4 w-4 mr-2" /> Receber</Button>
+                    {account.received && account.received_date && (
+                      <div className="mt-4 flex items-center gap-1 text-income font-medium text-sm">
+                        <CheckCircle className="h-4 w-4" /> Recebido em: {format(parseISO(account.received_date), "dd/MM/yyyy")}
+                      </div>
                     )}
-                    <Button variant="outline" size="sm" onClick={() => transferToPiggyBankMutation.mutate(account)} className="text-primary border-primary hover:bg-primary/10"><PiggyIcon className="h-4 w-4 mr-2" /> Cofrinho</Button>
-                    <Button variant="ghost" size="icon" onClick={() => { setEditingAccount(account); setIsFormOpen(true); }} disabled={account.is_generated_fixed_instance}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(account.id)} disabled={account.is_generated_fixed_instance}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                  </div>
+                  <div className="flex flex-col gap-3 ml-4">
+                    {account.received ? (
+                      <Button variant="outline" size="sm" onClick={() => reverseReceivedMutation.mutate(account.id)} className="text-destructive border-destructive hover:bg-destructive/10 h-8"><RotateCcw className="h-4 w-4 mr-2" /> Estornar</Button>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={() => { setCurrentConfirmingAccount(account); setShowConfirmDateDialog(true); }} className="text-income border-income hover:bg-income/10 h-8"><CheckCircle className="h-4 w-4 mr-2" /> Receber</Button>
+                    )}
+                    <div className="flex flex-col items-center gap-4 mt-2">
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setEditingAccount(account); setIsFormOpen(true); }} disabled={account.is_generated_fixed_instance}><Pencil className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600" onClick={() => transferToPiggyBankMutation.mutate(account)}><PiggyIcon className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => deleteMutation.mutate(account.id)} disabled={account.is_generated_fixed_instance}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
                   </div>
                 </div>
               </CardContent>
