@@ -87,20 +87,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
 
     const initialize = async () => {
-      const { data: { session: initialSession } } = await supabase.auth.getSession();
-      
-      if (!mounted) return;
-
-      if (initialSession) {
-        setSession(initialSession);
-        setUser(initialSession.user);
-        await fetchFamilyData(initialSession.user.id);
+      try {
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
         
-        if (location.pathname === '/auth' || location.pathname === '/') {
-          navigate('/dashboard', { replace: true });
+        if (!mounted) return;
+
+        if (initialSession) {
+          setSession(initialSession);
+          setUser(initialSession.user);
+          // Carrega dados da família em segundo plano para não travar o loading inicial
+          fetchFamilyData(initialSession.user.id);
+          
+          if (location.pathname === '/auth' || location.pathname === '/') {
+            navigate('/dashboard', { replace: true });
+          }
         }
+      } catch (error) {
+        console.error("Erro na inicialização da auth:", error);
+      } finally {
+        if (mounted) setLoading(false);
       }
-      setLoading(false);
     };
 
     initialize();
@@ -108,12 +114,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       if (!mounted) return;
 
-      setSession(currentSession);
       const currentUser = currentSession?.user ?? null;
+      setSession(currentSession);
       setUser(currentUser);
 
       if (currentUser) {
-        await fetchFamilyData(currentUser.id);
+        fetchFamilyData(currentUser.id);
         if (location.pathname === '/auth') {
           navigate('/dashboard', { replace: true });
         }
@@ -124,6 +130,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           navigate('/auth', { replace: true });
         }
       }
+      
+      // Garante que o loading seja falso após qualquer mudança de estado
       setLoading(false);
     });
 
@@ -131,8 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-    // Removido location.pathname e navigate das dependências para evitar loops
-  }, [fetchFamilyData]);
+  }, [fetchFamilyData]); // Removido navigate e location para evitar loops
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -150,7 +157,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     setLoading(true);
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      setLoading(false);
+      navigate('/auth', { replace: true });
+    }
   };
 
   return (
