@@ -11,21 +11,52 @@ import { ptBR } from "date-fns/locale";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { PrintStatementComponent } from "@/components/PrintStatementComponent";
 import { useReactToPrint } from "react-to-print";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+
+const purchaseSchema = z.object({
+  description: z.string().min(1, "Descrição é obrigatória"),
+  amount: z.string().min(1, "Valor é obrigatório"),
+  due_date: z.string().min(1, "Vencimento é obrigatório"),
+  category_id: z.string().min(1, "Categoria é obrigatória"),
+  responsible_person_id: z.string().min(1, "Responsável é obrigatório"),
+  installments: z.string().default("1"),
+  is_fixed: z.boolean().default(false),
+});
+
+type PurchaseFormData = z.infer<typeof purchaseSchema>;
 
 export default function CreditCards() {
   const { familyData, user } = useAuth();
   const queryClient = useQueryClient();
   const [selectedMonthYear, setSelectedMonthYear] = useState(format(new Date(), "yyyy-MM"));
   const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
-  const [selectedCardForPrint, setSelectedCardForPrint] = useState<any>(null);
+  const [isPurchaseDialogOpen, setIsPurchaseDialogOpen] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<any>(null);
   const printRef = useRef<HTMLDivElement>(null);
+
+  const purchaseForm = useForm<PurchaseFormData>({
+    resolver: zodResolver(purchaseSchema),
+    defaultValues: {
+      description: "",
+      amount: "",
+      due_date: format(new Date(), "yyyy-MM-dd"),
+      category_id: "",
+      responsible_person_id: "",
+      installments: "1",
+      is_fixed: false,
+    },
+  });
 
   const handlePrint = useReactToPrint({
     content: () => printRef.current,
-    documentTitle: `Extrato_${selectedCardForPrint?.name}_${selectedMonthYear}`,
+    documentTitle: `Extrato_${selectedCard?.name}_${selectedMonthYear}`,
   });
 
   const { data: cards, isLoading: loadingCards } = useQuery({
@@ -41,20 +72,45 @@ export default function CreditCards() {
     enabled: !!user?.id,
   });
 
+  const { data: categories } = useQuery({
+    queryKey: ["expense-categories"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("expense_categories").select("*").order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: responsiblePersons } = useQuery({
+    queryKey: ["responsible-persons"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("responsible_persons").select("*").order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const { data: rawTransactions } = useQuery({
     queryKey: ["credit_card_transactions_raw", familyData.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("accounts_payable")
         .select("*, responsible_persons(name), expense_categories(name)")
         .not("card_id", "is", null);
+      
+      if (familyData.id) {
+        query = query.eq("family_id", familyData.id);
+      } else {
+        query = query.eq("created_by", user?.id);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
     enabled: !!user?.id,
   });
 
-  // Lógica de projeção idêntica à da página de Contas a Pagar
   const processedTransactions = useMemo(() => {
     if (!rawTransactions) return [];
     const targetMonthDate = parseISO(`${selectedMonthYear}-01`);
@@ -65,16 +121,13 @@ export default function CreditCards() {
 
       const results: any[] = [];
 
-      // Se não for fixa, só aparece no mês do vencimento
       if (!account.is_fixed && isSameMonth(dueDate, targetMonthDate) && isSameYear(dueDate, targetMonthDate)) {
         results.push(account);
       } 
-      // Se for fixa, projetamos para o mês selecionado
       else if (account.is_fixed) {
         if (isSameMonth(dueDate, targetMonthDate) && isSameYear(dueDate, targetMonthDate)) {
           results.push(account);
         } else if (dueDate <= endOfMonth(targetMonthDate)) {
-          // Verifica se já existe uma instância paga/específica para este mês
           const exists = rawTransactions.find(a => 
             a.original_fixed_account_id === account.id && 
             isSameMonth(parseISO(a.due_date), targetMonthDate) &&
@@ -94,6 +147,41 @@ export default function CreditCards() {
       return results;
     });
   }, [rawTransactions, selectedMonthYear]);
+
+  const savePurchaseMutation = useMutation({
+    mutationFn: async (values: PurchaseFormData) => {
+      if (!user?.id || !selectedCard) throw new Error("Não autenticado ou cartão não selecionado");
+      
+      const { data: paymentTypes } = await supabase.from("payment_types").select("id").ilike("name", "%cartao%").limit(1);
+      const cardPaymentTypeId = paymentTypes?.[0]?.id;
+
+      if (!cardPaymentTypeId) throw new Error("Tipo de pagamento 'Cartão' não encontrado.");
+
+      const { error } = await supabase.from("accounts_payable").insert({
+        description: values.description,
+        amount: parseFloat(values.amount),
+        due_date: values.due_date,
+        category_id: values.category_id,
+        responsible_person_id: values.responsible_person_id,
+        card_id: selectedCard.id,
+        payment_type_id: cardPaymentTypeId,
+        installments: values.is_fixed ? 1 : parseInt(values.installments),
+        is_fixed: values.is_fixed,
+        created_by: user.id,
+        family_id: familyData.id,
+        expense_type: values.is_fixed ? 'fixa' : 'variavel',
+      });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["credit_card_transactions_raw"] });
+      toast.success("Compra lançada com sucesso!");
+      setIsPurchaseDialogOpen(false);
+      purchaseForm.reset();
+    },
+    onError: (error: any) => toast.error("Erro ao lançar compra: " + error.message),
+  });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -147,8 +235,13 @@ export default function CreditCards() {
   }, [processedTransactions]);
 
   const openPrintDialog = (card: any) => {
-    setSelectedCardForPrint(card);
+    setSelectedCard(card);
     setIsPrintDialogOpen(true);
+  };
+
+  const openPurchaseDialog = (card: any) => {
+    setSelectedCard(card);
+    setIsPurchaseDialogOpen(true);
   };
 
   return (
@@ -242,7 +335,7 @@ export default function CreditCards() {
                       <Button variant="outline" size="sm" className="text-slate-600 border-slate-200" onClick={() => openPrintDialog(card)}>
                         <FileText className="mr-2 h-4 w-4" /> Ver Extrato
                       </Button>
-                      <Button variant="outline" size="sm" className="text-slate-600 border-slate-200" onClick={() => toast.info("Lançar compra em breve")}>
+                      <Button variant="outline" size="sm" className="text-slate-600 border-slate-200" onClick={() => openPurchaseDialog(card)}>
                         <ShoppingCart className="mr-2 h-4 w-4" /> Lançar Compra
                       </Button>
                     </div>
@@ -257,7 +350,6 @@ export default function CreditCards() {
           </div>
         )}
 
-        {/* Seção de Gastos por Responsável */}
         <Card className="bg-white border-slate-100 shadow-sm">
           <CardHeader>
             <CardTitle className="text-xl font-bold text-slate-800">Gastos por Responsável (Mês)</CardTitle>
@@ -280,6 +372,36 @@ export default function CreditCards() {
         </Card>
       </div>
 
+      {/* Dialog de Lançamento de Compra */}
+      <Dialog open={isPurchaseDialogOpen} onOpenChange={setIsPurchaseDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Lançar Compra - {selectedCard?.name}</DialogTitle>
+          </DialogHeader>
+          <Form {...purchaseForm}>
+            <form onSubmit={purchaseForm.handleSubmit(v => savePurchaseMutation.mutate(v))} className="space-y-4">
+              <FormField control={purchaseForm.control} name="description" render={({ field }) => (<FormItem><FormLabel>Descrição</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={purchaseForm.control} name="amount" render={({ field }) => (<FormItem><FormLabel>Valor</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={purchaseForm.control} name="due_date" render={({ field }) => (<FormItem><FormLabel>Vencimento</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>)} />
+              </div>
+              <FormField control={purchaseForm.control} name="category_id" render={({ field }) => (<FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{categories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+              <FormField control={purchaseForm.control} name="responsible_person_id" render={({ field }) => (<FormItem><FormLabel>Responsável</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{responsiblePersons?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+              <div className="flex items-center justify-between border p-3 rounded-lg">
+                <FormLabel>Compra Fixa</FormLabel>
+                <FormField control={purchaseForm.control} name="is_fixed" render={({ field }) => (<FormControl><Input type="checkbox" className="h-4 w-4" checked={field.value} onChange={e => field.onChange(e.target.checked)} /></FormControl>)} />
+              </div>
+              {!purchaseForm.watch("is_fixed") && (
+                <FormField control={purchaseForm.control} name="installments" render={({ field }) => (<FormItem><FormLabel>Parcelas</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />
+              )}
+              <DialogFooter>
+                <Button type="submit" disabled={savePurchaseMutation.isPending}>Salvar Compra</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
       {/* Dialog de Extrato para Impressão */}
       <Dialog open={isPrintDialogOpen} onOpenChange={setIsPrintDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -289,9 +411,9 @@ export default function CreditCards() {
           <div className="p-4 bg-white border rounded-md">
             <PrintStatementComponent 
               ref={printRef}
-              cardName={selectedCardForPrint?.name || ""}
+              cardName={selectedCard?.name || ""}
               monthYear={selectedMonthYear}
-              transactions={cardStats[selectedCardForPrint?.id]?.transactions || []}
+              transactions={cardStats[selectedCard?.id]?.transactions || []}
               printType="general"
             />
           </div>
