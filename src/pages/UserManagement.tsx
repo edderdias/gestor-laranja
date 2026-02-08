@@ -15,7 +15,6 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Pencil, Trash2, UserPlus, UserCheck, Users, Link as LinkIcon, Copy, AlertTriangle } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 type Profile = Tables<'profiles'> & {
   email?: string;
@@ -72,7 +71,6 @@ export default function UserManagement() {
   const { data: users, isLoading: isLoadingUsers } = useQuery({
     queryKey: ["users", familyData.id, currentUser?.id],
     queryFn: async () => {
-      // Se tem família, busca membros da família. Se não, busca quem ele convidou.
       let query = supabase.from("profiles").select("*");
       
       if (familyData.id) {
@@ -84,7 +82,6 @@ export default function UserManagement() {
       const { data, error } = await query;
       if (error) throw error;
       
-      // Adiciona o próprio usuário na lista se não estiver nela
       const list = data as Profile[];
       const hasMe = list.some(u => u.id === currentUser?.id);
       if (!hasMe && currentUser) {
@@ -141,14 +138,14 @@ export default function UserManagement() {
       
       const cleanCode = data.familyCode.trim().toUpperCase();
 
-      // Busca na tabela FAMILIES e não em PROFILES
       const { data: family, error: searchError } = await supabase
         .from("families")
         .select("id")
         .eq("code", cleanCode)
         .maybeSingle();
 
-      if (searchError || !family) {
+      if (searchError) throw searchError;
+      if (!family) {
         throw new Error("Código de família inválido ou não encontrado.");
       }
 
@@ -172,7 +169,6 @@ export default function UserManagement() {
     mutationFn: async (data: z.infer<typeof createSchema>) => {
       if (!currentUser?.id) throw new Error("Não autenticado");
 
-      // Se o usuário não tem família, cria uma padrão antes de cadastrar o membro
       let currentFamilyId = familyData.id;
       if (!currentFamilyId) {
         const newFamily = await createFamilyMutation.mutateAsync({ name: `Família de ${currentUser.email?.split('@')[0]}` });
@@ -195,7 +191,6 @@ export default function UserManagement() {
       
       const result = await response.json();
       
-      // Vincula o novo usuário à família
       if (currentFamilyId && result.user?.id) {
         await supabase
           .from("profiles")
