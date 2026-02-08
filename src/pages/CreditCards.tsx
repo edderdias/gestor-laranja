@@ -122,9 +122,13 @@ export default function CreditCards() {
 
       const results: any[] = [];
 
-      if (!account.is_fixed && isSameMonth(dueDate, targetMonthDate) && isSameYear(dueDate, targetMonthDate)) {
-        results.push(account);
+      // 1. Transações normais (não fixas, 1 parcela)
+      if (!account.is_fixed && (account.installments || 1) === 1) {
+        if (isSameMonth(dueDate, targetMonthDate) && isSameYear(dueDate, targetMonthDate)) {
+          results.push(account);
+        }
       } 
+      // 2. Transações fixas
       else if (account.is_fixed) {
         if (isSameMonth(dueDate, targetMonthDate) && isSameYear(dueDate, targetMonthDate)) {
           results.push(account);
@@ -142,7 +146,7 @@ export default function CreditCards() {
 
             results.push({
               ...account,
-              id: `temp-${account.id}-${selectedMonthYear}`,
+              id: `temp-fixed-${account.id}-${selectedMonthYear}`,
               due_date: formattedDisplayDate,
               purchase_date: account.purchase_date || formattedDisplayDate,
               is_generated_fixed_instance: true,
@@ -151,6 +155,25 @@ export default function CreditCards() {
           }
         }
       }
+      // 3. Transações parceladas
+      else if ((account.installments || 1) > 1) {
+        const totalInstallments = account.installments || 1;
+        
+        for (let i = 0; i < totalInstallments; i++) {
+          const installmentDate = addMonths(dueDate, i);
+          if (isSameMonth(installmentDate, targetMonthDate) && isSameYear(installmentDate, targetMonthDate)) {
+            results.push({
+              ...account,
+              id: `temp-inst-${account.id}-${i}-${selectedMonthYear}`,
+              due_date: format(installmentDate, "yyyy-MM-dd"),
+              current_installment: i + 1,
+              is_generated_installment_instance: true,
+            });
+            break;
+          }
+        }
+      }
+      
       return results;
     });
   }, [rawTransactions, selectedMonthYear]);
