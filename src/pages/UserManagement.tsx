@@ -311,14 +311,16 @@ export default function UserManagement() {
                     <p className="text-xs text-muted-foreground">{isOwner ? "Você é o dono desta família." : "Você é membro desta família."}</p>
                   </div>
                   
-                  <div className="pt-4 border-t">
-                    <p className="text-sm font-medium mb-2">Código de Compartilhamento:</p>
-                    <div className="flex gap-2">
-                      <Input value={familyData.code || ""} readOnly className="bg-muted font-mono text-lg text-center tracking-widest" />
-                      <Button variant="outline" size="icon" onClick={copyFamilyCode}><Copy className="h-4 w-4" /></Button>
+                  {isOwner && (
+                    <div className="pt-4 border-t">
+                      <p className="text-sm font-medium mb-2">Código de Compartilhamento:</p>
+                      <div className="flex gap-2">
+                        <Input value={familyData.code || ""} readOnly className="bg-muted font-mono text-lg text-center tracking-widest" />
+                        <Button variant="outline" size="icon" onClick={copyFamilyCode}><Copy className="h-4 w-4" /></Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">Envie este código para outros usuários se vincularem à sua família.</p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">Envie este código para outros usuários se vincularem à sua família.</p>
-                  </div>
+                  )}
                 </div>
               )}
             </CardContent>
