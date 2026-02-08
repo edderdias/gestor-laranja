@@ -111,7 +111,7 @@ export default function AccountsPayable() {
       let query = supabase
         .from("accounts_payable")
         .select("*, expense_categories(name), credit_cards(name), payment_types(name), responsible_persons(name)");
-
+      
       if (familyData.id) {
         query = query.eq("family_id", familyData.id);
       } else {
@@ -162,7 +162,7 @@ export default function AccountsPayable() {
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
       if (!user?.id) throw new Error("Não autenticado");
-
+      
       const accountData = {
         description: values.description,
         payment_type_id: values.payment_type_id,
@@ -219,9 +219,9 @@ export default function AccountsPayable() {
         });
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("accounts_payable").update({
-          paid: true,
-          paid_date: formattedDate
+        const { error } = await supabase.from("accounts_payable").update({ 
+          paid: true, 
+          paid_date: formattedDate 
         }).eq("id", account.id);
         if (error) throw error;
       }
@@ -235,9 +235,9 @@ export default function AccountsPayable() {
 
   const reversePaidMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("accounts_payable").update({
-        paid: false,
-        paid_date: null
+      const { error } = await supabase.from("accounts_payable").update({ 
+        paid: false, 
+        paid_date: null 
       }).eq("id", id);
       if (error) throw error;
     },
@@ -275,8 +275,8 @@ export default function AccountsPayable() {
         if (isSameMonth(dueDate, targetMonthDate) && isSameYear(dueDate, targetMonthDate)) {
           results.push(account);
         } else if (dueDate <= endOfMonth(targetMonthDate)) {
-          const exists = accounts.find(a =>
-            a.original_fixed_account_id === account.id &&
+          const exists = accounts.find(a => 
+            a.original_fixed_account_id === account.id && 
             isSameMonth(parseISO(a.due_date), targetMonthDate) &&
             isSameYear(parseISO(a.due_date), targetMonthDate)
           );
@@ -315,115 +315,100 @@ export default function AccountsPayable() {
   }, []);
 
   return (
-    <div className= "min-h-screen bg-background" >
-    <div className="container mx-auto px-4 py-4" >
-      <div className="flex items-center justify-between flex-wrap gap-4 mb-6" >
-        <h1 className="text-2xl font-bold" > Contas a Pagar < /h1>
-          < div className = "flex items-center gap-4" >
-            <Select value={ selectedMonthYear } onValueChange = { setSelectedMonthYear } >
-              <SelectTrigger className="w-[200px]" > <SelectValue /></SelectTrigger >
-                <SelectContent>{
-                  monthOptions.map(o => <SelectItem key={ o.value } value = { o.value } > { o.label } < /SelectItem>)}</SelectContent >
-                    </Select>
-                    < Dialog open = { isFormOpen } onOpenChange = {(open) => {
-                    setIsFormOpen(open);
-              if(!open) setEditingAccount(null);
-                  }} >
-                <DialogTrigger asChild >
-                <Button onClick={ () => { setEditingAccount(null); form.reset(defaultFormValues); } }>
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto px-4 py-4">
+        <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
+          <h1 className="text-2xl font-bold">Contas a Pagar</h1>
+          <div className="flex items-center gap-4">
+            <Select value={selectedMonthYear} onValueChange={setSelectedMonthYear}>
+              <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+              <SelectContent>{monthOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+            </Select>
+            <Dialog open={isFormOpen} onOpenChange={(open) => {
+              setIsFormOpen(open);
+              if (!open) setEditingAccount(null);
+            }}>
+              <DialogTrigger asChild>
+                <Button onClick={() => { setEditingAccount(null); form.reset(defaultFormValues); }}>
                   <Plus className="mr-2 h-4 w-4" /> Nova Conta
-                    < /Button>
-                    < /DialogTrigger>
-                    < DialogContent className = "max-w-2xl max-h-[90vh] overflow-y-auto" >
-                      <DialogHeader><DialogTitle>{ editingAccount? "Editar Conta": "Nova Conta a Pagar" } < /DialogTitle></DialogHeader >
-                      <Form { ...form } >
-                      <form onSubmit={ form.handleSubmit(v => saveMutation.mutate(v)) } className = "space-y-4" >
-                        <FormField control={ form.control } name = "description" render = {({ field }) => (<FormItem><FormLabel>Descrição < /FormLabel><FormControl><Input {...field} value={field.value || ""} / > </FormControl><FormMessage / > </FormItem>)} / >
-                          <div className= "grid grid-cols-1 md:grid-cols-2 gap-4" >
-                          <FormField control={ form.control } name = "payment_type_id" render = {({ field }) => (<FormItem><FormLabel>Tipo de Pagamento < /FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" / > </SelectTrigger></FormControl > <SelectContent>{
-                            paymentTypes?.map(t => <SelectItem key = { t.id } value = { t.id } > { t.name } < /SelectItem>)}</SelectContent > </Select><FormMessage / > </FormItem>)} / >
-                              <FormField control={ form.control
-                          } name = "is_fixed" render = {({ field }) => (<FormItem className= "flex items-center justify-between border p-3 rounded-lg" > <FormLabel>Conta Fixa < /FormLabel><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} / > </FormControl></FormItem >)
-} />
-  < /div>
-{
-  selectedPaymentTypeId === creditCardPaymentTypeId && (
-    <FormField control={ form.control } name = "card_id" render = {({ field }) => (<FormItem><FormLabel>Cartão < /FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione o cartão" / > </SelectTrigger></FormControl > <SelectContent>{
-      creditCards?.map(c => <SelectItem key = { c.id } value = { c.id } > { c.name } < /SelectItem>)}</SelectContent > </Select><FormMessage / > </FormItem>)} / >
-                    )
-    }
-      < div className = "grid grid-cols-1 md:grid-cols-2 gap-4" >
-        <FormField control={ form.control } name = "purchase_date" render = {({ field }) => (<FormItem><FormLabel>Data da Compra < /FormLabel><FormControl><Input type="date" {...field} value={field.value || ""} / > </FormControl><FormMessage / > </FormItem>)} / >
-          <FormField control={ form.control } name = "due_date" render = {({ field }) => (<FormItem><FormLabel>Vencimento < /FormLabel><FormControl><Input type="date" {...field} value={field.value || ""} / > </FormControl><FormMessage / > </FormItem>)} / >
-            </div>
-            < div className = "grid grid-cols-2 gap-4" >
-              {!isFixed && <FormField control={ form.control } name = "installments" render = {({ field }) => (<FormItem><FormLabel>Parcelas < /FormLabel><FormControl><Input type="number" {...field} value={field.value || "1"} / > </FormControl><FormMessage / > </FormItem>)} / >}
-<FormField control={ form.control } name = "amount" render = {({ field }) => (<FormItem className= { cn(isFixed && "col-span-2")}> <FormLabel>Valor < /FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value || ""} / > </FormControl><FormMessage / > </FormItem>)} / >
-  </div>
-  < FormField control = { form.control } name = "category_id" render = {({ field }) => (<FormItem><FormLabel>Categoria < /FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" / > </SelectTrigger></FormControl > <SelectContent>{
-    categories?.map(c => <SelectItem key = { c.id } value = { c.id } > { c.name } < /SelectItem>)}</SelectContent > </Select><FormMessage / > </FormItem>)} / >
-      <FormField control={ form.control
-  } name = "responsible_person_id" render = {({ field }) => (<FormItem><FormLabel>Responsável < /FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" / > </SelectTrigger></FormControl > <SelectContent>{
-    responsiblePersons?.map(p => <SelectItem key = { p.id } value = { p.id } > { p.name } < /SelectItem>)}</SelectContent > </Select><FormMessage / > </FormItem>)} / >
-      <DialogFooter><Button type="submit" disabled = { saveMutation.isPending } > Salvar < /Button></DialogFooter >
-        </form>
-        < /Form>
-        < /DialogContent>
-        < /Dialog>
-        < /div>
-        < /div>
-
-        < div className = "grid gap-6 md:grid-cols-2 mb-8" >
-          <Card><CardHeader><CardTitle>Total Pago</ CardTitle > </CardHeader><CardContent><div className="text-2xl font-bold text-income">R$ {totalPaid.toFixed(2)}</div > </CardContent></Card >
-    <Card><CardHeader><CardTitle>Total Pendente < /CardTitle></CardHeader > <CardContent><div className="text-2xl font-bold text-destructive" > R$ { totalPending.toFixed(2) } </div></CardContent > </Card>
-      < /div>
-
-      < div className = "grid gap-4 md:grid-cols-2" >
-      {
-        loadingAccounts?<p className = "col-span-2 text-center py-12">Carregando contas...</p> : processedAccounts.length > 0 ? processedAccounts.map(account => (
-          < Card key={ account.id } className={ cn("border-l-4", account.paid ? "border-income" : "border-destructive") } >
-          <CardContent className="pt-6">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <h3 className="font-semibold text-lg mb-2"> { account.description } < /h3>
-                  < div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground" >
-                  <div><span className="font-medium"> Tipo 1:< /span> {account.payment_types?.name || "N/A"}</div>
-                    < div > <span className="font-medium" > Vencimento: </span> {format(parseISO(account.due_date), "dd/MM / yyyy")}</div>
-                      < div > <span className="font-medium" > Valor: </span> R$ {account.amount.toFixed(2)}</div >
-                        <div><span className="font-medium" > Categoria: </span> {account.expense_categories?.name || "N/A"}</div>
-                          < div > <span className="font-medium" > Responsável: </span> {account.responsible_persons?.name || "N/A"}</div>
-{
-  account.paid && account.paid_date && (
-    <div className="col-span-2 text-income font-medium" > Pago em: { format(parseISO(account.paid_date), "dd/MM/yyyy") } </div>
-                      )
-}
-</div>
-  < /div>
-  < div className = "flex flex-col gap-2 ml-4" >
-  {
-    account.paid ? (
-      <Button variant= "outline" size="sm" onClick={() => reversePaidMutation.mutate(account.id)
-  } className = "text-destructive border-destructive hover:bg-destructive/10" > <RotateCcw className="h-4 w-4 mr-2" /> Estornar < /Button>
-                    ) : (
-  <Button variant= "outline" size = "sm" onClick = {() => { setCurrentConfirmingAccount(account); setShowConfirmPaidDateDialog(true); }} className = "text-income border-income hover:bg-income/10" > <CheckCircle className="h-4 w-4 mr-2" /> Pagar < /Button>
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader><DialogTitle>{editingAccount ? "Editar Conta" : "Nova Conta a Pagar"}</DialogTitle></DialogHeader>
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(v => saveMutation.mutate(v))} className="space-y-4">
+                    <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Descrição</FormLabel><FormControl><Input {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>)} />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField control={form.control} name="payment_type_id" render={({ field }) => (<FormItem><FormLabel>Tipo de Pagamento</FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{paymentTypes?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+                      <FormField control={form.control} name="is_fixed" render={({ field }) => (<FormItem className="flex items-center justify-between border p-3 rounded-lg"><FormLabel>Conta Fixa</FormLabel><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)} />
+                    </div>
+                    {selectedPaymentTypeId === creditCardPaymentTypeId && (
+                      <FormField control={form.control} name="card_id" render={({ field }) => (<FormItem><FormLabel>Cartão</FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione o cartão" /></SelectTrigger></FormControl><SelectContent>{creditCards?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
                     )}
-<Button variant="ghost" size = "icon" onClick = {() => { setEditingAccount(account); setIsFormOpen(true); }} disabled = { account.is_generated_fixed_instance } > <Pencil className="h-4 w-4" /> </Button>
-  < Button variant = "ghost" size = "icon" onClick = {() => deleteMutation.mutate(account.id)} disabled = { account.is_generated_fixed_instance } > <Trash2 className="h-4 w-4 text-destructive" /> </Button>
-    < /div>
-    < /div>
-    < /CardContent>
-    < /Card>
-          )) : <div className="col-span-2 text-center py-12 text-muted-foreground" > Nenhuma conta encontrada para este mês.< /div>}
-  < /div>
-  < /div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField control={form.control} name="purchase_date" render={({ field }) => (<FormItem><FormLabel>Data da Compra</FormLabel><FormControl><Input type="date" {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>)} />
+                      <FormField control={form.control} name="due_date" render={({ field }) => (<FormItem><FormLabel>Vencimento</FormLabel><FormControl><Input type="date" {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>)} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      {!isFixed && <FormField control={form.control} name="installments" render={({ field }) => (<FormItem><FormLabel>Parcelas</FormLabel><FormControl><Input type="number" {...field} value={field.value || "1"} /></FormControl><FormMessage /></FormItem>)} />}
+                      <FormField control={form.control} name="amount" render={({ field }) => (<FormItem className={cn(isFixed && "col-span-2")}><FormLabel>Valor</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>)} />
+                    </div>
+                    <FormField control={form.control} name="category_id" render={({ field }) => (<FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{categories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+                    <FormField control={form.control} name="responsible_person_id" render={({ field }) => (<FormItem><FormLabel>Responsável</FormLabel><Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{responsiblePersons?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+                    <DialogFooter><Button type="submit" disabled={saveMutation.isPending}>Salvar</Button></DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
 
-  < Dialog open = { showConfirmPaidDateDialog } onOpenChange = { setShowConfirmPaidDateDialog } >
-    <DialogContent>
-    <DialogHeader><DialogTitle>Confirmar Pagamento < /DialogTitle></DialogHeader >
-      <div className="py-4 flex justify-center" > <Calendar mode="single" selected = { selectedPaidDate } onSelect = { setSelectedPaidDate } locale = { ptBR } /> </div>
-        < DialogFooter > <Button onClick={ () => currentConfirmingAccount && selectedPaidDate && confirmPaidMutation.mutate({ account: currentConfirmingAccount, paidDate: selectedPaidDate }) }> Confirmar < /Button></DialogFooter >
-          </DialogContent>
-          < /Dialog>
-          < /div>
+        <div className="grid gap-6 md:grid-cols-2 mb-8">
+          <Card><CardHeader><CardTitle>Total Pago</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-income">R$ {totalPaid.toFixed(2)}</div></CardContent></Card>
+          <Card><CardHeader><CardTitle>Total Pendente</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-destructive">R$ {totalPending.toFixed(2)}</div></CardContent></Card>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {loadingAccounts ? <p className="col-span-2 text-center py-12">Carregando contas...</p> : processedAccounts.length > 0 ? processedAccounts.map(account => (
+            <Card key={account.id} className={cn("border-l-4", account.paid ? "border-income" : "border-destructive")}>
+              <CardContent className="pt-6">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-lg mb-2">{account.description}</h3>
+                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                      <div><span className="font-medium">Vencimento:</span> {format(parseISO(account.due_date), "dd/MM/yyyy")}</div>
+                      <div><span className="font-medium">Valor:</span> R$ {account.amount.toFixed(2)}</div>
+                      <div><span className="font-medium">Tipo:</span> {account.payment_types?.name || "N/A"}</div>
+                      <div><span className="font-medium">Categoria:</span> {account.expense_categories?.name || "N/A"}</div>
+                      <div><span className="font-medium">Responsável:</span> {account.responsible_persons?.name || "N/A"}</div>
+                      {account.paid && account.paid_date && (
+                        <div className="col-span-2 text-income font-medium">Pago em: {format(parseISO(account.paid_date), "dd/MM/yyyy")}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 ml-4">
+                    {account.paid ? (
+                      <Button variant="outline" size="sm" onClick={() => reversePaidMutation.mutate(account.id)} className="text-destructive border-destructive hover:bg-destructive/10"><RotateCcw className="h-4 w-4 mr-2" /> Estornar</Button>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={() => { setCurrentConfirmingAccount(account); setShowConfirmPaidDateDialog(true); }} className="text-income border-income hover:bg-income/10"><CheckCircle className="h-4 w-4 mr-2" /> Pagar</Button>
+                    )}
+                    <Button variant="ghost" size="icon" onClick={() => { setEditingAccount(account); setIsFormOpen(true); }} disabled={account.is_generated_fixed_instance}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(account.id)} disabled={account.is_generated_fixed_instance}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )) : <div className="col-span-2 text-center py-12 text-muted-foreground">Nenhuma conta encontrada para este mês.</div>}
+        </div>
+      </div>
+
+      <Dialog open={showConfirmPaidDateDialog} onOpenChange={setShowConfirmPaidDateDialog}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Confirmar Pagamento</DialogTitle></DialogHeader>
+          <div className="py-4 flex justify-center"><Calendar mode="single" selected={selectedPaidDate} onSelect={setSelectedPaidDate} locale={ptBR} /></div>
+          <DialogFooter><Button onClick={() => currentConfirmingAccount && selectedPaidDate && confirmPaidMutation.mutate({ account: currentConfirmingAccount, paidDate: selectedPaidDate })}>Confirmar</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
