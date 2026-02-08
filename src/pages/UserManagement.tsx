@@ -114,6 +114,7 @@ export default function UserManagement() {
         is_family_member: true 
       };
 
+      // Gera o código apenas se ainda não existir
       if (!familyData.code) {
         updateData.family_code = generateFamilyCode();
       }
@@ -122,13 +123,17 @@ export default function UserManagement() {
         .from("profiles")
         .update(updateData)
         .eq("id", currentUser.id);
+      
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Família registrada com sucesso!");
       refreshFamily();
     },
-    onError: (error: any) => toast.error("Erro ao salvar família."),
+    onError: (error: any) => {
+      console.error("Erro ao salvar família:", error);
+      toast.error(`Erro ao salvar família: ${error.message || "Erro desconhecido"}`);
+    },
   });
 
   const joinFamilyMutation = useMutation({
