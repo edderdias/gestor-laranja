@@ -48,7 +48,6 @@ export default function UserManagement() {
   const [isInviteFormOpen, setIsInviteFormOpen] = useState(false);
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
   const [isJoinFormOpen, setIsJoinFormOpen] = useState(false);
-  const [dbError, setDbError] = useState<string | null>(null);
 
   const inviteForm = useForm<z.infer<typeof inviteSchema>>({
     resolver: zodResolver(inviteSchema),
@@ -71,17 +70,31 @@ export default function UserManagement() {
   });
 
   const { data: users, isLoading: isLoadingUsers } = useQuery({
-    queryKey: ["users", familyData.id],
+    queryKey: ["users", familyData.id, currentUser?.id],
     queryFn: async () => {
-      if (!familyData.id) return [];
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("family_id", familyData.id);
+      // Se tem família, busca membros da família. Se não, busca quem ele convidou.
+      let query = supabase.from("profiles").select("*");
+      
+      if (familyData.id) {
+        query = query.eq("family_id", familyData.id);
+      } else {
+        query = query.eq("invited_by_user_id", currentUser?.id);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
-      return data as Profile[];
+      
+      // Adiciona o próprio usuário na lista se não estiver nela
+      const list = data as Profile[];
+      const hasMe = list.some(u => u.id === currentUser?.id);
+      if (!hasMe && currentUser) {
+        const { data: myProfile } = await supabase.from("profiles").select("*").eq("id", currentUser.id).single();
+        if (myProfile) list.unshift(myProfile as Profile);
+      }
+      
+      return list;
     },
-    enabled: !!familyData.id,
+    enabled: !!currentUser?.id,
   });
 
   const generateFamilyCode = () => {
@@ -94,7 +107,6 @@ export default function UserManagement() {
       
       const code = generateFamilyCode();
       
-      // 1. Criar a família
       const { data: family, error: familyError } = await supabase
         .from("families")
         .insert({
@@ -107,17 +119,18 @@ export default function UserManagement() {
 
       if (familyError) throw familyError;
 
-      // 2. Vincular o usuário atual a essa família
       const { error: profileError } = await supabase
         .from("profiles")
         .update({ family_id: family.id, is_family_member: true })
         .eq("id", currentUser.id);
 
       if (profileError) throw profileError;
+      return family;
     },
     onSuccess: () => {
       toast.success("Família criada com sucesso!");
       refreshFamily();
+      queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (error: any) => toast.error(`Erro: ${error.message}`),
   });
@@ -128,7 +141,7 @@ export default function UserManagement() {
       
       const cleanCode = data.familyCode.trim().toUpperCase();
 
-      // 1. Buscar a família pelo código
+      // Busca na tabela FAMILIES e não em PROFILES
       const { data: family, error: searchError } = await supabase
         .from("families")
         .select("id")
@@ -139,7 +152,6 @@ export default function UserManagement() {
         throw new Error("Código de família inválido ou não encontrado.");
       }
 
-      // 2. Vincular o usuário
       const { error } = await supabase
         .from("profiles")
         .update({ family_id: family.id, is_family_member: true })
@@ -151,23 +163,31 @@ export default function UserManagement() {
       toast.success("Vinculado à família com sucesso!");
       setIsJoinFormOpen(false);
       refreshFamily();
+      queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (error: any) => toast.error(error.message),
   });
 
   const createUserMutation = useMutation({
     mutationFn: async (data: z.infer<typeof createSchema>) => {
+      if (!currentUser?.id) throw new Error("Não autenticado");
+
+      // Se o usuário não tem família, cria uma padrão antes de cadastrar o membro
+      let currentFamilyId = familyData.id;
+      if (!currentFamilyId) {
+        const newFamily = await createFamilyMutation.mutateAsync({ name: `Família de ${currentUser.email?.split('@')[0]}` });
+        currentFamilyId = newFamily.id;
+      }
+
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session?.access_token}`,
         },
-        body: JSON.stringify({
-          ...data,
-          familyId: familyData.id // Passar o ID da família para a função se necessário
-        }),
+        body: JSON.stringify(data),
       });
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || "Erro ao cadastrar usuário");
@@ -175,11 +195,11 @@ export default function UserManagement() {
       
       const result = await response.json();
       
-      // Vincular o novo usuário à família atual se o criador tiver uma
-      if (familyData.id && result.user?.id) {
+      // Vincula o novo usuário à família
+      if (currentFamilyId && result.user?.id) {
         await supabase
           .from("profiles")
-          .update({ family_id: familyData.id, is_family_member: true })
+          .update({ family_id: currentFamilyId, is_family_member: data.isFamilyMember })
           .eq("id", result.user.id);
       }
       
@@ -187,7 +207,7 @@ export default function UserManagement() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
-      toast.success("Usuário cadastrado e vinculado à família!");
+      toast.success("Usuário cadastrado e vinculado!");
       setIsCreateFormOpen(false);
       createForm.reset();
     },
@@ -235,37 +255,44 @@ export default function UserManagement() {
               </Dialog>
             )}
 
-            {familyData.id && (
-              <Dialog open={isCreateFormOpen} onOpenChange={setIsCreateFormOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="default">
-                    <UserCheck className="mr-2 h-4 w-4" /> Cadastrar Membro
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Cadastrar Novo Membro</DialogTitle>
-                    <DialogDescription>O novo usuário será automaticamente vinculado à sua família.</DialogDescription>
-                  </DialogHeader>
-                  <Form {...createForm}>
-                    <form onSubmit={createForm.handleSubmit((data) => createUserMutation.mutate(data))} className="space-y-4">
-                      <FormField control={createForm.control} name="fullName" render={({ field }) => (
-                        <FormItem><FormLabel>Nome Completo</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <FormField control={createForm.control} name="email" render={({ field }) => (
-                        <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} type="email" /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <FormField control={createForm.control} name="password" render={({ field }) => (
-                        <FormItem><FormLabel>Senha</FormLabel><FormControl><Input {...field} type="password" /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <DialogFooter>
-                        <Button type="submit" disabled={createUserMutation.isPending}>Cadastrar</Button>
-                      </DialogFooter>
-                    </form>
-                  </Form>
-                </DialogContent>
-              </Dialog>
-            )}
+            <Dialog open={isCreateFormOpen} onOpenChange={setIsCreateFormOpen}>
+              <DialogTrigger asChild>
+                <Button variant="default">
+                  <UserCheck className="mr-2 h-4 w-4" /> Cadastrar Membro
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Cadastrar Novo Membro</DialogTitle>
+                  <DialogDescription>O novo usuário será vinculado ao seu grupo familiar.</DialogDescription>
+                </DialogHeader>
+                <Form {...createForm}>
+                  <form onSubmit={createForm.handleSubmit((data) => createUserMutation.mutate(data))} className="space-y-4">
+                    <FormField control={createForm.control} name="fullName" render={({ field }) => (
+                      <FormItem><FormLabel>Nome Completo</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={createForm.control} name="email" render={({ field }) => (
+                      <FormItem><FormLabel>Email</FormLabel><FormControl><Input {...field} type="email" /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={createForm.control} name="password" render={({ field }) => (
+                      <FormItem><FormLabel>Senha</FormLabel><FormControl><Input {...field} type="password" /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={createForm.control} name="isFamilyMember" render={({ field }) => (
+                      <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="space-y-0.5">
+                          <FormLabel>Membro da Família</FormLabel>
+                          <FormDescription>Compartilha lançamentos financeiros.</FormDescription>
+                        </div>
+                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                      </FormItem>
+                    )} />
+                    <DialogFooter>
+                      <Button type="submit" disabled={createUserMutation.isPending}>Cadastrar</Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
@@ -312,37 +339,35 @@ export default function UserManagement() {
           </Card>
         </div>
 
-        {familyData.id && (
-          <Card>
-            <CardHeader><CardTitle>Membros da Família</CardTitle></CardHeader>
-            <CardContent>
-              {isLoadingUsers ? <p>Carregando...</p> : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Papel</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
+        <Card>
+          <CardHeader><CardTitle>Membros do Grupo</CardTitle></CardHeader>
+          <CardContent>
+            {isLoadingUsers ? <p>Carregando...</p> : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Papel</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users?.map((u) => (
+                    <TableRow key={u.id}>
+                      <TableCell className="font-medium">{u.full_name} {u.id === currentUser?.id && "(Você)"}</TableCell>
+                      <TableCell>{u.id === familyData.ownerId ? "Dono" : "Membro"}</TableCell>
+                      <TableCell className="text-right">
+                        {isOwner && u.id !== currentUser?.id && (
+                          <Button variant="ghost" size="icon" onClick={() => confirm("Remover membro?") && toast.info("Funcionalidade em breve")}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        )}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {users?.map((u) => (
-                      <TableRow key={u.id}>
-                        <TableCell className="font-medium">{u.full_name} {u.id === currentUser?.id && "(Você)"}</TableCell>
-                        <TableCell>{u.id === familyData.ownerId ? "Dono" : "Membro"}</TableCell>
-                        <TableCell className="text-right">
-                          {isOwner && u.id !== currentUser?.id && (
-                            <Button variant="ghost" size="icon" onClick={() => confirm("Remover membro?") && toast.info("Funcionalidade em breve")}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        )}
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
