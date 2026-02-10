@@ -73,6 +73,88 @@ export default function AccountsPayable() {
 
   const isFixed = form.watch("is_fixed");
   const selectedPaymentTypeId = form.watch("payment_type_id");
+  const selectedCardId = form.watch("card_id");
+
+  const { data: paymentTypes } = useQuery({
+    queryKey: ["payment-types"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("payment_types").select("*").order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name.toLowerCase().includes("cartao"))?.id;
+
+  const { data: creditCards } = useQuery({
+    queryKey: ["credit_cards", familyData.id],
+    queryFn: async () => {
+      let query = supabase.from("credit_cards").select("*");
+      if (familyData.id) {
+        query = query.eq("family_id", familyData.id);
+      } else {
+        query = query.eq("created_by", user?.id);
+      }
+      const { data, error } = await query.order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Busca transações para calcular o valor da fatura
+  const { data: rawTransactions } = useQuery({
+    queryKey: ["credit_card_transactions_raw", familyData.id],
+    queryFn: async () => {
+      let query = supabase.from("credit_card_transactions").select("*");
+      if (familyData.id) query = query.eq("family_id", familyData.id);
+      else query = query.eq("created_by", user?.id);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id && !!creditCardPaymentTypeId,
+  });
+
+  // Lógica de automação da fatura
+  useEffect(() => {
+    if (selectedPaymentTypeId === creditCardPaymentTypeId && selectedCardId && !editingAccount) {
+      const card = creditCards?.find(c => c.id === selectedCardId);
+      if (card && rawTransactions) {
+        const now = new Date();
+        const monthLabel = format(now, "MM/yyyy");
+        
+        // Calcula o total utilizado no mês atual para este cartão
+        const totalUsed = rawTransactions.reduce((sum, t) => {
+          if (t.card_id !== selectedCardId) return sum;
+          
+          const purchaseDate = parseISO(t.purchase_date);
+          if (!isValid(purchaseDate)) return sum;
+
+          // Verifica se a transação (ou parcela) cai no mês atual
+          if (t.is_fixed) {
+            if (purchaseDate <= now) return sum + t.amount;
+          } else if ((t.installments || 1) > 1) {
+            for (let i = 0; i < (t.installments || 1); i++) {
+              if (isSameMonth(addMonths(purchaseDate, i), now) && isSameYear(addMonths(purchaseDate, i), now)) {
+                return sum + t.amount;
+              }
+            }
+          } else if (isSameMonth(purchaseDate, now) && isSameYear(purchaseDate, now)) {
+            return sum + t.amount;
+          }
+          return sum;
+        }, 0);
+
+        form.setValue("description", `Fatura ${card.name} - ${monthLabel}`);
+        form.setValue("amount", totalUsed.toString());
+        
+        // Tenta encontrar uma categoria de "Cartão" ou similar
+        const cardCategory = categories?.find(cat => cat.name.toLowerCase().includes("cartão") || cat.name.toLowerCase().includes("fatura"));
+        if (cardCategory) form.setValue("category_id", cardCategory.id);
+      }
+    }
+  }, [selectedPaymentTypeId, selectedCardId, creditCardPaymentTypeId, creditCards, rawTransactions, editingAccount]);
 
   useEffect(() => {
     if (editingAccount) {
@@ -92,17 +174,6 @@ export default function AccountsPayable() {
       form.reset(defaultFormValues);
     }
   }, [editingAccount, form]);
-
-  const { data: paymentTypes } = useQuery({
-    queryKey: ["payment-types"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("payment_types").select("*").order("name");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const creditCardPaymentTypeId = paymentTypes?.find(pt => pt.name.toLowerCase().includes("cartao"))?.id;
 
   const { data: accounts, isLoading: loadingAccounts } = useQuery({
     queryKey: ["accounts-payable", familyData.id],
@@ -131,22 +202,6 @@ export default function AccountsPayable() {
       if (error) throw error;
       return data;
     },
-  });
-
-  const { data: creditCards } = useQuery({
-    queryKey: ["credit_cards", familyData.id],
-    queryFn: async () => {
-      let query = supabase.from("credit_cards").select("*");
-      if (familyData.id) {
-        query = query.eq("family_id", familyData.id);
-      } else {
-        query = query.eq("created_by", user?.id);
-      }
-      const { data, error } = await query.order("name");
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user?.id,
   });
 
   const { data: responsiblePersons } = useQuery({
@@ -229,6 +284,7 @@ export default function AccountsPayable() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-payable"] });
+      queryClient.invalidateQueries({ queryKey: ["credit_cards"] });
       toast.success("Pagamento confirmado!");
       setShowConfirmPaidDateDialog(false);
     },
@@ -244,6 +300,7 @@ export default function AccountsPayable() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts-payable"] });
+      queryClient.invalidateQueries({ queryKey: ["credit_cards"] });
       toast.success("Pagamento estornado!");
     },
   });

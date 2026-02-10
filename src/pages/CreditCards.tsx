@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { CreditCard, Plus, Pencil, Trash2, FileText, ShoppingCart } from "lucide-react";
+import { CreditCard, Plus, Pencil, Trash2, FileText, ShoppingCart, CheckCircle, AlertCircle } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,6 +19,7 @@ import { useReactToPrint } from "react-to-print";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { cn } from "@/lib/utils";
 
 const purchaseSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -110,6 +111,20 @@ export default function CreditCards() {
     enabled: !!user?.id,
   });
 
+  // Busca contas a pagar para verificar status da fatura
+  const { data: accountsPayable } = useQuery({
+    queryKey: ["accounts-payable", familyData.id],
+    queryFn: async () => {
+      let query = supabase.from("accounts_payable").select("*");
+      if (familyData.id) query = query.eq("family_id", familyData.id);
+      else query = query.eq("created_by", user?.id);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
   const processedTransactions = useMemo(() => {
     if (!rawTransactions) return [];
     const [year, month] = selectedMonthYear.split('-').map(Number);
@@ -121,13 +136,11 @@ export default function CreditCards() {
 
       const results: any[] = [];
 
-      // 1. Transações normais (não fixas, 1 parcela)
       if (!transaction.is_fixed && (transaction.installments || 1) === 1) {
         if (isSameMonth(purchaseDate, targetMonthDate) && isSameYear(purchaseDate, targetMonthDate)) {
           results.push(transaction);
         }
       } 
-      // 2. Transações fixas
       else if (transaction.is_fixed) {
         if (isSameMonth(purchaseDate, targetMonthDate) && isSameYear(purchaseDate, targetMonthDate)) {
           results.push(transaction);
@@ -153,7 +166,6 @@ export default function CreditCards() {
           }
         }
       }
-      // 3. Transações parceladas
       else if ((transaction.installments || 1) > 1) {
         const totalInstallments = transaction.installments || 1;
         
@@ -226,20 +238,29 @@ export default function CreditCards() {
   }, []);
 
   const cardStats = useMemo(() => {
-    if (!cards || !processedTransactions) return {};
-    const stats: Record<string, { used: number; transactions: any[] }> = {};
+    if (!cards || !processedTransactions || !accountsPayable) return {};
+    const stats: Record<string, { used: number; transactions: any[]; isPaid: boolean; paidAmount: number }> = {};
 
     cards.forEach(card => {
       const cardTransactions = processedTransactions.filter(t => t.card_id === card.id);
       const used = cardTransactions.reduce((sum, t) => sum + t.amount, 0);
       
+      // Verifica se existe uma conta paga para este cartão no mês selecionado
+      const billAccount = accountsPayable.find(a => 
+        a.card_id === card.id && 
+        isSameMonth(parseISO(a.due_date), parseISO(`${selectedMonthYear}-01`)) &&
+        isSameYear(parseISO(a.due_date), parseISO(`${selectedMonthYear}-01`))
+      );
+
       stats[card.id] = { 
         used, 
-        transactions: cardTransactions
+        transactions: cardTransactions,
+        isPaid: billAccount?.paid || false,
+        paidAmount: billAccount?.paid ? billAccount.amount : 0
       };
     });
     return stats;
-  }, [cards, processedTransactions]);
+  }, [cards, processedTransactions, accountsPayable, selectedMonthYear]);
 
   const responsibleStats = useMemo(() => {
     if (!processedTransactions) return [];
@@ -284,10 +305,12 @@ export default function CreditCards() {
         ) : cards && cards.length > 0 ? (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-12">
             {cards.map(card => {
-              const stats = cardStats[card.id] || { used: 0, transactions: [] };
+              const stats = cardStats[card.id] || { used: 0, transactions: [], isPaid: false, paidAmount: 0 };
               const limit = card.credit_limit || 0;
-              const available = limit - stats.used;
-              const usagePercent = limit > 0 ? (stats.used / limit) * 100 : 0;
+              
+              // O limite disponível aumenta conforme o valor pago da fatura
+              const available = limit - (stats.used - stats.paidAmount);
+              const usagePercent = limit > 0 ? ((stats.used - stats.paidAmount) / limit) * 100 : 0;
               const monthLabel = format(parseISO(`${selectedMonthYear}-01`), "MMM/yy", { locale: ptBR });
 
               return (
@@ -340,9 +363,15 @@ export default function CreditCards() {
                     <div className="flex items-center justify-between pt-2">
                       <span className="text-sm font-bold text-slate-700">Fatura ({monthLabel}):</span>
                       {stats.transactions.length > 0 ? (
-                        <Badge variant="outline" className="rounded-full px-4 border-slate-200 text-slate-600">
-                          {stats.transactions.length} Lançamentos
-                        </Badge>
+                        stats.isPaid ? (
+                          <Badge variant="outline" className="rounded-full px-4 border-green-200 text-green-600 bg-green-50">
+                            <CheckCircle className="h-3 w-3 mr-1" /> Pagamento Feito
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="rounded-full px-4 border-red-200 text-red-600 bg-red-50">
+                            <AlertCircle className="h-3 w-3 mr-1" /> Pendente Pagamento
+                          </Badge>
+                        )
                       ) : (
                         <Badge variant="secondary" className="rounded-full px-4 bg-slate-100 text-slate-500">
                           Sem Lançamentos
