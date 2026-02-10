@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { Tables } from "@/integrations/supabase/types";
+import { Badge } from "@/components/ui/badge";
 
 type AccountPayableWithRelations = Tables<'accounts_payable'> & {
   is_generated_fixed_instance?: boolean;
@@ -102,7 +103,6 @@ export default function AccountsPayable() {
     enabled: !!user?.id,
   });
 
-  // Busca transações para calcular o valor da fatura
   const { data: rawTransactions } = useQuery({
     queryKey: ["credit_card_transactions_raw", familyData.id],
     queryFn: async () => {
@@ -116,7 +116,6 @@ export default function AccountsPayable() {
     enabled: !!user?.id && !!creditCardPaymentTypeId,
   });
 
-  // Lógica de automação da fatura
   useEffect(() => {
     if (selectedPaymentTypeId === creditCardPaymentTypeId && selectedCardId && !editingAccount) {
       const card = creditCards?.find(c => c.id === selectedCardId);
@@ -124,14 +123,12 @@ export default function AccountsPayable() {
         const now = new Date();
         const monthLabel = format(now, "MM/yyyy");
         
-        // Calcula o total utilizado no mês atual para este cartão
         const totalUsed = rawTransactions.reduce((sum, t) => {
           if (t.card_id !== selectedCardId) return sum;
           
           const purchaseDate = parseISO(t.purchase_date);
           if (!isValid(purchaseDate)) return sum;
 
-          // Verifica se a transação (ou parcela) cai no mês atual
           if (t.is_fixed) {
             if (purchaseDate <= now) return sum + t.amount;
           } else if ((t.installments || 1) > 1) {
@@ -149,7 +146,6 @@ export default function AccountsPayable() {
         form.setValue("description", `Fatura ${card.name} - ${monthLabel}`);
         form.setValue("amount", totalUsed.toString());
         
-        // Tenta encontrar uma categoria de "Cartão" ou similar
         const cardCategory = categories?.find(cat => cat.name.toLowerCase().includes("cartão") || cat.name.toLowerCase().includes("fatura"));
         if (cardCategory) form.setValue("category_id", cardCategory.id);
       }
@@ -434,10 +430,13 @@ export default function AccountsPayable() {
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h3 className="font-bold text-lg mb-4">{account.description}</h3>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-bold text-lg">{account.description}</h3>
+                      {account.is_fixed && <Badge variant="secondary" className="bg-blue-50 text-blue-600 border-blue-100">Fixo</Badge>}
+                    </div>
                     <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
                       <div className="space-y-1">
-                        <p><span className="text-muted-foreground">Tipo:</span> {account.expense_type || "N/A"}</p>
+                        <p><span className="text-muted-foreground">Tipo:</span> {account.payment_types?.name || "N/A"}</p>
                         <p><span className="text-muted-foreground">Vencimento:</span> {format(parseISO(account.due_date), "dd/MM/yyyy")}</p>
                         <p><span className="text-muted-foreground">Parcelas:</span> {account.current_installment}/{account.installments}</p>
                         <p><span className="text-muted-foreground">Valor:</span> <span className="text-destructive font-bold">R$ {account.amount.toFixed(2)}</span></p>
