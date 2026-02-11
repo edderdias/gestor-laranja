@@ -111,7 +111,6 @@ export default function CreditCards() {
     enabled: !!user?.id,
   });
 
-  // Busca contas a pagar para verificar status da fatura
   const { data: accountsPayable } = useQuery({
     queryKey: ["accounts-payable", familyData.id],
     queryFn: async () => {
@@ -245,7 +244,6 @@ export default function CreditCards() {
       const cardTransactions = processedTransactions.filter(t => t.card_id === card.id);
       const used = cardTransactions.reduce((sum, t) => sum + t.amount, 0);
       
-      // Verifica se existe uma conta paga para este cartão no mês selecionado
       const billAccount = accountsPayable.find(a => 
         a.card_id === card.id && 
         isSameMonth(parseISO(a.due_date), parseISO(`${selectedMonthYear}-01`)) &&
@@ -308,7 +306,6 @@ export default function CreditCards() {
               const stats = cardStats[card.id] || { used: 0, transactions: [], isPaid: false, paidAmount: 0 };
               const limit = card.credit_limit || 0;
               
-              // O limite disponível aumenta conforme o valor pago da fatura
               const available = limit - (stats.used - stats.paidAmount);
               const usagePercent = limit > 0 ? ((stats.used - stats.paidAmount) / limit) * 100 : 0;
               const monthLabel = format(parseISO(`${selectedMonthYear}-01`), "MMM/yy", { locale: ptBR });
@@ -365,7 +362,7 @@ export default function CreditCards() {
                       {stats.transactions.length > 0 ? (
                         stats.isPaid ? (
                           <Badge variant="outline" className="rounded-full px-4 border-green-200 text-green-600 bg-green-50">
-                            <CheckCircle className="h-3 w-3 mr-1" /> Pagamento Feito
+                            <CheckCircle className="h-3 w-3 mr-1" /> Pagamento Realizado
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="rounded-full px-4 border-red-200 text-red-600 bg-red-50">
